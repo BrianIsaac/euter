@@ -20,3 +20,7 @@ CLAUDE.md
 
 # lavish review surfaces
 .lavish/
+
+# build and tool state
+node_modules/.tmp
+.wrangler
