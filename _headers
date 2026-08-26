@@ -1,0 +1,15 @@
+# Cloudflare Pages headers (plan Decision 8; landscape §2.6, §7).
+# Origin-Agent-Cluster: ?1 keeps the document origin-keyed, which WebMCP requires;
+# Permissions-Policy names the three features the app uses; no COOP/COEP, so no
+# SharedArrayBuffer and no cross-origin isolation to break R2 fetches.
+/*
+  Origin-Agent-Cluster: ?1
+  Permissions-Policy: tools=(self), microphone=(self), midi=(self)
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.wasm
+  Content-Type: application/wasm
