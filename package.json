@@ -23,8 +23,15 @@
     "e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
+    "@mediabunny/mp3-encoder": "1.55.3",
+    "@tonejs/midi": "2.0.28",
+    "audiobuffer-to-wav": "1.0.0",
+    "mediabunny": "1.55.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "smplr": "1.0.0",
+    "tonal": "6.4.3",
+    "tone": "15.1.22",
     "zod": "4.4.3"
   },
   "devDependencies": {
