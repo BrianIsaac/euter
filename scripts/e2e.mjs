@@ -36,7 +36,9 @@ const chromeCandidates = [
 const chrome = chromeCandidates.find((candidate) => existsSync(candidate));
 
 console.log('pnpm e2e: the harness lands on 30 Aug (plan Phases, 30 Aug lane C).');
-console.log(`Chrome binary: ${chrome ?? 'not found in the usual places'}; switch: --enable-features=WebMCPTesting`);
+console.log(
+  `Chrome binary: ${chrome ?? 'not found in the usual places'}; switch: --enable-features=WebMCPTesting`,
+);
 console.log(`Target URL: ${process.env.E2E_URL ?? 'http://localhost:4173/ (default)'}`);
 console.log(
   'Until then, day-one check 6 is the manual equivalent: DevTools > Application > WebMCP.',
