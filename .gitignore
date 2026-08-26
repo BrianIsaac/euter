@@ -12,10 +12,7 @@ next-env.d.ts
 *.log
 .vercel
 
-# AI agent meta and local tooling state - copied into each worktree by hand, not part of the public repo
-AGENTS.md
-CLAUDE.md
-.claude/
+# local tooling state
 .playwright-mcp/
 
 # lavish review surfaces
