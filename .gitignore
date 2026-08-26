@@ -1,0 +1,19 @@
+node_modules
+.next
+dist
+out
+coverage
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+*.log
+.vercel
+
+# AI agent meta and local tooling state - copied into each worktree by hand, not part of the public repo
+AGENTS.md
+CLAUDE.md
+.claude/
+.playwright-mcp/
