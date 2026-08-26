@@ -283,8 +283,23 @@ export function PianoRoll({
     return { x: event.clientX - rectangle.left, y: event.clientY - rectangle.top };
   };
 
-  const dispatchNotes = (notes: Note[], summary: string): void => {
-    onDispatch(humanNotesCommand(track.id, notes, summary));
+  const noteBars = (note: Pick<Note, 's' | 'd'>): [number, number] => {
+    const barFrom = Math.floor(note.s / geometry.beatsPerBar) + 1;
+    return [barFrom, Math.max(barFrom, Math.ceil((note.s + note.d) / geometry.beatsPerBar))];
+  };
+
+  const dispatchNotes = (
+    notes: Note[],
+    summary: string,
+    [barFrom, barTo]: readonly [number, number],
+  ): void => {
+    onDispatch(
+      humanNotesCommand(track.id, notes, summary, {
+        barFrom,
+        barTo,
+        beatsPerBar: geometry.beatsPerBar,
+      }),
+    );
   };
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>): void => {
@@ -301,7 +316,11 @@ export function PianoRoll({
         source: 'human',
       };
       const notes = [...track.notes, note].sort((a, b) => a.s - b.s || a.p - b.p);
-      dispatchNotes(notes, `Added ${pitchName(note.p, song.key.name)} at beat ${note.s + 1}`);
+      dispatchNotes(
+        notes,
+        `Added ${pitchName(note.p, song.key.name)} at beat ${note.s + 1}`,
+        noteBars(note),
+      );
       setSelectedIndex(notes.indexOf(note));
       gesture.setGestureActive(false);
       return;
@@ -324,20 +343,29 @@ export function PianoRoll({
     const { x, y } = canvasPoint(event);
     const beatDelta = (x - drag.originX) / geometry.pixelsPerBeat;
     const pitchDelta = yToPitch(y, geometry) - yToPitch(drag.originY, geometry);
+    const songEnd = geometry.bars * geometry.beatsPerBar;
     const edited: Note = {
       ...drag.original,
       source: 'human',
       ...(drag.mode === 'move'
         ? {
-            s: snapBeat(drag.original.s + beatDelta),
+            s: Math.min(songEnd - 0.25, snapBeat(drag.original.s + beatDelta)),
             p: clamp(drag.original.p + pitchDelta, 24, 96),
           }
-        : { d: Math.max(0.25, snapBeat(drag.original.d + beatDelta)) }),
+        : {
+            d: Math.min(
+              songEnd - drag.original.s,
+              Math.max(0.25, snapBeat(drag.original.d + beatDelta)),
+            ),
+          }),
     };
     const notes = track.notes.map((note, index) => (index === drag.index ? edited : note));
+    const originalBars = noteBars(drag.original);
+    const editedBars = noteBars(edited);
     dispatchNotes(
       notes,
       `${drag.mode === 'move' ? 'Moved' : 'Resized'} ${pitchName(edited.p, song.key.name)}`,
+      [Math.min(originalBars[0], editedBars[0]), Math.max(originalBars[1], editedBars[1])],
     );
     dragRef.current = null;
     gesture.setGestureActive(false);
@@ -355,6 +383,7 @@ export function PianoRoll({
     dispatchNotes(
       track.notes.filter((_, index) => index !== selectedIndex),
       `Deleted ${pitchName(removed.p, song.key.name)}`,
+      noteBars(removed),
     );
     setSelectedIndex(null);
   };

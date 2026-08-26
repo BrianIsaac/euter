@@ -60,11 +60,13 @@ export function StepGrid({
           ]
         : track.notes.filter((note) => note !== existing);
     notes.sort((a, b) => a.s - b.s || a.p - b.p);
+    const targetBar = barFrom + Math.floor(step / stepsPerBar);
     onDispatch(
       humanNotesCommand(
         track.id,
         notes,
         `${existing === undefined ? 'Added' : 'Removed'} ${lane.name} at bar ${barFrom + Math.floor(step / stepsPerBar)}, step ${(step % stepsPerBar) + 1}`,
+        { barFrom: targetBar, barTo: targetBar, beatsPerBar },
       ),
     );
   };

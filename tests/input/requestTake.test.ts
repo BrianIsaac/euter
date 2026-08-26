@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createTakeRequestController } from '../../src/input/requestTake.ts';
+import {
+  armedTakeRequestFromSong,
+  createTakeRequestController,
+} from '../../src/input/requestTake.ts';
 
 describe('request_take arming', () => {
   it('arms a track and bar range with the teacher-producer prompt', () => {
@@ -45,5 +48,23 @@ describe('request_take arming', () => {
     expect(controller.getSnapshot()?.id).toBe('request-1');
     controller.clear('request-1');
     expect(controller.getSnapshot()).toBeNull();
+  });
+
+  it('maps Lane A persisted request fields for TakePanel', () => {
+    expect(
+      armedTakeRequestFromSong({
+        id: 'request-song',
+        track_id: 'bass',
+        bar_from: 5,
+        bar_to: 8,
+        prompt: 'Play this part',
+      }),
+    ).toEqual({
+      id: 'request-song',
+      trackId: 'bass',
+      targetBars: { barFrom: 5, barTo: 8 },
+      prompt: 'Play this part',
+      armedAt: 0,
+    });
   });
 });

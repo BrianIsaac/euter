@@ -60,3 +60,13 @@ export function quantiseNotes(
     };
   });
 }
+
+/** Lane A reducer-compatible spelling and positional signature. */
+export function quantizeNotes(
+  notes: readonly Note[],
+  grid: QuantiseGrid,
+  strength: number,
+  swing = 0,
+): Note[] {
+  return quantiseNotes(notes, { grid, strength, swing });
+}

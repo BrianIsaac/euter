@@ -36,7 +36,7 @@ describe('StepGrid', () => {
     fireEvent.change(screen.getByLabelText('Step velocity'), { target: { value: '0.55' } });
     fireEvent.click(screen.getByLabelText('Snare, bar 1, step 2'));
     const notes = onDispatch.mock.calls[0]?.[0].args.notes;
-    expect(notes).toContainEqual({ p: 38, s: 0.25, d: 0.25, v: 0.55, source: 'human' });
+    expect(notes).toContainEqual({ p: 38, s: 0.25, d: 0.25, v: 0.55 });
   });
 
   it('refuses a non-drums track visibly', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Note } from '../../src/song/types.ts';
-import { gridBeats, quantiseNotes } from '../../src/theory/quantise.ts';
+import { gridBeats, quantiseNotes, quantizeNotes } from '../../src/theory/quantise.ts';
 
 const performed: Note = {
   p: 60,
@@ -46,5 +46,14 @@ describe('quantiseNotes', () => {
     expect(() => quantiseNotes([performed], { grid: '16n', strength: 1, swing: 0.6 })).toThrow(
       'swing',
     );
+  });
+
+  it('supports Lane A reducer spelling without changing reversibility', () => {
+    expect(quantizeNotes([performed], '16n', 1, 0)[0]).toMatchObject({
+      s: 0.25,
+      d: 0.5,
+      s_raw: 0.18,
+      d_raw: 0.42,
+    });
   });
 });

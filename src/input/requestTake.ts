@@ -8,6 +8,14 @@ export interface TakeRequestInput {
   prompt: string;
 }
 
+export interface SongTakeRequestPort {
+  id: string;
+  track_id: string;
+  bar_from: number;
+  bar_to: number;
+  prompt: string;
+}
+
 export interface ArmedTakeRequest {
   id: string;
   trackId: string;
@@ -30,6 +38,20 @@ export interface TakeRequestController {
 export interface TakeRequestOptions {
   now?: () => number;
   makeId?: () => string;
+}
+
+/** Maps Lane A's persisted song request into the TakePanel/recorder view shape. */
+export function armedTakeRequestFromSong(
+  request: SongTakeRequestPort,
+  armedAt = 0,
+): ArmedTakeRequest {
+  return {
+    id: request.id,
+    trackId: request.track_id,
+    targetBars: { barFrom: request.bar_from, barTo: request.bar_to },
+    prompt: request.prompt,
+    armedAt,
+  };
 }
 
 /** Arms a visible prompt; the person starts audio with the TakePanel's Record button. */

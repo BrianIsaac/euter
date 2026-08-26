@@ -85,7 +85,7 @@ describe('PianoRoll', () => {
     expect(setGestureActive).toHaveBeenLastCalledWith(false);
     const command = onDispatch.mock.calls[0]?.[0];
     expect(command).toMatchObject({ type: 'set_notes', source: 'human' });
-    expect(command.args.notes[0]).toMatchObject({ p: 61, s: 2, d: 1, source: 'human' });
+    expect(command.args.notes[0]).toEqual({ p: 61, s: 2, d: 1, v: 0.8 });
   });
 
   it('clicks empty space to add and Delete removes the selected note', () => {
@@ -100,7 +100,8 @@ describe('PianoRoll', () => {
     );
     const canvas = screen.getByRole('img');
     fireEvent.pointerDown(canvas, { clientX: 300, clientY: 310 });
-    expect(onDispatch.mock.calls[0]?.[0].args.notes).toHaveLength(2);
+    expect(onDispatch.mock.calls[0]?.[0].args).toMatchObject({ bar_from: 2 });
+    expect(onDispatch.mock.calls[0]?.[0].args.notes).toHaveLength(1);
     view.rerender(
       <PianoRoll
         song={song()}
