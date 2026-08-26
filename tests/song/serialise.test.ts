@@ -24,6 +24,13 @@ describe('song serialisation', () => {
   it('ignores malformed storage values', () => {
     expect(loadSong({ getItem: () => '{no' })).toBeNull();
     expect(loadSong({ getItem: () => JSON.stringify({ title: 'half a song' }) })).toBeNull();
+    const invalidNote = loadExampleSong();
+    const firstNote = invalidNote.tracks[0]?.notes[0];
+    if (firstNote) firstNote.p = 200;
+    expect(loadSong({ getItem: () => JSON.stringify(invalidNote) })).toBeNull();
+    const duplicateChord = loadExampleSong();
+    duplicateChord.chords.push({ bar: 1, symbol: 'G' });
+    expect(loadSong({ getItem: () => JSON.stringify(duplicateChord) })).toBeNull();
   });
 
   it('debounces store changes and flushes the latest song', () => {

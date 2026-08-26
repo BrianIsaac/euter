@@ -6,45 +6,62 @@ export const SONG_STORAGE_KEY = 'euter.song.v1';
 
 const noteSchema = z
   .object({
-    p: z.number(),
-    s: z.number(),
-    d: z.number(),
-    v: z.number(),
-    s_raw: z.number().optional(),
-    d_raw: z.number().optional(),
+    p: z.number().int().min(24).max(96),
+    s: z.number().finite().nonnegative(),
+    d: z.number().finite().positive(),
+    v: z.number().finite().min(0).max(1),
+    s_raw: z.number().finite().nonnegative().optional(),
+    d_raw: z.number().finite().positive().optional(),
     source: z.enum(['human', 'agent', 'take']),
   })
   .strict();
 
-const chordSchema = z.object({ bar: z.number().int(), symbol: z.string() }).strict();
+const chordSchema = z
+  .object({ bar: z.number().int().positive(), symbol: z.string().trim().min(1).max(24) })
+  .strict();
 
 export const persistedSongSchema: z.ZodType<SongDocument> = z
   .object({
     revision: z.number().int().nonnegative(),
-    title: z.string(),
-    bpm: z.number(),
-    time_sig: z.tuple([z.number(), z.number()]),
+    title: z.string().trim().min(1).max(120),
+    bpm: z.number().finite().min(40).max(220),
+    time_sig: z.tuple([z.literal(4), z.literal(4)]),
     key: z
       .object({
-        name: z.string(),
-        confidence: z.number(),
-        alternatives: z.array(z.object({ name: z.string(), confidence: z.number() }).strict()),
+        name: z.string().trim().min(2).max(40),
+        confidence: z.number().finite().min(0).max(1),
+        alternatives: z
+          .array(
+            z
+              .object({
+                name: z.string().trim().min(2).max(40),
+                confidence: z.number().finite().min(0).max(1),
+              })
+              .strict(),
+          )
+          .max(3),
       })
       .strict(),
-    bars: z.number().int().positive(),
+    bars: z.number().int().positive().max(4096),
     sections: z.array(
-      z.object({ name: z.string(), bar_from: z.number().int(), bar_to: z.number().int() }).strict(),
+      z
+        .object({
+          name: z.string().trim().min(1).max(80),
+          bar_from: z.number().int().positive(),
+          bar_to: z.number().int().positive(),
+        })
+        .strict(),
     ),
     chords: z.array(chordSchema),
     tracks: z.array(
       z
         .object({
-          id: z.string(),
-          name: z.string(),
+          id: z.string().trim().min(1).max(64),
+          name: z.string().trim().min(1).max(80),
           kind: z.enum(['melody', 'chords', 'bass', 'drums']),
-          instrument: z.string(),
-          volume_db: z.number(),
-          pan: z.number(),
+          instrument: z.string().trim().min(1).max(80),
+          volume_db: z.number().finite().min(-60).max(6),
+          pan: z.number().finite().min(-1).max(1),
           mute: z.boolean(),
           solo: z.boolean(),
           notes_rev: z.number().int().nonnegative(),
@@ -55,28 +72,34 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
     takes: z.array(
       z
         .object({
-          id: z.string(),
+          id: z.string().trim().min(1).max(64),
           source: z.enum(['mic', 'import', 'keyboard', 'midi']),
           notes: z.array(noteSchema),
           pitch_track: z.array(
-            z.object({ t: z.number(), hz: z.number(), clarity: z.number() }).strict(),
+            z
+              .object({
+                t: z.number().finite().nonnegative(),
+                hz: z.number().finite().positive(),
+                clarity: z.number().finite().min(0).max(1),
+              })
+              .strict(),
           ),
-          duration_s: z.number(),
-          voiced_ratio: z.number(),
-          median_clarity: z.number(),
-          pitch_range: z.tuple([z.number(), z.number()]),
-          tempo_hint: z.number().nullable(),
-          refining_job_id: z.string().optional(),
+          duration_s: z.number().finite().nonnegative(),
+          voiced_ratio: z.number().finite().min(0).max(1),
+          median_clarity: z.number().finite().min(0).max(1),
+          pitch_range: z.tuple([z.number().finite(), z.number().finite()]),
+          tempo_hint: z.number().finite().positive().nullable(),
+          refining_job_id: z.string().trim().min(1).max(64).optional(),
         })
         .strict(),
     ),
     notes_log: z.array(
       z
         .object({
-          revision: z.number().int(),
-          why: z.string(),
-          bars: z.tuple([z.number().int(), z.number().int()]),
-          track_id: z.string().nullable(),
+          revision: z.number().int().nonnegative(),
+          why: z.string().trim().min(1).max(200),
+          bars: z.tuple([z.number().int().positive(), z.number().int().positive()]),
+          track_id: z.string().trim().min(1).max(64).nullable(),
           source: z.enum(['human', 'agent']),
         })
         .strict(),
@@ -84,19 +107,19 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
     option_sets: z.array(
       z
         .object({
-          id: z.string(),
+          id: z.string().trim().min(1).max(64),
           kind: z.enum(['chords', 'feel', 'part']),
-          bar_from: z.number().int(),
-          bar_to: z.number().int(),
+          bar_from: z.number().int().positive(),
+          bar_to: z.number().int().positive(),
           options: z.array(
             z
               .object({
-                id: z.string(),
-                label: z.string(),
-                why: z.string(),
+                id: z.string().trim().min(1).max(64),
+                label: z.string().trim().min(1).max(80),
+                why: z.string().trim().min(1).max(200),
                 chords: z.array(chordSchema).optional(),
                 style: z.enum(['pop', 'soul', 'lofi']).optional(),
-                track_id: z.string().optional(),
+                track_id: z.string().trim().min(1).max(64).optional(),
                 notes: z.array(noteSchema).optional(),
               })
               .strict(),
@@ -107,16 +130,45 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
     ),
     take_request: z
       .object({
-        id: z.string(),
-        track_id: z.string(),
-        bar_from: z.number().int(),
-        bar_to: z.number().int(),
-        prompt: z.string(),
+        id: z.string().trim().min(1).max(64),
+        track_id: z.string().trim().min(1).max(64),
+        bar_from: z.number().int().positive(),
+        bar_to: z.number().int().positive(),
+        prompt: z.string().trim().min(1).max(200),
       })
       .strict()
       .nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((song, context) => {
+    for (const section of song.sections) {
+      if (section.bar_to < section.bar_from || section.bar_to > song.bars) {
+        context.addIssue({
+          code: 'custom',
+          message: `Section "${section.name}" is outside the song.`,
+        });
+      }
+    }
+    const chordBars = new Set<number>();
+    for (const chord of song.chords) {
+      if (chord.bar > song.bars || chordBars.has(chord.bar)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Chord bar ${chord.bar} is invalid or duplicated.`,
+        });
+      }
+      chordBars.add(chord.bar);
+    }
+    const songBeats = song.bars * song.time_sig[0];
+    for (const track of song.tracks) {
+      if (track.notes.some((note) => note.s >= songBeats || note.s + note.d > songBeats)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Track "${track.id}" has a note outside the song.`,
+        });
+      }
+    }
+  });
 
 export interface SongStoreReader {
   getDocument(): SongDocument;

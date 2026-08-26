@@ -127,7 +127,7 @@ export interface SongDocument {
   revision: number;
   title: string;
   bpm: number;
-  time_sig: [number, number];
+  time_sig: [4, 4];
   key: KeyEstimate;
   bars: number;
   sections: Section[];
@@ -142,7 +142,7 @@ export interface SongDocument {
 }
 
 /** The immutable time signature used by the first-song product. */
-export const DEFAULT_TIME_SIGNATURE: [number, number] = [4, 4];
+export const DEFAULT_TIME_SIGNATURE: [4, 4] = [4, 4];
 
 /**
  * Creates an empty song at revision 0.

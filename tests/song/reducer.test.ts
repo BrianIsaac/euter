@@ -96,6 +96,23 @@ describe('song reducer and command bus', () => {
     });
   });
 
+  it('keeps swung quantisation inside the fixed song boundary', () => {
+    const song = loadExampleSong();
+    const melody = song.tracks[0];
+    if (!melody) throw new Error('Example song has no melody track.');
+    song.tracks[0] = {
+      ...melody,
+      notes: [{ p: 60, s: 31.9, d: 0.1, v: 0.8, source: 'human' }],
+    };
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('set_quantize', { track_id: 'melody', grid: '8n', strength: 1, swing: 0.5 }),
+    );
+    const note = songStore.getDocument().tracks[0]?.notes[0];
+    expect((note?.s ?? 0) + (note?.d ?? 0)).toBeLessThanOrEqual(32);
+    expect(note?.s_raw).toBe(31.9);
+  });
+
   it('validates every chord before applying and sets a ranked key', () => {
     const songStore = store();
     const before = JSON.stringify(songStore.getDocument());

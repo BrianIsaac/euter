@@ -219,6 +219,7 @@ function setQuantize(
     command.args.grid,
     command.args.strength,
     command.args.swing ?? 0,
+    document.bars * document.time_sig[0],
   );
   const bars = noteRange(notes, document.time_sig[0], document.bars);
   const updated = { ...track, notes, notes_rev: track.notes_rev + 1 };
@@ -426,11 +427,22 @@ function commitTake(
   if (!take) {
     throw new ToolError('TAKE_NOT_FOUND', `Take "${command.args.take_id}" does not exist.`, true);
   }
+  const maximumBeat = document.bars * document.time_sig[0];
+  if (
+    take.notes.some((note) => note.s < 0 || note.s >= maximumBeat || note.s + note.d > maximumBeat)
+  ) {
+    throw new ToolError(
+      'OUT_OF_RANGE',
+      `Take "${take.id}" extends past the current ${document.bars} bars. Arrange more bars first.`,
+      true,
+    );
+  }
   const notes = quantizeNotes(
     take.notes.map((note) => ({ ...note, source: 'take' })),
     command.args.grid,
     command.args.quantize_strength,
     0,
+    maximumBeat,
   );
   const range = noteRange(notes, document.time_sig[0], document.bars);
   const start = (range[0] - 1) * document.time_sig[0];
@@ -678,6 +690,7 @@ function quantizeNotes(
   grid: '8n' | '16n',
   strength: number,
   swing: number,
+  maximumBeat: number,
 ): Note[] {
   const unit = grid === '8n' ? 0.5 : 0.25;
   return notes.map((note) => {
@@ -687,12 +700,20 @@ function quantizeNotes(
     const swingOffset = step % 2 === 1 ? unit * swing : 0;
     const targetStart = step * unit + swingOffset;
     const targetDuration = Math.max(unit, Math.round(rawDuration / unit) * unit);
+    const start = Math.min(
+      round(rawStart + (targetStart - rawStart) * strength),
+      maximumBeat - 0.001,
+    );
+    const duration = Math.min(
+      round(rawDuration + (targetDuration - rawDuration) * strength),
+      maximumBeat - start,
+    );
     return {
       ...note,
       s_raw: rawStart,
       d_raw: rawDuration,
-      s: round(rawStart + (targetStart - rawStart) * strength),
-      d: round(rawDuration + (targetDuration - rawDuration) * strength),
+      s: start,
+      d: Math.max(0.001, duration),
     };
   });
 }
