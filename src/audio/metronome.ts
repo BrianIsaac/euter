@@ -11,7 +11,7 @@ export interface MetronomeTransport {
   bpm: { value: number };
   position: unknown;
   schedule(callback: (time: number) => void, position: string): number;
-  scheduleRepeat(callback: (time: number) => void, interval: string): number;
+  scheduleRepeat(callback: (time: number) => void, interval: string, startTime?: string): number;
   clear(id: number): void;
   start(): void;
 }
@@ -86,11 +86,15 @@ export function createMetronome(
       scheduled.push(completion);
       if (options.continueClick) {
         let beat = 0;
-        const repeat = dependencies.transport.scheduleRepeat((time) => {
-          const accented = beat % beatsPerBar === 0;
-          dependencies?.click.play(time, accented);
-          beat += 1;
-        }, '4n');
+        const repeat = dependencies.transport.scheduleRepeat(
+          (time) => {
+            const accented = beat % beatsPerBar === 0;
+            dependencies?.click.play(time, accented);
+            beat += 1;
+          },
+          '4n',
+          `${options.bars}:0:0`,
+        );
         scheduled.push(repeat);
       }
       dependencies.transport.start();

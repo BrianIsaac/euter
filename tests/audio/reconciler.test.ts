@@ -133,6 +133,15 @@ describe('audio graph reconciler', () => {
     const event = melodyPart?.events[0];
     if (event) melodyPart.callback(2, event);
     expect(loaded.get('grand-piano')?.trigger).toHaveBeenCalledWith(64, 2, 60 / 92, 0.78);
+    store.dispatch({
+      type: 'set_tempo',
+      args: { bpm: 120 },
+      source: 'human',
+      why: 'Try it faster.',
+    });
+    if (event) melodyPart.callback(3, event);
+    expect(loaded.get('grand-piano')?.trigger).toHaveBeenLastCalledWith(64, 3, 0.5, 0.78);
+    expect(melodyPart?.dispose).not.toHaveBeenCalled();
     reconciler.dispose();
   });
 
@@ -198,7 +207,7 @@ describe('audio graph reconciler', () => {
     const store = createSongStore(loadExampleSong(), createSongReducer());
     store.dispatch({
       type: 'set_instrument',
-      args: { track_id: 'melody', instrument: 'vcsl-flute' },
+      args: { track_id: 'melody', instrument: 'vcsl-recorder' },
       source: 'agent',
       why: 'Try a breathy lead.',
     });
@@ -212,7 +221,7 @@ describe('audio graph reconciler', () => {
     });
     await reconciler.ready();
     expect(reconciler.getSnapshot().fallbacks).toMatchObject({
-      'melody:vcsl-flute': 'R2 is not configured; playing piano instead.',
+      'melody:vcsl-recorder': 'R2 is not configured; playing piano instead.',
     });
   });
 

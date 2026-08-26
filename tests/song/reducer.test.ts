@@ -46,18 +46,24 @@ describe('song reducer and command bus', () => {
     songStore.dispatch(agent('add_track', { kind: 'bass', instrument: 'sub-bass', name: 'Low' }));
     const id = songStore.getDocument().tracks.at(-1)?.id;
     expect(id).toBe('bass-1');
-    songStore.dispatch(agent('set_instrument', { track_id: id, instrument: 'upright-bass' }));
+    songStore.dispatch(agent('set_instrument', { track_id: id, instrument: 'vcsl-strings' }));
     songStore.dispatch(agent('set_mix', { track_id: id, volume_db: -10, pan: -0.1, mute: true }));
     songStore.dispatch(agent('set_tempo', { bpm: 101.5 }));
     expect(songStore.getDocument()).toMatchObject({ bpm: 101.5, revision: 4 });
     expect(songStore.getDocument().tracks.at(-1)).toMatchObject({
       name: 'Low',
-      instrument: 'upright-bass',
+      instrument: 'vcsl-strings',
       volume_db: -10,
       pan: -0.1,
       mute: true,
     });
     expect(songStore.getDocument().notes_log).toHaveLength(4);
+    expect(() =>
+      songStore.dispatch(
+        agent('set_instrument', { track_id: id, instrument: 'imaginary-orchestra' }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'INVALID_ARGUMENT' }));
+    expect(songStore.getDocument().revision).toBe(4);
   });
 
   it('translates set_notes from its starting bar and makes quantisation reversible', () => {

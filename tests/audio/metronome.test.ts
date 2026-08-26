@@ -82,6 +82,7 @@ describe('transport metronome', () => {
     });
     deps.repeated.get(6)?.(3);
     expect(deps.click.play).toHaveBeenCalledWith(3, true);
+    expect(deps.transport.scheduleRepeat).toHaveBeenCalledWith(expect.any(Function), '4n', '1:0:0');
     scheduled.cancel();
     expect(deps.scheduled.size).toBe(0);
     expect(deps.repeated.size).toBe(0);

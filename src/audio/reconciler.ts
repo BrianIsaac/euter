@@ -231,7 +231,8 @@ export function createAudioReconciler(
     }));
     const instrument = state.instrument;
     state.part = factory.part(track.id, events, (time, event) => {
-      instrument.trigger(event.note.p, time, (event.note.d * 60) / song.bpm, event.note.v);
+      const currentBpm = store.getDocument().bpm;
+      instrument.trigger(event.note.p, time, (event.note.d * 60) / currentBpm, event.note.v);
     });
     state.part.start();
     state.notesRev = track.notes_rev;

@@ -16,7 +16,7 @@ describe('song store history integration', () => {
     const songStore = createSongStore(loadExampleSong(), createSongReducer());
     songStore.dispatch(edit('set_tempo', { bpm: 100 }));
     songStore.dispatch(edit('set_mix', { track_id: 'bass', volume_db: -20 }));
-    songStore.dispatch(edit('set_instrument', { track_id: 'bass', instrument: 'upright-bass' }));
+    songStore.dispatch(edit('set_instrument', { track_id: 'bass', instrument: 'vcsl-strings' }));
 
     const undo = songStore.undoItem(2);
     expect(undo).toMatchObject({ revision: 4, edits: 2 });

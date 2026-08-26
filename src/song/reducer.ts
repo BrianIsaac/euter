@@ -1,6 +1,7 @@
 /** Atomic song reducer for every document-mutating write (plan Architecture item 2). */
 import type { Command, Reducer, ReducerResult } from '../webmcp/bus.ts';
 import { ToolError } from '../webmcp/envelope.ts';
+import { isKnownInstrument } from '../audio/instruments.ts';
 import { isValidChord } from '../theory/chords.ts';
 import { generateBass } from '../theory/generate/bass.ts';
 import { generateChords } from '../theory/generate/chords.ts';
@@ -77,6 +78,7 @@ export function createSongReducer(options: SongReducerOptions = {}): Reducer<Son
       case 'add_track':
         return addTrack(document, command, idFactory);
       case 'set_instrument':
+        requireInstrument(command.args.instrument);
         return updateTrack(
           document,
           command,
@@ -236,6 +238,7 @@ function addTrack(
   command: Extract<SongCommand, { type: 'add_track' }>,
   idFactory: (prefix: string) => string,
 ): ReducerResult<SongDocument> {
+  requireInstrument(command.args.instrument);
   const id = uniqueId(document, command.args.kind, idFactory);
   const mix = MIX_DEFAULTS[command.args.kind];
   const track: Track = {
@@ -649,6 +652,16 @@ function requireTrack(document: SongDocument, trackId: string): Track {
   const track = document.tracks.find(({ id }) => id === trackId);
   if (!track) throw new ToolError('TRACK_NOT_FOUND', `Track "${trackId}" does not exist.`, true);
   return track;
+}
+
+function requireInstrument(instrument: string): void {
+  if (!isKnownInstrument(instrument)) {
+    throw new ToolError(
+      'INVALID_ARGUMENT',
+      `Instrument "${instrument}" is not in the current catalogue. Read get_song_state for names.`,
+      true,
+    );
+  }
 }
 
 function validateBarRange(document: SongDocument, barFrom: number, barTo: number): void {

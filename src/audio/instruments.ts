@@ -246,6 +246,11 @@ export const INSTRUMENT_CATALOGUE: readonly InstrumentCatalogueEntry[] = DEFINIT
   }),
 );
 
+/** True when a reducer/UI instrument name resolves to a real catalogue loader. */
+export function isKnownInstrument(id: string): boolean {
+  return INSTRUMENT_CATALOGUE.some((entry) => entry.id === id);
+}
+
 /** Groups the catalogue for `get_song_state` and the instrument chooser. */
 export function instrumentsByFamily(): Record<InstrumentFamily, string[]> {
   return Object.fromEntries(
