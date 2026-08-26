@@ -236,8 +236,8 @@ credentials stop the upload before any network mutation.
 ## Export codecs
 
 Tone.js and smplr are MIT. MIDI export uses @tonejs/midi (MIT), WAV export uses
-audiobuffer-to-wav (MIT), and MP3 export uses mediabunny with @mediabunny/mp3-encoder. The MP3
-encoder is consumed unmodified under MPL-2.0.
+audiobuffer-to-wav (MIT), and MP3 export uses mediabunny with @mediabunny/mp3-encoder. Those
+packages are consumed unmodified under MPL-2.0; the extension's embedded LAME encoder is LGPL.
 `;
 }
 
