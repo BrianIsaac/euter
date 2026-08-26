@@ -64,7 +64,7 @@ interface InstrumentDefinition {
   bundled: boolean;
   byte_size: number;
   licence: InstrumentLicence;
-  sample_profile?: 'piano' | 'orchestral';
+  sample_map?: readonly { sample: string; pitch: number }[];
   fallback_id?: string;
 }
 
@@ -107,9 +107,15 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'keys',
     engine: 'smplr-sampler',
     bundled: true,
-    byte_size: 620_000,
+    byte_size: 436_889,
     licence: PUBLIC_DOMAIN_PIANO,
-    sample_profile: 'piano',
+    sample_map: [
+      { sample: 'c2', pitch: 48 },
+      { sample: 'c3', pitch: 60 },
+      { sample: 'c4', pitch: 72 },
+      { sample: 'b4', pitch: 83 },
+      { sample: 'c6', pitch: 96 },
+    ],
   },
   {
     id: 'electric-piano',
@@ -117,9 +123,14 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'keys',
     engine: 'smplr-sampler',
     bundled: false,
-    byte_size: 1_200_000,
+    byte_size: 274_004,
     licence: VCSL_CC0,
-    sample_profile: 'piano',
+    sample_map: [
+      { sample: 'c2', pitch: 48 },
+      { sample: 'c3', pitch: 60 },
+      { sample: 'c4', pitch: 72 },
+      { sample: 'c5', pitch: 84 },
+    ],
     fallback_id: 'grand-piano',
   },
   {
@@ -128,7 +139,7 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'drums',
     engine: 'smplr-drum-machine',
     bundled: true,
-    byte_size: 90_000,
+    byte_size: 10_214,
     licence: PUBLIC_DOMAIN_DRUMS,
   },
   {
@@ -137,7 +148,7 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'drums',
     engine: 'smplr-drum-machine',
     bundled: false,
-    byte_size: 180_000,
+    byte_size: 9_413,
     licence: PUBLIC_DOMAIN_DRUMS,
     fallback_id: 'studio-kit',
   },
@@ -147,7 +158,7 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'drums',
     engine: 'smplr-drum-machine',
     bundled: false,
-    byte_size: 210_000,
+    byte_size: 9_730,
     licence: PUBLIC_DOMAIN_DRUMS,
     fallback_id: 'studio-kit',
   },
@@ -157,9 +168,12 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'strings',
     engine: 'smplr-sampler',
     bundled: false,
-    byte_size: 4_200_000,
+    byte_size: 290_792,
     licence: VCSL_CC0,
-    sample_profile: 'orchestral',
+    sample_map: [
+      { sample: 'c4', pitch: 72 },
+      { sample: 'c5', pitch: 84 },
+    ],
     fallback_id: 'grand-piano',
   },
   {
@@ -168,9 +182,12 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'mallets',
     engine: 'smplr-sampler',
     bundled: false,
-    byte_size: 2_100_000,
+    byte_size: 188_865,
     licence: VCSL_CC0,
-    sample_profile: 'orchestral',
+    sample_map: [
+      { sample: 'c3', pitch: 60 },
+      { sample: 'c5', pitch: 84 },
+    ],
     fallback_id: 'grand-piano',
   },
   {
@@ -179,9 +196,12 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'brass-winds',
     engine: 'smplr-sampler',
     bundled: false,
-    byte_size: 2_800_000,
+    byte_size: 358_323,
     licence: VCSL_CC0,
-    sample_profile: 'orchestral',
+    sample_map: [
+      { sample: 'c4', pitch: 72 },
+      { sample: 'c5', pitch: 84 },
+    ],
     fallback_id: 'grand-piano',
   },
   {
@@ -190,9 +210,13 @@ const DEFINITIONS: readonly InstrumentDefinition[] = [
     family: 'brass-winds',
     engine: 'smplr-sampler',
     bundled: false,
-    byte_size: 3_100_000,
+    byte_size: 267_446,
     licence: VCSL_CC0,
-    sample_profile: 'orchestral',
+    sample_map: [
+      { sample: 'd3', pitch: 62 },
+      { sample: 'd4', pitch: 74 },
+      { sample: 'e5', pitch: 88 },
+    ],
     fallback_id: 'grand-piano',
   },
   {
@@ -290,28 +314,28 @@ async function createBackend(
     progress(1);
     return backend;
   }
-  const preset = samplePreset(baseUrl, entry.sample_profile ?? 'orchestral');
+  if (!entry.sample_map) throw new Error(`Sample instrument "${entry.id}" has no explicit map.`);
+  const preset = samplePreset(baseUrl, entry);
   const backend = await factories.sampler(request.context, request.destination, preset, progress);
   progress(1);
   return backend;
 }
 
-function samplePreset(baseUrl: string, profile: 'piano' | 'orchestral'): SmplrPreset {
-  const roots = profile === 'piano' ? [48, 60, 72, 83, 96] : [48, 60, 72, 84];
-  const names = profile === 'piano' ? ['c2', 'c3', 'c4', 'b4', 'c6'] : ['c2', 'c3', 'c4', 'c5'];
+function samplePreset(baseUrl: string, entry: InstrumentCatalogueEntry): SmplrPreset {
+  const regions = entry.sample_map ?? [];
   return {
-    meta: { name: profile, license: profile === 'piano' ? 'Public domain' : 'CC0 1.0' },
+    meta: { name: entry.id, license: entry.licence.licence },
     samples: { baseUrl: `${trimSlash(baseUrl)}/`, formats: ['ogg'] },
     groups: [
       {
-        regions: roots.map((pitch, index) => ({
-          sample: names[index] ?? 'c4',
+        regions: regions.map(({ sample, pitch }, index) => ({
+          sample,
           pitch,
           keyRange: [
-            index === 0 ? 24 : Math.floor(((roots[index - 1] ?? pitch) + pitch) / 2) + 1,
-            index === roots.length - 1
+            index === 0 ? 24 : Math.floor(((regions[index - 1]?.pitch ?? pitch) + pitch) / 2) + 1,
+            index === regions.length - 1
               ? 108
-              : Math.floor((pitch + (roots[index + 1] ?? pitch)) / 2),
+              : Math.floor((pitch + (regions[index + 1]?.pitch ?? pitch)) / 2),
           ],
         })),
       },

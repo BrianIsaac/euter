@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -80,18 +81,6 @@ export const SAMPLE_ASSETS: readonly SampleAsset[] = [
   ]),
   ...assets('vcsl-strings', 'VCSL bowed psaltery', 'CC0 1.0', false, [
     [
-      'c2',
-      vcsl(
-        'Chordophones/Zithers/Psaltery, Bowed and Plucked/LongBow/BowedPsaltery_C4_Main_LongBow_rr1.ogg',
-      ),
-    ],
-    [
-      'c3',
-      vcsl(
-        'Chordophones/Zithers/Psaltery, Bowed and Plucked/LongBow/BowedPsaltery_C4_Main_LongBow_rr1.ogg',
-      ),
-    ],
-    [
       'c4',
       vcsl(
         'Chordophones/Zithers/Psaltery, Bowed and Plucked/LongBow/BowedPsaltery_C4_Main_LongBow_rr1.ogg',
@@ -106,16 +95,8 @@ export const SAMPLE_ASSETS: readonly SampleAsset[] = [
   ]),
   ...assets('vcsl-vibraphone', 'VCSL vibraphone, hard mallets', 'CC0 1.0', false, [
     [
-      'c2',
-      vcsl('Idiophones/Struck Idiophones/Vibraphone/Hard Mallets/Vibes_hard_C3_v2_rr1_Main.ogg'),
-    ],
-    [
       'c3',
       vcsl('Idiophones/Struck Idiophones/Vibraphone/Hard Mallets/Vibes_hard_C3_v2_rr1_Main.ogg'),
-    ],
-    [
-      'c4',
-      vcsl('Idiophones/Struck Idiophones/Vibraphone/Hard Mallets/Vibes_hard_C5_v2_rr1_Main.ogg'),
     ],
     [
       'c5',
@@ -123,18 +104,6 @@ export const SAMPLE_ASSETS: readonly SampleAsset[] = [
     ],
   ]),
   ...assets('vcsl-recorder', 'VCSL baroque alto recorder', 'CC0 1.0', false, [
-    [
-      'c2',
-      vcsl(
-        'Aerophones/Edge-blown Aerophones/Baroque Alto Recorder/Sustain/AltRecorder_Sus_C4_rr1_Main.ogg',
-      ),
-    ],
-    [
-      'c3',
-      vcsl(
-        'Aerophones/Edge-blown Aerophones/Baroque Alto Recorder/Sustain/AltRecorder_Sus_C4_rr1_Main.ogg',
-      ),
-    ],
     [
       'c4',
       vcsl(
@@ -150,25 +119,19 @@ export const SAMPLE_ASSETS: readonly SampleAsset[] = [
   ]),
   ...assets('vcsl-saxello', 'VCSL Saxello', 'CC0 1.0', false, [
     [
-      'c2',
+      'd3',
       vcsl(
         'Aerophones/Reed Aerophones/Saxello/Non-Vibrato/BrettSaxello_SusNV_MainSpirit_D3_vl2_rr2.ogg',
       ),
     ],
     [
-      'c3',
-      vcsl(
-        'Aerophones/Reed Aerophones/Saxello/Non-Vibrato/BrettSaxello_SusNV_MainSpirit_D3_vl2_rr2.ogg',
-      ),
-    ],
-    [
-      'c4',
+      'd4',
       vcsl(
         'Aerophones/Reed Aerophones/Saxello/Non-Vibrato/BrettSaxello_SusNV_MainSpirit_D4_vl2_rr2.ogg',
       ),
     ],
     [
-      'c5',
+      'e5',
       vcsl(
         'Aerophones/Reed Aerophones/Saxello/Non-Vibrato/BrettSaxello_SusNV_MainSpirit_E5_vl2_rr2.ogg',
       ),
@@ -249,10 +212,15 @@ async function run(options: FetchSampleOptions): Promise<void> {
     ? SAMPLE_ASSETS.filter(({ bundled }) => bundled)
     : SAMPLE_ASSETS;
   await mkdir(cache, { recursive: true });
+  if (!options.bundledOnly) {
+    await rm(remote, { recursive: true, force: true });
+    await mkdir(remote, { recursive: true });
+  }
 
-  for (const [index, asset] of selected.entries()) {
+  for (const asset of selected) {
     const output = asset.bundled ? bundledPath(root, asset) : path.join(remote, asset.destination);
-    const cached = path.join(cache, `${index}-${path.basename(asset.destination)}`);
+    const sourceHash = createHash('sha256').update(asset.sourceUrl).digest('hex').slice(0, 16);
+    const cached = path.join(cache, `${sourceHash}-${path.basename(asset.destination)}`);
     await download(asset.sourceUrl, cached);
     await mkdir(path.dirname(output), { recursive: true });
     await ensureOpus(cached, output);

@@ -97,9 +97,16 @@ describe('instrument catalogue', () => {
       onProgress: progress,
     });
     expect(result.loaded).toBe(true);
-    expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
-      'https://samples.example/electric-piano/',
-    );
+    const preset = vi.mocked(fake.value.sampler).mock.calls[0]?.[2];
+    expect(preset).toBeDefined();
+    if (!preset) throw new Error('Sampler was not called with a preset.');
+    expect(preset.samples.baseUrl).toBe('https://samples.example/electric-piano/');
+    expect(preset.groups[0]?.regions.map(({ sample, pitch }) => [sample, pitch])).toEqual([
+      ['c2', 48],
+      ['c3', 60],
+      ['c4', 72],
+      ['c5', 84],
+    ]);
     expect(progress).toHaveBeenNthCalledWith(1, 0);
     expect(progress).toHaveBeenLastCalledWith(1);
   });

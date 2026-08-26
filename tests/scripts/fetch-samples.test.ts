@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseArgs, renderSamplesMarkdown, SAMPLE_ASSETS } from '../../scripts/fetch-samples.ts';
+import { INSTRUMENT_CATALOGUE } from '../../src/audio/instruments.ts';
 
 describe('sample fetch manifest', () => {
   it('has a named, licensed upstream source for every catalogue sample', () => {
@@ -21,6 +22,20 @@ describe('sample fetch manifest', () => {
       expect(asset.sourceUrl).toMatch(/^https:/u);
       expect(['Public domain', 'CC0 1.0']).toContain(asset.licence);
       expect(asset.destination).toMatch(/\.ogg$/u);
+    }
+  });
+
+  it('matches every sampled loader map to files the workflow prepares', () => {
+    for (const instrument of INSTRUMENT_CATALOGUE.filter(({ sample_map }) => sample_map)) {
+      const outputs = SAMPLE_ASSETS.filter(({ instrument: id }) => id === instrument.id).map(
+        ({ destination }) =>
+          destination
+            .split('/')
+            .at(-1)
+            ?.replace(/\.ogg$/u, ''),
+      );
+      expect(outputs, instrument.id).toEqual(instrument.sample_map?.map(({ sample }) => sample));
+      expect(instrument.byte_size).toBeGreaterThan(0);
     }
   });
 
