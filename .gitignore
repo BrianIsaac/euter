@@ -17,3 +17,6 @@ AGENTS.md
 CLAUDE.md
 .claude/
 .playwright-mcp/
+
+# lavish review surfaces
+.lavish/
