@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      WebMCP origin trial (Chrome 149-156). Register the deployed origin at
+      https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241
+      and paste the token into content="" below. The token is bound to the origin and is
+      safe to commit. Chrome with chrome://flags/#enable-webmcp-testing and the ChatGPT
+      desktop app do not need it; a judge without the flag does.
+    -->
+    <meta http-equiv="origin-trial" content="" />
+    <meta
+      name="description"
+      content="Euterpe: hum a melody and make a song with your agent through WebMCP."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Euterpe</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

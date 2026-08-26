@@ -1,0 +1,6 @@
+# Cloudflare Pages project configuration (https://developers.cloudflare.com/pages/functions/wrangler-configuration/).
+# With pages_build_output_dir set, this file is the source of truth for the project's settings
+# and the same fields cannot be edited in the dashboard. Build command: pnpm build.
+name = "euter"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-08-27"
