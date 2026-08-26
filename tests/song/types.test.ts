@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptySong, type Note, type SongDocument } from '../../src/song/types.ts';
+import { cloneSong, createEmptySong, type Note, type SongDocument } from '../../src/song/types.ts';
 
 describe('song types', () => {
   it('creates an empty song at revision 0 with the plan shape', () => {
@@ -13,6 +13,8 @@ describe('song types', () => {
     expect(song.chords).toEqual([]);
     expect(song.sections).toEqual([]);
     expect(song.notes_log).toEqual([]);
+    expect(song.option_sets).toEqual([]);
+    expect(song.take_request).toBeNull();
     expect(Object.keys(song).sort()).toEqual(
       [
         'bars',
@@ -20,9 +22,11 @@ describe('song types', () => {
         'chords',
         'key',
         'notes_log',
+        'option_sets',
         'revision',
         'sections',
         'takes',
+        'take_request',
         'time_sig',
         'title',
         'tracks',
@@ -32,6 +36,13 @@ describe('song types', () => {
 
   it('defaults the title', () => {
     expect(createEmptySong().title).toBe('Untitled');
+  });
+
+  it('deep-clones history snapshots', () => {
+    const song = createEmptySong();
+    const clone = cloneSong(song);
+    clone.key.alternatives.push({ name: 'A minor', confidence: 0.5 });
+    expect(song.key.alternatives).toEqual([]);
   });
 
   it('types notes in beats with MIDI pitches and optional raw timing', () => {
