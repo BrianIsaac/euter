@@ -25,6 +25,7 @@ export interface CreateTakeOptions extends TakeAlignment {
   quantiseStrength?: number;
   swing?: number;
   clarityThreshold?: number;
+  startBeat?: number;
 }
 
 function rms(samples: ArrayLike<number>): number {
@@ -97,6 +98,7 @@ export function createTakeFromPitchTrack(
   const segmented = segmentPitchTrack(aligned, {
     bpm: options.bpm,
     clarityThreshold,
+    startBeat: options.startBeat ?? 0,
   });
   const rawNotes: Note[] = segmented.map((note) => ({
     ...note,
