@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 export type SampleLicence = 'Public domain' | 'CC0 1.0';
 
@@ -142,37 +143,80 @@ export const SAMPLE_ASSETS: readonly SampleAsset[] = [
 export interface FetchSampleOptions {
   upload: boolean;
   bundledOnly: boolean;
+  dryRun: boolean;
 }
+
+export interface SampleManifestEntry extends SampleAsset {
+  path: string;
+  bytes: number;
+  gzip_bytes: number;
+  sha256: string;
+}
+
+export interface SampleManifest {
+  version: 1;
+  codec: 'Opus in Ogg';
+  assets: SampleManifestEntry[];
+}
+
+export interface UploadObject {
+  key: string;
+  bytes: number;
+}
+
+const MAX_UPLOAD_BYTES = 1_000_000_000;
+const MANIFEST_FILE = 'SAMPLES.manifest.json';
 
 export function parseArgs(argv: readonly string[]): FetchSampleOptions {
   const argumentsWithoutSeparator = argv.filter((argument) => argument !== '--');
-  const known = new Set(['--upload', '--bundled-only']);
+  const known = new Set(['--upload', '--bundled-only', '--dry-run']);
   const unknown = argumentsWithoutSeparator.find((argument) => !known.has(argument));
   if (unknown) throw new Error(`Unknown argument: ${unknown}`);
   const upload = argumentsWithoutSeparator.includes('--upload');
   const bundledOnly = argumentsWithoutSeparator.includes('--bundled-only');
-  if (upload && bundledOnly) throw new Error('--upload and --bundled-only cannot be combined.');
-  return { upload, bundledOnly };
+  const dryRun = argumentsWithoutSeparator.includes('--dry-run');
+  if (upload && dryRun) throw new Error('--upload and --dry-run cannot be combined.');
+  if ((upload || dryRun) && bundledOnly) {
+    throw new Error('--upload/--dry-run and --bundled-only cannot be combined.');
+  }
+  return { upload, bundledOnly, dryRun };
 }
 
-export function renderSamplesMarkdown(sampleAssets: readonly SampleAsset[]): string {
+export function renderSamplesMarkdown(
+  sampleAssets: readonly SampleAsset[],
+  manifest: SampleManifest | null = null,
+): string {
   const rows = new Map<string, Pick<SampleAsset, 'source' | 'licence' | 'sourceUrl'>>();
   for (const asset of sampleAssets) {
     rows.set(`${asset.source}:${asset.licence}`, asset);
   }
+  const bytesBySource = new Map<string, number>();
+  for (const asset of manifest?.assets ?? []) {
+    bytesBySource.set(asset.source, (bytesBySource.get(asset.source) ?? 0) + asset.bytes);
+  }
   const table = [...rows.values()]
-    .map(({ source, licence, sourceUrl }) => `| ${source} | ${licence} | ${sourceUrl} |`)
+    .map(
+      ({ source, licence, sourceUrl }) =>
+        `| ${source} | ${licence} | ${formatBytes(bytesBySource.get(source))} | ${sourceUrl} |`,
+    )
     .join('\n');
+  const bundled = (manifest?.assets ?? []).filter(({ bundled }) => bundled);
+  const remote = (manifest?.assets ?? []).filter(({ bundled }) => !bundled);
+  const bundledBytes = sum(bundled.map(({ bytes }) => bytes));
+  const bundledGzipBytes = sum(bundled.map(({ gzip_bytes }) => gzip_bytes));
+  const remoteBytes = sum(remote.map(({ bytes }) => bytes));
   return `# Samples and codec licences
 
 Euterpe's bundled subset is one public-domain piano and one public-domain drum kit. The current
-bundled files total under 4 MB; all other sampled instruments are prepared for the public R2
-sample origin. Synth bass and pad are the two deliberate Tone.js exceptions to the sampled
-catalogue. Files are fetched from the named upstream source and normalised to Opus by
+bundled files total ${formatBytes(bundledBytes)} (${formatBytes(bundledGzipBytes)} gzipped), below
+the 4 MB gzipped ceiling. The remote pack totals ${formatBytes(remoteBytes)}. All other sampled
+instruments are prepared for the public R2 sample origin. Synth bass and pad are the two deliberate
+Tone.js exceptions to the sampled catalogue. Files are fetched from the named upstream source,
+normalised to Opus and recorded with byte counts and SHA-256 hashes in \`${MANIFEST_FILE}\` by
 \`scripts/fetch-samples.ts\`.
 
-| Source | Licence | Upstream asset example |
-| --- | --- | --- |
+| Source | Licence | Prepared bytes | Upstream asset example |
+| --- | --- | ---: | --- |
 ${table}
 
 Splendid Grand Piano is used under its public-domain dedication. The VCSL assets are CC0 1.0.
@@ -183,18 +227,20 @@ used, so their CC BY 3.0 attribution requirement does not apply.
 
 \`pnpm samples -- --bundled-only\` refreshes only the committed subset.
 \`pnpm samples\` also prepares the remote catalogue in \`samples-dist/\` but does not claim an
-upload. \`pnpm samples -- --upload\` uploads those remote files with
-\`Cache-Control: public, max-age=31536000, immutable\` after all five variables below are present
-in the gitignored \`.env.local\` or process environment:
+upload. \`pnpm samples -- --dry-run\` prepares and lists every object, byte size and the total
+without credentials or a network mutation. \`pnpm samples -- --upload\` uploads those remote files
+through R2's S3 API with \`Cache-Control: public, max-age=31536000, immutable\` after all four
+variables below are present in the gitignored \`.env.local\` or process environment:
 
 - \`R2_ACCOUNT_ID\`
 - \`R2_ACCESS_KEY_ID\`
 - \`R2_SECRET_ACCESS_KEY\`
 - \`R2_BUCKET\`
-- \`R2_PUBLIC_URL\` (also exposed to Vite as \`VITE_SAMPLES_BASE_URL\`)
 
-The upload uses rclone's S3 backend against the account's Cloudflare R2 endpoint. Missing
-credentials stop the upload before any network mutation.
+The bucket value is \`euter-samples\`. The upload refuses a prepared directory over 1 GB, then uses
+rclone's S3 backend against the account's Cloudflare R2 endpoint. Missing credentials stop the
+upload before any network mutation. Playback uses
+\`VITE_SAMPLES_BASE_URL=https://pub-6577ff8ba87b4d7e863a12dce1501192.r2.dev\`.
 
 ## Export codecs
 
@@ -228,18 +274,94 @@ async function run(options: FetchSampleOptions): Promise<void> {
     process.stdout.write(`${asset.instrument}/${path.basename(output)} ${bytes} bytes\n`);
   }
 
+  const generatedManifest = await createManifest(root, selected);
+  const manifest = options.bundledOnly
+    ? await mergeExistingManifest(root, generatedManifest)
+    : generatedManifest;
+  const manifestDocument = path.join(root, MANIFEST_FILE);
+  await writeFile(manifestDocument, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   const samplesDocument = path.join(root, 'SAMPLES.md');
-  await writeFile(samplesDocument, renderSamplesMarkdown(SAMPLE_ASSETS), 'utf8');
-  await execute('corepack', ['pnpm', 'exec', 'prettier', '--write', samplesDocument]);
+  await writeFile(samplesDocument, renderSamplesMarkdown(SAMPLE_ASSETS, manifest), 'utf8');
+  await execute('corepack', [
+    'pnpm',
+    'exec',
+    'prettier',
+    '--write',
+    samplesDocument,
+    manifestDocument,
+  ]);
   const bundledBytes = await sumBundledBytes(root);
-  if (bundledBytes >= 4_000_000) {
-    throw new Error(`Bundled sample subset is ${bundledBytes} bytes; it must remain under 4 MB.`);
+  const bundledGzipBytes = sum(
+    manifest.assets.filter(({ bundled }) => bundled).map(({ gzip_bytes }) => gzip_bytes),
+  );
+  if (bundledGzipBytes >= 4_000_000) {
+    throw new Error(
+      `Bundled sample subset is ${bundledGzipBytes} gzipped bytes; it must remain under 4 MB.`,
+    );
   }
-  process.stdout.write(`Bundled subset: ${bundledBytes} bytes (< 4 MB).\n`);
+  process.stdout.write(
+    `Bundled subset: ${bundledBytes} bytes, ${bundledGzipBytes} gzipped bytes (< 4 MB).\n`,
+  );
 
-  if (options.upload) await uploadToR2(remote);
+  if (options.dryRun) await printUploadPlan(remote);
+  else if (options.upload) await uploadToR2(root, remote);
   else if (!options.bundledOnly)
     process.stdout.write('Prepared remote catalogue; no upload requested.\n');
+}
+
+async function createManifest(
+  root: string,
+  sampleAssets: readonly SampleAsset[],
+): Promise<SampleManifest> {
+  const entries = await Promise.all(
+    sampleAssets.map(async (asset): Promise<SampleManifestEntry> => {
+      const file = asset.bundled
+        ? bundledPath(root, asset)
+        : path.join(root, 'samples-dist', asset.destination);
+      const bytes = await readFile(file);
+      return {
+        ...asset,
+        path: path.relative(root, file).split(path.sep).join('/'),
+        bytes: bytes.byteLength,
+        gzip_bytes: gzipSync(bytes).byteLength,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+      };
+    }),
+  );
+  return { version: 1, codec: 'Opus in Ogg', assets: entries };
+}
+
+async function mergeExistingManifest(
+  root: string,
+  generated: SampleManifest,
+): Promise<SampleManifest> {
+  let existing: SampleManifest | null = null;
+  try {
+    const parsed = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8')) as unknown;
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      (parsed as { version?: unknown }).version === 1 &&
+      Array.isArray((parsed as { assets?: unknown }).assets)
+    ) {
+      existing = parsed as SampleManifest;
+    }
+  } catch {
+    // The first bundled-only run legitimately has no earlier remote manifest to preserve.
+  }
+  if (!existing) return generated;
+  const replacements = new Map(
+    generated.assets.map((asset) => [`${asset.instrument}/${asset.destination}`, asset]),
+  );
+  const previous = new Map(
+    existing.assets.map((asset) => [`${asset.instrument}/${asset.destination}`, asset]),
+  );
+  const assets = SAMPLE_ASSETS.flatMap((asset) => {
+    const key = `${asset.instrument}/${asset.destination}`;
+    const entry = replacements.get(key) ?? previous.get(key);
+    return entry ? [entry] : [];
+  });
+  return { version: 1, codec: 'Opus in Ogg', assets };
 }
 
 function bundledPath(root: string, asset: SampleAsset): string {
@@ -301,13 +423,46 @@ async function sumBundledBytes(root: string): Promise<number> {
   return sizes.reduce((total, size) => total + size, 0);
 }
 
-async function uploadToR2(directory: string): Promise<void> {
+export async function uploadPlan(directory: string): Promise<UploadObject[]> {
+  const objects: UploadObject[] = [];
+  const visit = async (current: string): Promise<void> => {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) await visit(absolute);
+      else if (entry.isFile()) {
+        objects.push({
+          key: path.relative(directory, absolute).split(path.sep).join('/'),
+          bytes: (await stat(absolute)).size,
+        });
+      }
+    }
+  };
+  await visit(directory);
+  objects.sort((left, right) => left.key.localeCompare(right.key));
+  const total = sum(objects.map(({ bytes }) => bytes));
+  if (total > MAX_UPLOAD_BYTES) {
+    throw new Error(`R2 upload not started; ${total} bytes exceeds the 1 GB safety ceiling.`);
+  }
+  return objects;
+}
+
+async function printUploadPlan(directory: string): Promise<void> {
+  const objects = await uploadPlan(directory);
+  process.stdout.write('R2 dry run (no upload):\n');
+  for (const object of objects) process.stdout.write(`${object.key} ${object.bytes} bytes\n`);
+  process.stdout.write(
+    `${objects.length} objects, ${sum(objects.map(({ bytes }) => bytes))} bytes total.\n`,
+  );
+}
+
+async function uploadToR2(root: string, directory: string): Promise<void> {
+  await loadEnvFile(path.join(root, '.env.local'));
+  const objects = await uploadPlan(directory);
   const required = [
     'R2_ACCOUNT_ID',
     'R2_ACCESS_KEY_ID',
     'R2_SECRET_ACCESS_KEY',
     'R2_BUCKET',
-    'R2_PUBLIC_URL',
   ] as const;
   const missing = required.filter((name) => !process.env[name]);
   if (missing.length > 0) throw new Error(`R2 upload not started; missing ${missing.join(', ')}.`);
@@ -331,7 +486,35 @@ async function uploadToR2(directory: string): Promise<void> {
       RCLONE_CONFIG_R2_ENDPOINT: `https://${account}.r2.cloudflarestorage.com`,
     },
   );
-  process.stdout.write(`Uploaded immutable catalogue for ${process.env.R2_PUBLIC_URL}.\n`);
+  process.stdout.write(
+    `Uploaded ${objects.length} immutable objects (${sum(objects.map(({ bytes }) => bytes))} bytes) to ${bucket}.\n`,
+  );
+}
+
+async function loadEnvFile(file: string): Promise<void> {
+  let contents: string;
+  try {
+    contents = await readFile(file, 'utf8');
+  } catch {
+    return;
+  }
+  for (const line of contents.split(/\r?\n/u)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/u);
+    if (!match) continue;
+    const [, name = '', raw = ''] = match;
+    if (process.env[name] !== undefined) continue;
+    const quoted = raw.match(/^(?:"([\s\S]*)"|'([\s\S]*)')$/u);
+    process.env[name] = quoted ? (quoted[1] ?? quoted[2] ?? '') : raw.replace(/\s+#.*$/u, '');
+  }
+}
+
+function formatBytes(value: number | undefined): string {
+  if (value === undefined) return 'generated by pnpm samples';
+  return `${value.toLocaleString('en-US')} B`;
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
 }
 
 function execute(
