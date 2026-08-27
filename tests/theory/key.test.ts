@@ -27,4 +27,12 @@ describe('Krumhansl-Schmuckler key detection', () => {
     expect(parseKeyName('Bb minor')).toEqual({ tonic: 'Bb', mode: 'minor' });
     expect(parseKeyName('not a key')).toBeNull();
   });
+
+  it('rejects octave notes and compound accidentals that tonal parses as pitches', () => {
+    expect(parseKeyName('C4 major')).toBeNull();
+    expect(parseKeyName('C## major')).toBeNull();
+    expect(parseKeyName('Fx minor')).toBeNull();
+    expect(parseKeyName('Bb minor')).toEqual({ tonic: 'Bb', mode: 'minor' });
+    expect(parseKeyName('F# major')).toEqual({ tonic: 'F#', mode: 'major' });
+  });
 });
