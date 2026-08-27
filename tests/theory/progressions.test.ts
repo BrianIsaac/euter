@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { loadExampleSong } from '../../src/song/serialise.ts';
 import {
   cadenceForStyle,
   progressionForStyle,
@@ -33,5 +34,14 @@ describe('style progression preferences', () => {
       { bar: 3, symbol: 'G', fit: 0 },
       { bar: 4, symbol: 'C', fit: 0 },
     ]);
+  });
+
+  it('keeps the beginner pop preference when the melody fit is a near tie', () => {
+    const song = loadExampleSong();
+    const melody = song.tracks.find(({ id }) => id === 'melody')?.notes ?? [];
+    expect(suggestChordProgression(melody, 'C major', 'pop', 1, 4)[1]).toMatchObject({
+      bar: 2,
+      symbol: 'F',
+    });
   });
 });

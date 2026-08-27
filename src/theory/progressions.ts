@@ -60,6 +60,7 @@ export function suggestChordProgression(
 ): SuggestedChord[] {
   if (barFrom < 1 || barTo < barFrom) return [];
   const preferred = progressionForStyle(keyName, style, barTo - barFrom + 1);
+  const stylePalette = progressionForStyle(keyName, style, 4);
   const result = Array.from({ length: barTo - barFrom + 1 }, (_, offset) => {
     const bar = barFrom + offset;
     const scores = scoreChordsForBar(notes, bar, keyName, beatsPerBar);
@@ -68,11 +69,25 @@ export function suggestChordProgression(
     const preferredTonic = Chord.get(preferredSymbol).tonic;
     const preferredScore =
       scores.find(({ symbol }) => Chord.get(symbol).tonic === preferredTonic)?.score ?? 0;
-    const usePreferred = !best || preferredScore >= best.score - 0.2;
+    const nearbyStyleChord = stylePalette
+      .map((symbol) => {
+        const tonic = Chord.get(symbol).tonic;
+        const score = scores.find(
+          (candidate) => Chord.get(candidate.symbol).tonic === tonic,
+        )?.score;
+        return score === undefined ? null : { symbol, score };
+      })
+      .filter((candidate): candidate is { symbol: string; score: number } => candidate !== null)
+      .filter(({ score }) => !best || score >= best.score - 0.2)
+      .sort((left, right) => right.score - left.score)[0];
+    const choice =
+      !best || preferredScore >= best.score - 0.2
+        ? { symbol: preferredSymbol, score: preferredScore }
+        : (nearbyStyleChord ?? { symbol: best.symbol, score: best.score });
     return {
       bar,
-      symbol: usePreferred ? preferredSymbol : best.symbol,
-      fit: usePreferred ? preferredScore : best.score,
+      symbol: choice.symbol,
+      fit: choice.score,
     };
   });
 
