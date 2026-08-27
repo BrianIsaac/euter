@@ -136,6 +136,19 @@ describe('RecorderController', () => {
     await recorder.stop();
     await expect(recorder.stop()).resolves.toMatchObject({ ok: false, code: 'NOT_RECORDING' });
   });
+
+  it('disconnects the worklet and microphone stream when disposed mid-take', async () => {
+    const test = harness();
+    const recorder = new RecorderController(test.transport, test.dependencies);
+    await recorder.start({ countInBars: 1, metronome: false });
+
+    recorder.dispose();
+
+    expect(test.disconnect).toHaveBeenCalledOnce();
+    expect(test.stopTrack).toHaveBeenCalledOnce();
+    expect(test.port.onmessage).toBeNull();
+    expect(recorder.getSnapshot().status).toBe('idle');
+  });
 });
 
 describe('encodePcm16Wav', () => {

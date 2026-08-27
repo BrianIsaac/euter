@@ -137,7 +137,7 @@ export interface FakeRecorder extends RecorderPort {
  */
 export function fakeRecorder(take: Take | null = null): FakeRecorder {
   const listeners = new Set<() => void>();
-  let snapshot: RecorderSnapshot = {
+  const initialSnapshot: RecorderSnapshot = {
     status: 'idle',
     live: null,
     targetBars: null,
@@ -145,6 +145,7 @@ export function fakeRecorder(take: Take | null = null): FakeRecorder {
     prompt: null,
     error: null,
   };
+  let snapshot: RecorderSnapshot = initialSnapshot;
   const publish = (next: RecorderSnapshot): void => {
     snapshot = next;
     for (const listener of listeners) listener();
@@ -211,6 +212,10 @@ export function fakeRecorder(take: Take | null = null): FakeRecorder {
         targetBars,
       };
       return Promise.resolve({ ok: true as const, data: recorded });
+    },
+    dispose() {
+      publish(initialSnapshot);
+      listeners.clear();
     },
   };
   return fake;

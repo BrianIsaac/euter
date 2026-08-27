@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RenderOptions } from '../../src/audio/render.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
 import { createTestEngine, fakeAudio, fakeAudioBuffer, makeTake } from '../helpers/harness.ts';
 
@@ -30,6 +31,38 @@ describe('engine', () => {
     await engine.activate();
     expect(engine.audio.getSnapshot().state).toBe('running');
     engine.dispose();
+  });
+
+  it('releases live audio, capture and render resources when disposed', async () => {
+    const audio = fakeAudio('uninitialised');
+    const close = vi.spyOn(audio, 'close');
+    const render = vi.fn(
+      (_song: unknown, _range: unknown, options?: RenderOptions): Promise<AudioBuffer> =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        }),
+    );
+    const { engine, recorder, transport } = createTestEngine({
+      audio,
+      exporters: { render },
+    });
+    const disposeRecorder = vi.spyOn(recorder, 'dispose');
+    const stopTransport = vi.spyOn(transport, 'stop');
+    await engine.activate();
+    await recorder.start({ countInBars: 1, metronome: true });
+    const job = engine.startExport('wav', 1, 8);
+    await settle();
+    expect(engine.jobs.get(job.id)?.state).toBe('running');
+
+    engine.dispose();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(stopTransport).toHaveBeenCalledTimes(1);
+    expect(disposeRecorder).toHaveBeenCalledTimes(1);
+    expect(recorder.getSnapshot().status).toBe('idle');
+    expect(engine.jobs.get(job.id)?.state).toBe('cancelled');
   });
 
   it('lands a take, remembers it as pending and clears it on demand', () => {

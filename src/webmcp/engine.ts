@@ -60,6 +60,7 @@ export interface RecorderPort {
   subscribe(listener: () => void): () => void;
   start(options: StartRecordingOptions): Promise<RecorderResult<RecorderSnapshot>>;
   stop(): Promise<RecorderResult<RecordedTake>>;
+  dispose(): void;
 }
 
 export interface AuditionResult {
@@ -504,6 +505,9 @@ export function createEngine(options: EngineOptions = {}): Engine {
       };
     },
     dispose() {
+      for (const { id, state } of jobs.list()) {
+        if (state === 'queued' || state === 'running') jobs.cancel(id);
+      }
       stopJobs();
       stopRecorder();
       stopAudio();
@@ -512,6 +516,9 @@ export function createEngine(options: EngineOptions = {}): Engine {
       reconciler?.dispose();
       keyboardInstrument?.dispose();
       metronome.dispose();
+      recorder.dispose();
+      void transport.stop().catch(() => undefined);
+      void audio.close().catch(() => undefined);
       for (const { download_url } of exports.values()) revokeObjectUrl(download_url);
       exports.clear();
       listeners.clear();
