@@ -192,10 +192,15 @@ function setKey(
     .flatMap(({ notes }) => notes);
   const name = `${parsed.tonic} ${parsed.mode}`;
   const detected = detectKey(melody);
-  const alternatives = [
-    ...(detected.name === name ? [] : [{ name: detected.name, confidence: detected.confidence }]),
-    ...detected.alternatives.filter((alternative) => alternative.name !== name),
-  ].slice(0, 3);
+  const alternatives =
+    melody.length === 0
+      ? []
+      : [
+          ...(detected.name === name
+            ? []
+            : [{ name: detected.name, confidence: detected.confidence }]),
+          ...detected.alternatives.filter((alternative) => alternative.name !== name),
+        ].slice(0, 3);
   return finish(
     document,
     command,
