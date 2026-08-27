@@ -113,6 +113,31 @@ describe('engine', () => {
     engine.dispose();
   });
 
+  it('plays arranged backing from bar four while muting the requested track for bars five-eight', async () => {
+    const { engine, transport } = createTestEngine();
+    const result = await engine.transportPort.countIn({
+      bars: 1,
+      metronome: true,
+      targetBar: 5,
+      mutedTrackId: 'bass',
+    });
+
+    expect(transport.calls.play.at(-1)).toEqual({ from_bar: 4 });
+    expect(engine.playback.getPreview()?.tracks.find(({ id }) => id === 'bass')).toMatchObject({
+      mute: true,
+      solo: false,
+    });
+    expect(engine.playback.getPreview()?.tracks.find(({ id }) => id === 'melody')?.mute).toBe(
+      false,
+    );
+
+    result.finish?.();
+    await settle();
+    expect(transport.calls.stop).toBe(1);
+    expect(engine.playback.getPreview()).toBeNull();
+    engine.dispose();
+  });
+
   it('auditions an option through the preview document and reverts on stop', async () => {
     const { engine, transport } = createTestEngine();
     await engine.activate();

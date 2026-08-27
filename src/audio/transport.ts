@@ -1,5 +1,5 @@
 /** Tone.Transport facade: the only tool-facing route to playback (plan Architecture item 4). */
-import type { SongDocument } from '../song/types.ts';
+import { cloneSong, type SongDocument } from '../song/types.ts';
 import { ToolError } from '../webmcp/envelope.ts';
 import type { AudioContextManager } from './context.ts';
 
@@ -113,6 +113,31 @@ export function positionBar(position: unknown): number {
   if (typeof position !== 'string') return 1;
   const bars = Number.parseInt(position.split(':')[0] ?? '0', 10);
   return Number.isFinite(bars) ? bars + 1 : 1;
+}
+
+/** The arranged bar where backing starts so capture begins exactly on `targetBar`. */
+export function countInStartBar(targetBar: number, countInBars: 1 | 2): number {
+  if (!Number.isInteger(targetBar) || targetBar < 1) {
+    throw new ToolError('OUT_OF_RANGE', 'The take target bar must be a positive integer.', true);
+  }
+  return Math.max(1, targetBar - countInBars);
+}
+
+/** Creates a detached playback view with only the track being recorded muted. */
+export function createTakeBackingSong(song: SongDocument, recordedTrackId: string): SongDocument {
+  const target = song.tracks.find(({ id }) => id === recordedTrackId);
+  if (!target) {
+    throw new ToolError(
+      'TRACK_NOT_FOUND',
+      `Track "${recordedTrackId}" does not exist for the take backing.`,
+      true,
+    );
+  }
+  const backing = cloneSong(song);
+  backing.tracks = backing.tracks.map((track) =>
+    track.id === recordedTrackId ? { ...track, mute: true, solo: false } : track,
+  );
+  return backing;
 }
 
 async function defaultTransportProvider(): Promise<ToneTransportLike> {

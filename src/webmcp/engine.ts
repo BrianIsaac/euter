@@ -18,7 +18,13 @@ import { createMetronome, type Metronome } from '../audio/metronome.ts';
 import { createAudioReconciler, type AudioReconciler } from '../audio/reconciler.ts';
 import { analyseAudioBuffer, type LoudnessReading } from '../audio/loudness.ts';
 import { getRenderFallbacks, renderSong } from '../audio/render.ts';
-import { createSongTransport, type PlayOptions, type SongTransport } from '../audio/transport.ts';
+import {
+  countInStartBar,
+  createSongTransport,
+  createTakeBackingSong,
+  type PlayOptions,
+  type SongTransport,
+} from '../audio/transport.ts';
 import { importAudioFile, type ImportedAudio } from '../input/importFile.ts';
 import { PlayedNoteRecorder, type PlayedNoteSink } from '../input/musicalTyping.ts';
 import {
@@ -190,20 +196,58 @@ export function createEngine(options: EngineOptions = {}): Engine {
     getBpm: () => store.getDocument().bpm,
     getTimeSignature: () => store.getDocument().time_sig,
     getPositionSeconds: () => audio.getContext()?.currentTime ?? 0,
-    async countIn({ bars, metronome: click }) {
-      const bpm = store.getDocument().bpm;
-      const beatsPerBar = store.getDocument().time_sig[0];
+    async countIn({ bars, metronome: click, targetBar, mutedTrackId }) {
+      const song = store.getDocument();
+      const bpm = song.bpm;
+      const beatsPerBar = song.time_sig[0];
       const durationSeconds = (bars * beatsPerBar * 60) / bpm;
+      const backing =
+        targetBar === undefined || mutedTrackId === undefined
+          ? null
+          : createTakeBackingSong(song, mutedTrackId);
+      const startBar = targetBar === undefined ? 1 : countInStartBar(targetBar, bars);
+      let finished = false;
+      const finish = (): void => {
+        if (finished) return;
+        finished = true;
+        metronome.stop();
+        void transport.stop();
+        if (backing !== null && playback.getPreview() === backing) playback.setPreview(null);
+        notify();
+      };
       if (!click) {
+        if (backing !== null) {
+          playback.setPreview(backing);
+          await transport.play(backing, { from_bar: startBar });
+        }
         await delay(durationSeconds * 1000);
-        return { durationSeconds };
+        return { durationSeconds, ...(backing === null ? {} : { finish }) };
       }
-      await new Promise<void>((resolve) => {
-        void metronome
-          .scheduleCountIn({ bars, bpm, beatsPerBar, continueClick: true, onComplete: resolve })
-          .catch(() => resolve());
+      let complete: () => void = () => undefined;
+      const completed = new Promise<void>((resolve) => {
+        complete = resolve;
       });
-      return { durationSeconds };
+      let clickFailed = false;
+      try {
+        await metronome.scheduleCountIn({
+          bars,
+          bpm,
+          beatsPerBar,
+          startBar,
+          startTransport: backing === null,
+          continueClick: true,
+          onComplete: complete,
+        });
+      } catch {
+        clickFailed = true;
+      }
+      if (backing !== null) {
+        playback.setPreview(backing);
+        await transport.play(backing, { from_bar: startBar });
+      }
+      if (clickFailed) await delay(durationSeconds * 1000);
+      else await completed;
+      return { durationSeconds, ...(backing === null ? {} : { finish }) };
     },
   };
 

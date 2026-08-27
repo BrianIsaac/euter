@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSongTransport, type ToneTransportLike } from '../../src/audio/transport.ts';
+import {
+  countInStartBar,
+  createSongTransport,
+  createTakeBackingSong,
+  type ToneTransportLike,
+} from '../../src/audio/transport.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
 import type { AudioContextManager } from '../../src/audio/context.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
@@ -92,5 +97,28 @@ describe('song transport', () => {
       transport.play(loadExampleSong(), { loop: { bar_from: 4, bar_to: 2 } }),
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
     await expect(transport.syncTempo(20)).rejects.toMatchObject({ code: 'OUT_OF_RANGE' });
+  });
+
+  it('starts requested-take backing one count-in earlier and mutes only its recorded track', () => {
+    const song = loadExampleSong();
+    const backing = createTakeBackingSong(song, 'bass');
+
+    expect(countInStartBar(5, 1)).toBe(4);
+    expect(countInStartBar(2, 2)).toBe(1);
+    expect(backing).not.toBe(song);
+    expect(backing.tracks.find(({ id }) => id === 'bass')).toMatchObject({
+      mute: true,
+      solo: false,
+    });
+    expect(backing.tracks.filter(({ id }) => id !== 'bass')).toEqual(
+      song.tracks.filter(({ id }) => id !== 'bass'),
+    );
+    expect(song.tracks.find(({ id }) => id === 'bass')?.mute).toBe(false);
+    try {
+      createTakeBackingSong(song, 'missing');
+      throw new Error('Expected a missing-track failure.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'TRACK_NOT_FOUND' });
+    }
   });
 });
