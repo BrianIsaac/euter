@@ -8,7 +8,7 @@ import {
   NAME_PATTERN,
   toInputSchema,
 } from '../../src/webmcp/schemas.ts';
-import { probeTools, productTools, tools } from '../../src/webmcp/tools/index.ts';
+import { productTools, tools } from '../../src/webmcp/tools/index.ts';
 import type { JsonSchemaObject } from '../../src/webmcp/schemas.ts';
 import { createHarness, makeTake, type Harness } from '../helpers/harness.ts';
 
@@ -28,7 +28,6 @@ const DOCUMENT_WRITES = new Set([
   'set_mix',
   'generate_part',
   'arrange',
-  'ping',
 ]);
 
 /** Tools that need something in the song, the recorder or the job list before their example runs. */
@@ -88,11 +87,11 @@ async function seeded(name: string): Promise<Harness> {
 describe('tool contract', () => {
   const described = createHarness().runtime.registry.describe();
 
-  it('registers the twenty-eight product tools, six of them reads, with unique names', () => {
+  it('registers the twenty-eight tools, six of them reads, with unique names', () => {
     expect(productTools).toHaveLength(28);
+    expect(tools).toBe(productTools);
     expect(productTools.filter(({ kind }) => kind === 'read')).toHaveLength(6);
     expect(new Set(tools.map((tool) => tool.name)).size).toBe(tools.length);
-    expect(probeTools.map(({ name }) => name)).toEqual(['get_diagnostics', 'ping']);
   });
 
   it('marks the reads that echo names the person typed as untrusted content', () => {
@@ -105,8 +104,7 @@ describe('tool contract', () => {
   it('asks for a reason on every product tool that changes the document', () => {
     for (const definition of tools) {
       const hasWhy = 'why' in definition.input.shape;
-      const expected = DOCUMENT_WRITES.has(definition.name) && definition.name !== 'ping';
-      expect(hasWhy, definition.name).toBe(expected);
+      expect(hasWhy, definition.name).toBe(DOCUMENT_WRITES.has(definition.name));
     }
   });
 
@@ -199,11 +197,9 @@ describe('tool contract', () => {
           };
           expect(envelope.ok).toBe(true);
           expect(envelope.revision).toBe(before + 1);
-          if (definition.name !== 'ping') {
-            const why = (definition.example as { why: string }).why;
-            expect(harness.engine.store.getDocument().notes_log.length).toBe(notes + 1);
-            expect(harness.engine.store.getDocument().notes_log.at(-1)?.why).toBe(why);
-          }
+          const why = (definition.example as { why: string }).why;
+          expect(harness.engine.store.getDocument().notes_log.length).toBe(notes + 1);
+          expect(harness.engine.store.getDocument().notes_log.at(-1)?.why).toBe(why);
           harness.engine.dispose();
         });
       } else {

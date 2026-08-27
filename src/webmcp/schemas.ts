@@ -237,13 +237,6 @@ export const renderInput = z.strictObject({
 
 export const cancelJobInput = z.strictObject({ job_id: jobIdField });
 
-/** Probe inputs for day-one checks 0 and 7; removed with `src/webmcp/probe.ts`. */
-export const pingInput = z.strictObject({
-  message: z.string().min(1).max(200).describe('Short text to echo back in the summary'),
-});
-
-export const getDiagnosticsInput = z.strictObject({});
-
 export interface JsonSchemaObject extends JsonSchemaNode {
   type: 'object';
   properties: Record<string, JsonSchemaNode>;

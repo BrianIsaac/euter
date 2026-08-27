@@ -62,8 +62,8 @@ describe('Diagnostics', () => {
     const context = createFakeContext();
     const runtime = createRuntime({ contexts: () => [context], storage: null });
     await runtime.registry.register();
-    await runtime.registry.invoke('ping', { message: 'hello' });
-    await runtime.registry.invoke('ping', { message: 5 });
+    await runtime.registry.invoke('set_tempo', { bpm: 96, why: 'A touch faster.' });
+    await runtime.registry.invoke('set_tempo', { bpm: 5, why: 'Too slow.' });
     const onClose = vi.fn();
     render(<Diagnostics runtime={runtime} onClose={onClose} />);
 
@@ -87,8 +87,8 @@ describe('Diagnostics', () => {
     const calls = screen.getAllByTestId('tool-call');
     expect(calls).toHaveLength(2);
     expect(calls[0]).toHaveTextContent('error INVALID_ARGUMENT');
-    expect(calls[1]).toHaveTextContent('ping');
-    expect(calls[1]).toHaveTextContent('{"message":"hello"}');
+    expect(calls[1]).toHaveTextContent('set_tempo');
+    expect(calls[1]).toHaveTextContent('{"bpm":96,"why":"A touch faster."}');
     expect(screen.getByText('Last 2 tool calls')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close diagnostics' }));

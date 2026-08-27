@@ -1,7 +1,8 @@
 /**
  * Every tool the page registers, in registration order: orientation, capture, composition,
- * teaching, arrangement, transport, history and jobs (plan Tool surface). The two probe tools stay
- * until the first full loop has run.
+ * teaching, arrangement, transport, history and jobs (plan Tool surface). The 27 Aug probe tools
+ * (`get_diagnostics`, `ping`) went with `src/webmcp/probe.ts` once the first full loop had run; the
+ * diagnostics panel is a UI panel, not a tool.
  */
 import type { ToolDefinition } from '../types.ts';
 import { addTrack } from './add_track.ts';
@@ -11,12 +12,10 @@ import { cancelJob } from './cancel_job.ts';
 import { commitTake } from './commit_take.ts';
 import { generatePart } from './generate_part.ts';
 import { getChords } from './get_chords.ts';
-import { getDiagnostics } from './get_diagnostics.ts';
 import { getJob } from './get_job.ts';
 import { getSongState } from './get_song_state.ts';
 import { getTake } from './get_take.ts';
 import { getTrackNotes } from './get_track_notes.ts';
-import { ping } from './ping.ts';
 import { play } from './play.ts';
 import { proposeOptions } from './propose_options.ts';
 import { redo } from './redo.ts';
@@ -35,7 +34,7 @@ import { stopRecording } from './stop_recording.ts';
 import { suggestChords } from './suggest_chords.ts';
 import { undo } from './undo.ts';
 
-/** The twenty-eight product tools (plan Tool surface). */
+/** The twenty-eight tools of the tool surface. */
 export const productTools: readonly ToolDefinition[] = [
   getSongState,
   getTrackNotes,
@@ -67,10 +66,4 @@ export const productTools: readonly ToolDefinition[] = [
   cancelJob,
 ] as readonly ToolDefinition[];
 
-/** The probe tools from 27 Aug, removed once the first full loop has run. */
-export const probeTools: readonly ToolDefinition[] = [
-  getDiagnostics,
-  ping,
-] as readonly ToolDefinition[];
-
-export const tools: readonly ToolDefinition[] = [...productTools, ...probeTools];
+export const tools: readonly ToolDefinition[] = productTools;

@@ -5,31 +5,28 @@ import {
   BUDGETS,
   collectParameterDescriptions,
   expectedRevisionField,
-  getDiagnosticsInput,
+  getSongStateInput,
   NAME_PATTERN,
   parseInput,
-  pingInput,
+  setKeyInput,
   toInputSchema,
   whyField,
 } from '../../src/webmcp/schemas.ts';
 
 describe('schemas', () => {
   it('exports JSON Schema with additionalProperties false and no $schema key', () => {
-    const json = toInputSchema(pingInput);
-    expect(json).toEqual({
-      type: 'object',
-      properties: {
-        message: {
-          type: 'string',
-          minLength: 1,
-          maxLength: 200,
-          description: 'Short text to echo back in the summary',
-        },
-      },
-      required: ['message'],
-      additionalProperties: false,
+    const json = toInputSchema(setKeyInput);
+    expect(json.type).toBe('object');
+    expect(json.additionalProperties).toBe(false);
+    expect(json.required).toEqual(['key', 'why']);
+    expect(json.properties.key).toMatchObject({
+      type: 'string',
+      minLength: 2,
+      maxLength: 40,
+      description: 'A key such as "C major" or "A minor"',
     });
-    expect(toInputSchema(getDiagnosticsInput)).toEqual({
+    expect('$schema' in json).toBe(false);
+    expect(toInputSchema(getSongStateInput)).toEqual({
       type: 'object',
       properties: {},
       additionalProperties: false,
@@ -41,11 +38,14 @@ describe('schemas', () => {
   });
 
   it('parses valid input and refuses invalid input with INVALID_ARGUMENT', () => {
-    expect(parseInput(pingInput, { message: 'hi' })).toEqual({ message: 'hi' });
-    expect(parseInput(getDiagnosticsInput, undefined)).toEqual({});
+    expect(parseInput(setKeyInput, { key: 'C major', why: 'Home key.' })).toEqual({
+      key: 'C major',
+      why: 'Home key.',
+    });
+    expect(parseInput(getSongStateInput, undefined)).toEqual({});
     let thrown: unknown;
     try {
-      parseInput(pingInput, { message: 'hi', extra: true });
+      parseInput(setKeyInput, { key: 'C major', why: 'Home key.', extra: true });
     } catch (error) {
       thrown = error;
     }

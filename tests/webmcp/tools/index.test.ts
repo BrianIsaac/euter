@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { descriptions } from '../../../src/webmcp/descriptions.ts';
-import { probeTools, productTools, tools } from '../../../src/webmcp/tools/index.ts';
+import { productTools, tools } from '../../../src/webmcp/tools/index.ts';
 
 describe('tools index', () => {
   it('lists the twenty-eight product tools in the plan’s order', () => {
@@ -55,9 +55,10 @@ describe('tools index', () => {
     }
   });
 
-  it('keeps the probe tools last until the first full loop has run', () => {
-    expect(probeTools.map(({ name }) => name)).toEqual(['get_diagnostics', 'ping']);
-    expect(tools).toHaveLength(productTools.length + probeTools.length);
-    expect(tools.slice(-2)).toEqual(probeTools);
+  it('registers the product tools and nothing else', () => {
+    expect(tools).toBe(productTools);
+    expect(tools).toHaveLength(28);
+    expect(tools.map(({ name }) => name)).not.toContain('ping');
+    expect(tools.map(({ name }) => name)).not.toContain('get_diagnostics');
   });
 });

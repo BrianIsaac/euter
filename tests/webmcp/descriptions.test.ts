@@ -21,8 +21,15 @@ describe('descriptions', () => {
     }
   });
 
-  it('names the tail marker in the diagnostics description', () => {
-    expect(descriptions.get_diagnostics).toContain('tail_marker');
-    expect(descriptions.ping).toContain('revision');
+  it('tells the agent what to call first and what comes next', () => {
+    expect(descriptions.get_song_state).toContain('Call this first');
+    expect(descriptions.stop_recording).toContain('Next: set_key');
+    expect(descriptions.get_take).toContain('commit_take');
+    expect(descriptions.set_chords).toContain('Set chords before generate_part');
+    expect(descriptions.render).toContain('poll get_job');
+  });
+
+  it('carries one description for every registered tool and nothing else', () => {
+    expect(Object.keys(descriptions)).toHaveLength(28);
   });
 });
