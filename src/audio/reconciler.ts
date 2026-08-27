@@ -83,12 +83,16 @@ interface ReconciledTrack {
   loadPromise: Promise<void> | null;
 }
 
-const DEFAULT_SEND: Record<Track['kind'], number> = {
+export const DEFAULT_REVERB_SEND: Readonly<Record<Track['kind'], number>> = {
   melody: 0.2,
   chords: 0.28,
   bass: 0.06,
   drums: 0.1,
 };
+
+export const MASTER_COMPRESSOR = { threshold: -18, ratio: 3 } as const;
+export const MASTER_LIMITER_CEILING_DB = -1;
+export const MASTER_REVERB = { decay: 1.8, wet: 1 } as const;
 
 /** Creates and immediately subscribes the graph reconciler. */
 export function createAudioReconciler(
@@ -98,7 +102,7 @@ export function createAudioReconciler(
 ): AudioReconciler {
   const provideGraphFactory = options.provideGraphFactory ?? defaultGraphFactoryProvider;
   const instrumentLoader = options.instrumentLoader ?? loadInstrument;
-  const sendLevels = { ...DEFAULT_SEND, ...options.reverbSend };
+  const sendLevels = { ...DEFAULT_REVERB_SEND, ...options.reverbSend };
   const listeners = new Set<() => void>();
   const tracks = new Map<string, ReconciledTrack>();
   let factory: ToneGraphFactory | null = null;
@@ -118,7 +122,7 @@ export function createAudioReconciler(
       factory = created;
       const destination = created.destination();
       const compressor = created.compressor();
-      const limiter = created.limiter(-1);
+      const limiter = created.limiter(MASTER_LIMITER_CEILING_DB);
       const reverb = created.reverb();
       compressor.connect(limiter);
       limiter.connect(destination);
@@ -346,9 +350,9 @@ async function defaultGraphFactoryProvider(): Promise<ToneGraphFactory> {
   });
   return {
     destination: () => wrap('destination', tone.getDestination(), false),
-    compressor: () => wrap('master:compressor', new tone.Compressor({ threshold: -18, ratio: 3 })),
+    compressor: () => wrap('master:compressor', new tone.Compressor(MASTER_COMPRESSOR)),
     limiter: (ceilingDb) => wrap('master:limiter', new tone.Limiter(ceilingDb)),
-    reverb: () => wrap('master:reverb', new tone.Reverb({ decay: 1.8, wet: 1 })),
+    reverb: () => wrap('master:reverb', new tone.Reverb(MASTER_REVERB)),
     channel: (track) => {
       const raw = new tone.Channel({
         volume: track.volume_db,

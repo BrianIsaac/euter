@@ -287,8 +287,23 @@ export async function loadInstrument(
   const baseUrl = entry.bundled
     ? bundledBase(entry)
     : `${trimSlash(configuredBase ?? '')}/${entry.id}`;
-  const backend = await createBackend(entry, request, factories, baseUrl);
-  return { instrument: wrapInstrument(id, backend), loaded: true };
+  try {
+    const backend = await createBackend(entry, request, factories, baseUrl);
+    return { instrument: wrapInstrument(id, backend), loaded: true };
+  } catch (error) {
+    if (entry.bundled) throw error;
+    const fallback = INSTRUMENT_CATALOGUE.find(
+      ({ id: candidate }) => candidate === entry.fallback_id,
+    );
+    if (!fallback) throw error;
+    const backend = await createBackend(fallback, request, factories, bundledBase(fallback));
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      instrument: wrapInstrument(id, backend),
+      loaded: false,
+      reason: `Failed to load ${entry.name}: ${detail}; playing ${fallback.name} instead.`,
+    };
+  }
 }
 
 async function createBackend(

@@ -17,7 +17,7 @@ import { ExportJobManager, type ExportJob } from '../audio/jobs.ts';
 import { createMetronome, type Metronome } from '../audio/metronome.ts';
 import { createAudioReconciler, type AudioReconciler } from '../audio/reconciler.ts';
 import { analyseAudioBuffer, type LoudnessReading } from '../audio/loudness.ts';
-import { renderSong } from '../audio/render.ts';
+import { getRenderFallbacks, renderSong } from '../audio/render.ts';
 import { createSongTransport, type PlayOptions, type SongTransport } from '../audio/transport.ts';
 import { importAudioFile, type ImportedAudio } from '../input/importFile.ts';
 import { PlayedNoteRecorder, type PlayedNoteSink } from '../input/musicalTyping.ts';
@@ -53,6 +53,7 @@ export interface ExportResult {
   duration_s: number;
   peak_dbfs: number | null;
   bytes: number;
+  fallbacks?: readonly string[] | undefined;
 }
 
 export interface RecorderPort {
@@ -342,6 +343,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
       { signal, onProgress: (value) => setProgress(value * 0.7) },
     );
     setProgress(75);
+    const fallbacks = getRenderFallbacks(buffer);
     const loudness = trimClipping(buffer);
     const bytes =
       format === 'wav' ? exporters.wav(buffer) : await exporters.mp3(buffer, { signal });
@@ -354,6 +356,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
       duration_s: Math.round(buffer.duration * 100) / 100,
       peak_dbfs: Number.isFinite(loudness.peak_dbfs) ? loudness.peak_dbfs : null,
       bytes: bytes.length,
+      ...(fallbacks.length === 0 ? {} : { fallbacks }),
     };
   };
 

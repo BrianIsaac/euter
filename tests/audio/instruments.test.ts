@@ -114,6 +114,27 @@ describe('instrument catalogue', () => {
     expect(progress).toHaveBeenLastCalledWith(1);
   });
 
+  it('uses the bundled live fallback when a configured remote sample load fails', async () => {
+    const fake = factories();
+    vi.mocked(fake.value.sampler)
+      .mockRejectedValueOnce(new Error('R2 returned 503'))
+      .mockResolvedValueOnce(fake.backend);
+    const result = await loadInstrument('electric-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples.example',
+    });
+
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe(
+      'Failed to load Electric piano: R2 returned 503; playing Grand piano instead.',
+    );
+    expect(vi.mocked(fake.value.sampler).mock.calls[1]?.[2].samples.baseUrl).toBe(
+      '/samples/piano/grand/',
+    );
+  });
+
   it('resolves drum machines and the two deliberate Tone synth exceptions', async () => {
     const fake = factories();
     await loadInstrument('studio-kit', { context, destination: {}, factories: fake.value });
