@@ -317,7 +317,13 @@ export function createTestEngine(options: TestEngineOptions = {}): {
   const audio = options.audio ?? fakeAudio();
   const transport = options.transport ?? fakeTransport(audio);
   const recorder = options.recorder ?? fakeRecorder(makeTake());
-  let counter = 0;
+  let urls = 0;
+  const counts = new Map<string, number>();
+  const makeId = (prefix: string): string => {
+    const next = (counts.get(prefix) ?? 0) + 1;
+    counts.set(prefix, next);
+    return `${prefix}-${next}`;
+  };
   const engine = createEngine({
     document: options.document ?? loadExampleSong(),
     storage: null,
@@ -327,9 +333,9 @@ export function createTestEngine(options: TestEngineOptions = {}): {
     metronome: fakeMetronome(),
     keyboardInstrument: null,
     createReconciler: fakeReconciler,
-    createObjectUrl: () => `blob:euter/${(counter += 1)}`,
+    createObjectUrl: () => `blob:euter/${(urls += 1)}`,
     revokeObjectUrl: () => undefined,
-    makeId: (prefix) => `${prefix}-${(counter += 1)}`,
+    makeId,
     delay: () => Promise.resolve(),
     exporters: {
       render: () => Promise.resolve(fakeAudioBuffer()),

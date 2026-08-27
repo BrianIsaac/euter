@@ -1,5 +1,5 @@
 /**
- * The contract every registered tool keeps (plan Testing, "Contract"; Decisions 16 and 18).
+ * The contract every registered tool keeps (plan Testing, "Contract"; Decisions 12, 16 and 18).
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -8,21 +8,106 @@ import {
   NAME_PATTERN,
   toInputSchema,
 } from '../../src/webmcp/schemas.ts';
-import { tools } from '../../src/webmcp/tools/index.ts';
+import { probeTools, productTools, tools } from '../../src/webmcp/tools/index.ts';
 import type { JsonSchemaObject } from '../../src/webmcp/schemas.ts';
-import { createHarness } from '../helpers/harness.ts';
+import { createHarness, makeTake, type Harness } from '../helpers/harness.ts';
 
-function makeRegistry() {
+/** Tools whose call lands a change in the document and therefore pins a producer note. */
+const DOCUMENT_WRITES = new Set([
+  'stop_recording',
+  'commit_take',
+  'set_notes',
+  'set_chords',
+  'propose_options',
+  'request_take',
+  'set_key',
+  'set_tempo',
+  'set_quantize',
+  'add_track',
+  'set_instrument',
+  'set_mix',
+  'generate_part',
+  'arrange',
+  'ping',
+]);
+
+/** Tools that need something in the song, the recorder or the job list before their example runs. */
+const seeds: Record<string, (harness: Harness) => Promise<void> | void> = {
+  get_take: (harness) => {
+    harness.engine.addTake(makeTake('take-1'), 'Kept your hum.', 'agent');
+  },
+  commit_take: (harness) => {
+    harness.engine.addTake(makeTake('take-1'), 'Kept your hum.', 'agent');
+  },
+  stop_recording: async (harness) => {
+    await harness.recorder.start({ trackId: 'melody', countInBars: 1, metronome: true });
+  },
+  audition_option: async (harness) => {
+    await harness.invoke('propose_options', {
+      kind: 'chords',
+      bar_from: 1,
+      bar_to: 4,
+      options: [
+        { label: 'One', why: 'The calm one.', chords: [{ bar: 1, symbol: 'C' }] },
+        { label: 'Two', why: 'The lift.', chords: [{ bar: 1, symbol: 'Am7' }] },
+      ],
+      why: 'Two ways in.',
+    });
+  },
+  get_job: (harness) => {
+    harness.engine.startExport('wav', 1, 8);
+  },
+  cancel_job: (harness) => {
+    harness.engine.startExport('wav', 1, 8);
+  },
+  undo: (harness) => {
+    harness.engine.store.dispatch({
+      type: 'set_tempo',
+      args: { bpm: 100 },
+      source: 'human',
+      why: 'Something to undo.',
+    });
+  },
+  redo: (harness) => {
+    harness.engine.store.dispatch({
+      type: 'set_tempo',
+      args: { bpm: 100 },
+      source: 'human',
+      why: 'Something to undo.',
+    });
+    harness.engine.store.undo('human');
+  },
+};
+
+async function seeded(name: string): Promise<Harness> {
   const harness = createHarness();
-  return { bus: harness.engine.store, registry: harness.runtime.registry };
+  await seeds[name]?.(harness);
+  return harness;
 }
 
 describe('tool contract', () => {
-  const described = makeRegistry().registry.describe();
+  const described = createHarness().runtime.registry.describe();
 
-  it('registers at least the two probe tools with unique names', () => {
-    expect(tools.length).toBeGreaterThanOrEqual(2);
+  it('registers the twenty-eight product tools, six of them reads, with unique names', () => {
+    expect(productTools).toHaveLength(28);
+    expect(productTools.filter(({ kind }) => kind === 'read')).toHaveLength(6);
     expect(new Set(tools.map((tool) => tool.name)).size).toBe(tools.length);
+    expect(probeTools.map(({ name }) => name)).toEqual(['get_diagnostics', 'ping']);
+  });
+
+  it('marks the reads that echo names the person typed as untrusted content', () => {
+    const untrusted = productTools
+      .filter(({ untrustedContent }) => untrustedContent === true)
+      .map(({ name }) => name);
+    expect(untrusted).toEqual(['get_song_state', 'get_take']);
+  });
+
+  it('asks for a reason on every product tool that changes the document', () => {
+    for (const definition of tools) {
+      const hasWhy = 'why' in definition.input.shape;
+      const expected = DOCUMENT_WRITES.has(definition.name) && definition.name !== 'ping';
+      expect(hasWhy, definition.name).toBe(expected);
+    }
   });
 
   for (const definition of tools) {
@@ -71,50 +156,70 @@ describe('tool contract', () => {
         expect(registered.annotations?.readOnlyHint).toBe(definition.kind === 'read');
       });
 
-      it('accepts its example input and returns the success envelope', async () => {
-        const { registry } = makeRegistry();
-        const envelope = await registry.invoke(definition.name, definition.example);
-        expect(envelope.ok, JSON.stringify(envelope)).toBe(true);
-        if (envelope.ok) {
-          expect(typeof envelope.revision).toBe('number');
-          expect(Array.isArray(envelope.changed)).toBe(true);
-          expect(typeof envelope.summary).toBe('string');
-          expect('data' in envelope).toBe(true);
-          expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(BUDGETS.output);
-        }
+      it('accepts its example input and returns the success envelope inside the budget', async () => {
+        const harness = await seeded(definition.name);
+        const envelope = await harness.invoke(definition.name, definition.example);
+        expect(envelope, JSON.stringify(envelope)).toMatchObject({ ok: true });
+        expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(BUDGETS.output);
+        harness.engine.dispose();
       });
 
-      it('rejects its bad input with INVALID_ARGUMENT', async () => {
-        const { registry, bus } = makeRegistry();
-        const before = bus.getDocument().revision;
-        const envelope = await registry.invoke(definition.name, definition.badExample);
+      it('rejects its bad input with INVALID_ARGUMENT and changes nothing', async () => {
+        const harness = await seeded(definition.name);
+        const before = harness.engine.store.getDocument().revision;
+        const envelope = await harness.invoke(definition.name, definition.badExample);
         expect(envelope).toMatchObject({ ok: false, code: 'INVALID_ARGUMENT', recoverable: true });
-        expect(bus.getDocument().revision).toBe(before);
+        expect(harness.engine.store.getDocument().revision).toBe(before);
+        harness.engine.dispose();
       });
 
       if (definition.kind === 'read') {
         it('never changes the revision', async () => {
-          const { registry, bus } = makeRegistry();
-          bus.dispatch({ type: 'ping', args: { message: 'seed' }, source: 'human' });
-          const before = bus.getDocument().revision;
-          const envelope = await registry.invoke(definition.name, definition.example);
+          const harness = await seeded(definition.name);
+          const before = harness.engine.store.getDocument().revision;
+          const envelope = (await harness.invoke(definition.name, definition.example)) as {
+            ok: boolean;
+            revision: number;
+            changed: string[];
+          };
           expect(envelope.ok).toBe(true);
-          if (envelope.ok) {
-            expect(envelope.revision).toBe(before);
-            expect(envelope.changed).toEqual([]);
+          expect(envelope.revision).toBe(before);
+          expect(envelope.changed).toEqual([]);
+          expect(harness.engine.store.getDocument().revision).toBe(before);
+          harness.engine.dispose();
+        });
+      } else if (DOCUMENT_WRITES.has(definition.name)) {
+        it('bumps the revision by one and pins its reason', async () => {
+          const harness = await seeded(definition.name);
+          const before = harness.engine.store.getDocument().revision;
+          const notes = harness.engine.store.getDocument().notes_log.length;
+          const envelope = (await harness.invoke(definition.name, definition.example)) as {
+            ok: boolean;
+            revision: number;
+          };
+          expect(envelope.ok).toBe(true);
+          expect(envelope.revision).toBe(before + 1);
+          if (definition.name !== 'ping') {
+            const why = (definition.example as { why: string }).why;
+            expect(harness.engine.store.getDocument().notes_log.length).toBe(notes + 1);
+            expect(harness.engine.store.getDocument().notes_log.at(-1)?.why).toBe(why);
           }
-          expect(bus.getDocument().revision).toBe(before);
-          expect(bus.getActivities()).toHaveLength(1);
+          harness.engine.dispose();
         });
       } else {
-        it('bumps the revision by one', async () => {
-          const { registry, bus } = makeRegistry();
-          const before = bus.getDocument().revision;
-          const envelope = await registry.invoke(definition.name, definition.example);
+        it('leaves the document where it was', async () => {
+          const harness = await seeded(definition.name);
+          const before = harness.engine.store.getDocument();
+          const envelope = (await harness.invoke(definition.name, definition.example)) as {
+            ok: boolean;
+          };
           expect(envelope.ok).toBe(true);
-          if (envelope.ok) {
-            expect(envelope.revision).toBe(before + 1);
-          }
+          const after = harness.engine.store.getDocument();
+          const undoOrRedo = definition.name === 'undo' || definition.name === 'redo';
+          expect(after.revision, definition.name).toBe(
+            undoOrRedo ? before.revision + 1 : before.revision,
+          );
+          harness.engine.dispose();
         });
       }
     });

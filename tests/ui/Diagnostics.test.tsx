@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Diagnostics } from '../../src/ui/Diagnostics.tsx';
+import { tools } from '../../src/webmcp/tools/index.ts';
 import { createRuntime } from '../../src/webmcp/runtime.ts';
 import { createFakeContext } from '../helpers/fakeContext.ts';
 
@@ -59,7 +60,7 @@ describe('Diagnostics', () => {
 
   it('shows identity, WebMCP state, headers, audio before and after, and the call log', async () => {
     const context = createFakeContext();
-    const runtime = createRuntime({ contexts: () => [context] });
+    const runtime = createRuntime({ contexts: () => [context], storage: null });
     await runtime.registry.register();
     await runtime.registry.invoke('ping', { message: 'hello' });
     await runtime.registry.invoke('ping', { message: 5 });
@@ -67,7 +68,7 @@ describe('Diagnostics', () => {
     render(<Diagnostics runtime={runtime} onClose={onClose} />);
 
     expect(screen.getByText(navigator.userAgent)).toBeInTheDocument();
-    expect(screen.getByTestId('registry-status')).toHaveTextContent('ready (2)');
+    expect(screen.getByTestId('registry-status')).toHaveTextContent(`ready (${tools.length})`);
     await waitFor(() => {
       expect(screen.getByText('tools=(self), microphone=(self), midi=(self)')).toBeInTheDocument();
     });

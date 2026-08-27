@@ -73,13 +73,16 @@ describe('registry', () => {
     const navigatorContext = createFakeContext();
     const registry = createRegistry(deps({ contexts: () => [documentContext, navigatorContext] }));
     expect(registry.getStatus()).toEqual({ kind: 'initialising' });
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
     for (const context of [documentContext, navigatorContext]) {
       const listed = await context.getTools();
-      expect(listed.map((tool) => tool.name)).toEqual(['get_diagnostics', 'ping']);
-      expect(listed[0]?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
-      expect(listed[1]?.annotations).toEqual({ readOnlyHint: false, untrustedContentHint: false });
-      expect(listed[1]?.inputSchema).toMatchObject({ additionalProperties: false });
+      expect(listed).toHaveLength(tools.length);
+      expect(listed.map((tool) => tool.name)).toContain('get_song_state');
+      const read = listed.find((tool) => tool.name === 'get_song_state');
+      const write = listed.find((tool) => tool.name === 'set_chords');
+      expect(read?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
+      expect(write?.annotations).toEqual({ readOnlyHint: false, untrustedContentHint: false });
+      expect(write?.inputSchema).toMatchObject({ additionalProperties: false });
     }
   });
 
@@ -92,15 +95,15 @@ describe('registry', () => {
     const shared = createFakeContext();
     installContexts(shared, shared);
     const registry = createRegistry(deps());
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
-    expect(shared.registerCalls).toBe(2);
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
+    expect(shared.registerCalls).toBe(tools.length);
   });
 
   it('stays ready when the second context is an alias over the same tool map', async () => {
     const documentContext = createFakeContext();
-    const alias = createFakeContext({ preRegistered: ['get_diagnostics', 'ping'] });
+    const alias = createFakeContext({ preRegistered: tools.map(({ name }) => name) });
     const registry = createRegistry(deps({ contexts: () => [documentContext, alias] }));
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
   });
 
   it('reports an error when registration is refused everywhere', async () => {
@@ -121,11 +124,9 @@ describe('registry', () => {
     expect(registry.getStatus()).toEqual({ kind: 'unavailable' });
     expect(await documentContext.getTools()).toEqual([]);
     expect(await navigatorContext.getTools()).toEqual([]);
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
-    expect((await documentContext.getTools()).map((tool) => tool.name)).toEqual([
-      'get_diagnostics',
-      'ping',
-    ]);
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
+    expect((await documentContext.getTools()).map((tool) => tool.name)).toContain('ping');
+    expect(await documentContext.getTools()).toHaveLength(tools.length);
   });
 
   it('runs a tool through the browser path and returns the envelope as JSON', async () => {
@@ -133,7 +134,7 @@ describe('registry', () => {
     const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus, contexts: () => [context] }));
     await registry.register();
-    const [, pingTool] = await context.getTools();
+    const pingTool = (await context.getTools()).find((tool) => tool.name === 'ping');
     if (!pingTool || !context.executeTool) {
       throw new Error('ping was not registered');
     }
@@ -152,7 +153,7 @@ describe('registry', () => {
   it('survives execute being called without options and with a JSON-string input', async () => {
     const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
-    const [, pingTool] = registry.describe();
+    const pingTool = registry.describe().find((tool) => tool.name === 'ping');
     if (!pingTool) {
       throw new Error('ping not described');
     }
@@ -300,9 +301,15 @@ describe('registry', () => {
   it('describes tools with the registered description and title', () => {
     const registry = createRegistry(deps());
     const described = registry.describe();
-    expect(described.map((tool) => tool.name)).toEqual(['get_diagnostics', 'ping']);
-    expect(described[1]?.description).toMatch(/on error returns ok:false with a code\.$/);
-    expect(described[1]?.description).not.toContain('Include why.');
-    expect(described[0]?.title).toBe('Get diagnostics');
+    expect(described.map((tool) => tool.name)).toEqual(tools.map(({ name }) => name));
+    const read = described.find((tool) => tool.name === 'get_song_state');
+    const write = described.find((tool) => tool.name === 'set_chords');
+    const probe = described.find((tool) => tool.name === 'ping');
+    expect(read?.title).toBe('Read the song');
+    expect(read?.description).not.toContain('Include why.');
+    expect(write?.description).toMatch(/Include why\. Returns revision, changed and summary/u);
+    expect(write?.description).toMatch(/on error returns ok:false with a code\.$/u);
+    expect(probe?.description).toMatch(/on error returns ok:false with a code\.$/u);
+    expect(probe?.description).not.toContain('Include why.');
   });
 });
