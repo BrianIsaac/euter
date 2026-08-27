@@ -1,0 +1,28 @@
+/** Temporary Lane B boundary onto Lane A's transport (plan Architecture item 5). */
+
+export interface RecorderAudioContext {
+  readonly state: AudioContextState;
+  readonly sampleRate: number;
+  readonly baseLatency: number;
+  readonly outputLatency: number;
+  readonly audioWorklet: Pick<AudioWorklet, 'addModule'>;
+}
+
+export interface CountInOptions {
+  bars: 1 | 2;
+  metronome: boolean;
+  targetBar?: number;
+}
+
+export interface CountInResult {
+  /** Actual capture-clock time occupied by the count-in. */
+  durationSeconds: number;
+}
+
+export interface TransportPort {
+  getAudioContext(): RecorderAudioContext | null;
+  getBpm(): number;
+  getTimeSignature(): readonly [number, number];
+  getPositionSeconds(): number;
+  countIn(options: CountInOptions): Promise<CountInResult>;
+}
