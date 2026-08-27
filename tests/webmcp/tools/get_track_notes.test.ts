@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { loadExampleSong } from '../../../src/song/serialise.ts';
 import { createHarness } from '../../helpers/harness.ts';
 
 interface BarView {
@@ -11,7 +12,13 @@ interface NotesEnvelope {
   revision: number;
   changed: string[];
   summary: string;
-  data: { track_id: string; bars: BarView[] };
+  data: {
+    track_id: string;
+    bars: BarView[];
+    notes_total: number;
+    note_offset: number;
+    next_note_offset: number | null;
+  };
 }
 
 describe('get_track_notes', () => {
@@ -26,7 +33,7 @@ describe('get_track_notes', () => {
     expect(envelope.ok).toBe(true);
     expect(envelope.revision).toBe(0);
     expect(envelope.changed).toEqual([]);
-    expect(envelope.summary).toBe('melody bars 1-2: 7 notes');
+    expect(envelope.summary).toBe('melody bars 1-2: notes 1-7 of 7');
     expect(envelope.data.track_id).toBe('melody');
     expect(envelope.data.bars.map(({ bar }) => bar)).toEqual([1, 2]);
     expect(envelope.data.bars[0]?.notes).toEqual([
@@ -85,6 +92,46 @@ describe('get_track_notes', () => {
     await expect(
       harness.invoke('get_track_notes', { track_id: 'melody', bar_from: 1, bar_to: 8 }),
     ).resolves.toMatchObject({ ok: true });
+    harness.engine.dispose();
+  });
+
+  it('pages a dense eight-bar note range without exceeding the output budget', async () => {
+    const song = loadExampleSong();
+    const melody = song.tracks.find(({ id }) => id === 'melody');
+    if (!melody) throw new Error('example melody missing');
+    melody.notes = Array.from({ length: 96 }, (_, index) => ({
+      p: 48 + (index % 24),
+      s: (index % 32) + (index % 4) * 0.001,
+      d: 0.125,
+      v: 0.8,
+      source: 'human' as const,
+    }));
+    const harness = createHarness({ engine: { document: song } });
+
+    const first = (await harness.invoke('get_track_notes', {
+      track_id: 'melody',
+      bar_from: 1,
+      bar_to: 8,
+      note_limit: 24,
+    })) as NotesEnvelope;
+    expect(first.ok).toBe(true);
+    expect(first.data.notes_total).toBe(96);
+    expect(first.data.note_offset).toBe(0);
+    expect(first.data.next_note_offset).toBe(24);
+    expect(first.data.bars.flatMap(({ notes }) => notes)).toHaveLength(24);
+    expect(JSON.stringify(first).length).toBeLessThanOrEqual(1500);
+
+    const last = (await harness.invoke('get_track_notes', {
+      track_id: 'melody',
+      bar_from: 1,
+      bar_to: 8,
+      note_offset: 72,
+      note_limit: 24,
+    })) as NotesEnvelope;
+    expect(last.ok).toBe(true);
+    expect(last.data.next_note_offset).toBeNull();
+    expect(last.data.bars.flatMap(({ notes }) => notes)).toHaveLength(24);
+    expect(JSON.stringify(last).length).toBeLessThanOrEqual(1500);
     harness.engine.dispose();
   });
 });

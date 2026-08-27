@@ -15,7 +15,7 @@ export const descriptions = {
   get_song_state:
     'Reads revision, tempo, time signature, key confidence, bar count, sections, bounded track summaries, pending takes, instrument and style names, transport, audio and running jobs. The payload stays under 1,200 characters; note detail is available from get_track_notes.',
   get_track_notes:
-    'Reads one track’s notes for up to 8 bars as {p: MIDI pitch, s: start in beats from the bar start, d: duration in beats, v: velocity 0-1}. Track ids and bar counts are reported by get_song_state.',
+    'Reads one track’s notes for up to 8 bars as {p: MIDI pitch, s: start in beats from the bar start, d: duration in beats, v: velocity 0-1}. Dense ranges page at up to 24 notes through note_offset and report next_note_offset. Track ids and bar counts are reported by get_song_state.',
   get_chords:
     'Reads each chord as a symbol and Roman numeral in the current key. Bars without a chord are omitted.',
   get_take:

@@ -60,6 +60,14 @@ export const getTrackNotesInput = z.strictObject({
   track_id: trackIdField,
   bar_from: barField.describe('First bar, one-based and inclusive'),
   bar_to: barField.describe('Last bar; at most 8 bars per invocation'),
+  note_offset: z.number().int().nonnegative().optional().describe('Zero-based note page offset'),
+  note_limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(24)
+    .optional()
+    .describe('Notes in one page, from 1 to 24; 24 when omitted'),
 });
 
 export const getChordsInput = z.strictObject({
