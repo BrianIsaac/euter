@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  firstSampleUrl,
   INSTRUMENT_CATALOGUE,
   instrumentPitchName,
   instrumentsByFamily,
@@ -97,6 +98,7 @@ describe('instrument catalogue', () => {
       destination: {},
       factories: fake.value,
       samplesBaseUrl: 'https://samples.example/',
+      probeRemote: async () => true,
       onProgress: progress,
     });
     expect(result.loaded).toBe(true);
@@ -114,6 +116,59 @@ describe('instrument catalogue', () => {
     expect(progress).toHaveBeenLastCalledWith(1);
   });
 
+  it('names the first sample a remote instrument would fetch', () => {
+    const piano = INSTRUMENT_CATALOGUE.find(({ id }) => id === 'electric-piano');
+    const kit = INSTRUMENT_CATALOGUE.find(({ id }) => id === 'pocket-kit');
+    const synth = INSTRUMENT_CATALOGUE.find(({ id }) => id === 'sub-bass');
+    if (!piano || !kit || !synth) throw new Error('The catalogue lost an entry.');
+    expect(firstSampleUrl(piano, 'https://samples.example/electric-piano/')).toBe(
+      'https://samples.example/electric-piano/c2.ogg',
+    );
+    expect(firstSampleUrl(kit, 'https://samples.example/pocket-kit')).toBe(
+      'https://samples.example/pocket-kit/kick.ogg',
+    );
+    expect(firstSampleUrl(synth, 'https://samples.example/sub-bass')).toBeNull();
+  });
+
+  it('substitutes audibly when the sample origin does not serve the instrument', async () => {
+    // smplr logs a failed buffer and resolves anyway, so a 404 origin would otherwise be silent
+    // with nothing said about it (measured against the deployed site on 28 Aug 2026).
+    const fake = factories();
+    const probeRemote = vi.fn(async () => false);
+    const result = await loadInstrument('electric-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples.example',
+      probeRemote,
+    });
+
+    expect(probeRemote).toHaveBeenCalledWith('https://samples.example/electric-piano/c2.ogg');
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe(
+      'Electric piano is not on the sample origin; playing Grand piano instead.',
+    );
+    expect(vi.mocked(fake.value.sampler)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
+      '/samples/piano/grand/',
+    );
+  });
+
+  it('does not probe the origin for a bundled instrument', async () => {
+    const fake = factories();
+    const probeRemote = vi.fn(async () => false);
+    const result = await loadInstrument('grand-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples.example',
+      probeRemote,
+    });
+
+    expect(probeRemote).not.toHaveBeenCalled();
+    expect(result.loaded).toBe(true);
+  });
+
   it('uses the bundled live fallback when a configured remote sample load fails', async () => {
     const fake = factories();
     vi.mocked(fake.value.sampler)
@@ -124,6 +179,7 @@ describe('instrument catalogue', () => {
       destination: {},
       factories: fake.value,
       samplesBaseUrl: 'https://samples.example',
+      probeRemote: async () => true,
     });
 
     expect(result.loaded).toBe(false);

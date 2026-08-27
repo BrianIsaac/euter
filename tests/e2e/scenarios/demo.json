@@ -18,11 +18,28 @@
           "get_take",
           "suggest_chords",
           "get_job",
-          "set_key",
+          "start_recording",
+          "stop_recording",
+          "commit_take",
+          "set_notes",
           "set_chords",
+          "propose_options",
+          "audition_option",
+          "request_take",
+          "set_key",
+          "set_tempo",
+          "set_quantize",
+          "add_track",
+          "set_instrument",
+          "set_mix",
           "generate_part",
           "arrange",
-          "render"
+          "play",
+          "stop",
+          "undo",
+          "redo",
+          "render",
+          "cancel_job"
         ]
       }
     },
@@ -56,11 +73,11 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 1: \"Read the song and tell me what I have so far.\"",
       "tool": "get_song_state",
       "input": {},
       "capture": {
-        "take_id": "data.takes.0.id",
-        "start_revision": "revision"
+        "take_id": "data.takes.0.id"
       },
       "expect": {
         "ok": true,
@@ -77,6 +94,7 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 2: \"That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there.\"",
       "tool": "set_key",
       "input": {
         "key": "C major",
@@ -106,6 +124,7 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 3: \"Give me two ways to harmonise the verse and play the second one.\"",
       "tool": "propose_options",
       "input": {
         "kind": "chords",
@@ -153,6 +172,48 @@
           "data.options.1.label": "Lift it"
         },
         "data_defined": ["data.option_set_id", "data.next"]
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person presses Play on the first card. That gesture creates the audio context, so the agent's own audition can sound (Decision 24).",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      },
+      "nth": 2
+    },
+    {
+      "action": "tool",
+      "tool": "audition_option",
+      "input": {
+        "option_id": "{{option_two}}"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "summary_includes": "Lift it",
+        "data": {
+          "data.committed": false
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The song is unchanged while an option is only being heard.",
+      "tool": "get_chords",
+      "input": {
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": {
+          "data.chords.0.symbol": "C",
+          "data.chords.1.symbol": "F"
+        }
       }
     },
     {
@@ -226,6 +287,7 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 4: \"Ask me to hum the bassline for the chorus.\"",
       "tool": "request_take",
       "input": {
         "track_id": "{{bass_id}}",
@@ -248,6 +310,7 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 5: \"Commit my take onto the melody and tighten the timing a little.\"",
       "tool": "commit_take",
       "input": {
         "take_id": "{{take_id}}",
@@ -264,11 +327,26 @@
       }
     },
     {
+      "action": "tool",
+      "tool": "set_quantize",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "grid": "16n",
+        "strength": 0.6,
+        "why": "Leaving a little of the sway you sang."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["notes_log"]
+      }
+    },
+    {
       "action": "click",
-      "note": "The person's gesture is what creates the audio context (Decision 24).",
+      "note": "The transport's own Play, the control the README tells a person to press first. Its label reads \"Play again\" once the card audition has started, so the match is by prefix.",
       "target": {
         "role": "button",
-        "name": "Play"
+        "name_includes": "Play"
       }
     },
     {
@@ -289,6 +367,19 @@
     },
     {
       "action": "tool",
+      "tool": "stop",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": {
+          "data.playing": false
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 6: \"Make it a verse, then an eight-bar chorus that lifts, and play from the chorus.\"",
       "tool": "arrange",
       "input": {
         "sections": [
@@ -334,19 +425,117 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 7: \"The bass is too busy - take that back and pull it down a few dB.\" Undo is itself a step forward: the revision rises.",
       "tool": "undo",
       "input": {},
       "expect": {
         "ok": true,
         "revision": "+1",
         "data": {
-          "data.undone": true
+          "data.undone": true,
+          "data.edits": 1
         },
         "summary_includes": "Undid"
       }
     },
     {
       "action": "tool",
+      "tool": "redo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": "Redid"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "undo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": "Undid"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "set_mix",
+      "input": {
+        "track_id": "{{bass_id}}",
+        "volume_db": -9,
+        "why": "Taking the bass back so the hum leads."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.track_id": "{{bass_id}}"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "A fifth track, so add_track and set_instrument are exercised on the built bundle.",
+      "tool": "add_track",
+      "input": {
+        "kind": "chords",
+        "instrument": "grand-piano",
+        "name": "Pad",
+        "why": "Somewhere to hang a softer chord voice."
+      },
+      "capture": {
+        "pad_id": "data.track_id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.kind": "chords",
+          "data.instrument": "grand-piano"
+        },
+        "data_defined": ["data.track_id"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The electric piano lives in the remote pack; without it the bundled grand piano sounds instead and the app says so.",
+      "tool": "set_instrument",
+      "input": {
+        "track_id": "{{pad_id}}",
+        "instrument": "electric-piano",
+        "why": "An electric piano sits softer under the melody."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.instrument": "electric-piano",
+          "data.track_id": "{{pad_id}}"
+        }
+      }
+    },
+    {
+      "action": "wait_for",
+      "note": "The substitution is visible in the transport, not silent: the remote pack is configured but does not serve the electric piano yet.",
+      "text": ["playing Grand piano instead"],
+      "timeout_ms": 20000
+    },
+    {
+      "action": "tool",
+      "tool": "play",
+      "input": {
+        "from_bar": 5
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "summary_includes": "Playing from bar 5"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 8: \"Export it as an MP3.\"",
       "tool": "render",
       "input": {
         "format": "mp3"
@@ -436,13 +625,13 @@
     },
     {
       "action": "eval",
-      "note": "The person sees what the agent did: one activity per call, each with its reason.",
-      "function": "() => ({ activities: window.euter.bus.getActivities().length, notes: window.euter.bus.getDocument().notes_log.length, revision: window.euter.bus.getDocument().revision })",
+      "note": "The person sees what the agent did: one activity per command, each with its reason.",
+      "function": "() => ({ activities: window.euter.bus.getActivities().length, notes: window.euter.bus.getDocument().notes_log.length, revision: window.euter.bus.getDocument().revision, tracks: window.euter.bus.getDocument().tracks.length })",
       "expect": {
         "data": {
-          "activities": 11
+          "tracks": 5
         },
-        "data_defined": ["notes", "revision"]
+        "data_defined": ["activities", "notes", "revision"]
       }
     },
     {
@@ -475,6 +664,12 @@
     {
       "action": "wait_for",
       "text": ["Sounds and licences"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "wait_for",
+      "note": "About reports the remote pack honestly: it is configured, and a bundled sound stood in.",
+      "text": ["bundled subset instead"],
       "timeout_ms": 10000
     },
     {
