@@ -113,6 +113,26 @@ describe('song reducer and command bus', () => {
     expect(note?.s_raw).toBe(31.9);
   });
 
+  it('restores raw timing exactly at quantisation strength zero', () => {
+    const song = loadExampleSong();
+    const melody = song.tracks[0];
+    if (!melody) throw new Error('Example song has no melody track.');
+    song.tracks[0] = {
+      ...melody,
+      notes: [{ p: 60, s: 0.123456, d: 0.654321, v: 0.8, source: 'take' }],
+    };
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('set_quantize', { track_id: 'melody', grid: '16n', strength: 0, swing: 0.5 }),
+    );
+    expect(songStore.getDocument().tracks[0]?.notes[0]).toMatchObject({
+      s: 0.123456,
+      d: 0.654321,
+      s_raw: 0.123456,
+      d_raw: 0.654321,
+    });
+  });
+
   it('validates every chord before applying and sets a ranked key', () => {
     const songStore = store();
     const before = JSON.stringify(songStore.getDocument());

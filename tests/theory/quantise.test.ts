@@ -56,4 +56,9 @@ describe('quantiseNotes', () => {
       d_raw: 0.42,
     });
   });
+
+  it('clips a swung note inside an optional song boundary', () => {
+    const [note] = quantizeNotes([{ ...performed, s: 31.9, d: 0.2 }], '8n', 1, 0.5, 32);
+    expect((note?.s ?? 0) + (note?.d ?? 0)).toBeLessThanOrEqual(32);
+  });
 });
