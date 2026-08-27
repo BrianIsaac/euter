@@ -86,6 +86,31 @@ describe('song serialisation', () => {
     vi.useRealTimers();
   });
 
+  it('flushes a pending edit before a page reload', () => {
+    vi.useFakeTimers();
+    let song = createEmptySong();
+    const listeners = new Set<() => void>();
+    const store = {
+      getDocument: () => song,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const setItem = vi.fn();
+    const lifecycle = new EventTarget();
+    const persistence = createSongPersistence(store, { setItem }, { lifecycle });
+    song = { ...song, bpm: 123 };
+    for (const listener of listeners) listener();
+
+    lifecycle.dispatchEvent(new Event('pagehide'));
+    expect(JSON.parse(setItem.mock.calls[0]?.[1] as string)).toMatchObject({ bpm: 123 });
+    vi.advanceTimersByTime(250);
+    expect(setItem).toHaveBeenCalledTimes(1);
+    persistence.dispose();
+    vi.useRealTimers();
+  });
+
   it('loads an original, playable four-track example', () => {
     const song = loadExampleSong();
     expect(song.title).toBe('First Light');

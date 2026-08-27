@@ -185,6 +185,7 @@ export interface PersistenceOptions {
   delayMs?: number;
   setTimer?: typeof setTimeout;
   clearTimer?: typeof clearTimeout;
+  lifecycle?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
 }
 
 /**
@@ -233,6 +234,12 @@ export function createSongPersistence(
   const delayMs = options.delayMs ?? 250;
   const setTimer = options.setTimer ?? setTimeout;
   const clearTimer = options.clearTimer ?? clearTimeout;
+  const lifecycle =
+    options.lifecycle === undefined
+      ? typeof window === 'undefined'
+        ? null
+        : window
+      : options.lifecycle;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const flush = (): void => {
@@ -246,11 +253,14 @@ export function createSongPersistence(
     if (timer !== undefined) clearTimer(timer);
     timer = setTimer(flush, delayMs);
   });
+  const onPageHide = (): void => flush();
+  lifecycle?.addEventListener('pagehide', onPageHide);
 
   return {
     flush,
     dispose() {
       unsubscribe();
+      lifecycle?.removeEventListener('pagehide', onPageHide);
       if (timer !== undefined) flush();
     },
   };
