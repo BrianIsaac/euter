@@ -16,4 +16,13 @@ describe('About', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close about' }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('offers the example song loader only when the shell provides one', () => {
+    const onLoadExample = vi.fn();
+    const { rerender } = render(<About onClose={() => undefined} />);
+    expect(screen.queryByRole('button', { name: 'Load the example song' })).not.toBeInTheDocument();
+    rerender(<About onClose={() => undefined} onLoadExample={onLoadExample} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load the example song' }));
+    expect(onLoadExample).toHaveBeenCalled();
+  });
 });

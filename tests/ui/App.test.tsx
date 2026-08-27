@@ -1,11 +1,17 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../src/ui/App.tsx';
-import { createRuntime } from '../../src/webmcp/runtime.ts';
-import { createFakeContext } from '../helpers/fakeContext.ts';
+import { App, createPlayheadStore, trackFromActivity } from '../../src/ui/App.tsx';
+import { loadExampleSong } from '../../src/song/serialise.ts';
+import { createHarness } from '../helpers/harness.ts';
+
+function renderApp(harness = createHarness()) {
+  render(<App runtime={harness.runtime} />);
+  return harness;
+}
 
 describe('App', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('', { status: 200 })),
@@ -13,36 +19,139 @@ describe('App', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
-  it('shows the name, the tool status, the placeholders and the strip', async () => {
-    const context = createFakeContext();
-    const runtime = createRuntime({ contexts: () => [context], storage: null });
-    render(<App runtime={runtime} />);
+  it('mounts the header, transport, tracks, roll, take panel, keyboard and rails', async () => {
+    const harness = renderApp();
     expect(screen.getByRole('heading', { level: 1, name: 'Euterpe' })).toBeInTheDocument();
     expect(screen.getByTestId('tool-status')).toHaveTextContent('Agent tools: initialising');
     await act(async () => {
-      await runtime.registry.register();
+      await harness.runtime.registry.register();
     });
-    expect(screen.getByTestId('tool-status')).toHaveTextContent('Agent tools: ready (2)');
-    expect(screen.getByLabelText('Transport')).toHaveTextContent('28 Aug');
-    expect(screen.getByLabelText('Piano roll')).toHaveTextContent('lane B');
-    expect(screen.getByLabelText('Tracks')).toHaveTextContent('4 track(s)');
-    expect(screen.getByLabelText('Activity')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-status')).toHaveTextContent(
+      `Agent tools: ready (${harness.runtime.registry.tools.length})`,
+    );
+    expect(screen.getByLabelText('Transport')).toBeInTheDocument();
+    expect(screen.getAllByTestId('track')).toHaveLength(4);
+    expect(screen.getByLabelText('Piano roll')).toBeInTheDocument();
+    expect(screen.getByLabelText('Drum step grid')).toBeInTheDocument();
+    expect(screen.getByLabelText('Take recorder')).toBeInTheDocument();
+    expect(screen.getByLabelText('Musical Typing keyboard')).toBeInTheDocument();
     expect(screen.getByLabelText('Producer notes')).toBeInTheDocument();
+    expect(screen.getByLabelText('Export')).toBeInTheDocument();
+    expect(screen.getByLabelText('Activity')).toBeInTheDocument();
     expect(screen.getByTestId('song-revision')).toHaveTextContent('r0');
+    expect(screen.getByTestId('audio-state')).toHaveTextContent('running');
+  });
 
-    await act(async () => {
-      await runtime.registry.invoke('ping', { message: 'hi' });
+  it('shows an agent write in the strip, the notes rail and the roll, and undoes it', () => {
+    const harness = renderApp();
+    act(() => {
+      harness.engine.store.dispatch({
+        type: 'generate_part',
+        args: { track_id: 'bass', role: 'bass', style: 'lofi', bar_from: 1, bar_to: 4 },
+        source: 'agent',
+        why: 'A soft root line so the hum sits on top.',
+      });
     });
     expect(screen.getByTestId('song-revision')).toHaveTextContent('r1');
-    expect(screen.getByText('ping: hi')).toBeInTheDocument();
+    expect(screen.getByTestId('activity')).toHaveTextContent('Generated lofi bass in bars 1-4');
+    expect(screen.getByTestId('producer-note')).toHaveTextContent(
+      'A soft root line so the hum sits on top.',
+    );
+    expect(screen.getByLabelText('Piano roll')).toHaveTextContent('Bass');
+
+    fireEvent.click(screen.getByRole('button', { name: /Undo Generated lofi bass/u }));
+    expect(
+      harness.engine.store.getDocument().tracks.find(({ id }) => id === 'bass')?.notes,
+    ).toEqual(loadExampleSong().tracks.find(({ id }) => id === 'bass')?.notes);
+  });
+
+  it('renders the agent options as cards and applies the one the person chooses', async () => {
+    const harness = renderApp();
+    act(() => {
+      harness.engine.store.dispatch({
+        type: 'propose_options',
+        args: {
+          kind: 'chords',
+          bar_from: 1,
+          bar_to: 2,
+          options: [
+            { label: 'Stay home', why: 'It keeps the calm.', chords: [{ bar: 1, symbol: 'C' }] },
+            { label: 'Lift it', why: 'It opens up.', chords: [{ bar: 1, symbol: 'Am7' }] },
+          ],
+        },
+        source: 'agent',
+        why: 'Two ways to start the verse.',
+      });
+    });
+    const cards = screen.getAllByTestId('option-card');
+    expect(cards).toHaveLength(2);
+    expect(cards[1]).toHaveTextContent('It opens up.');
+
+    await act(async () => {
+      fireEvent.click(within(cards[1] as HTMLElement).getByRole('button', { name: 'Play' }));
+      await Promise.resolve();
+    });
+    expect(harness.engine.playback.getPreview()?.chords[0]?.symbol).toBe('Am7');
+    expect(harness.engine.store.getDocument().chords[0]?.symbol).toBe('C');
+
+    act(() => {
+      fireEvent.click(within(cards[1] as HTMLElement).getByRole('button', { name: 'Choose' }));
+    });
+    expect(harness.engine.store.getDocument().chords[0]?.symbol).toBe('Am7');
+    expect(harness.engine.playback.getPreview()).toBeNull();
+    expect(screen.getAllByTestId('activity')[0]).toHaveTextContent('Chose Lift it');
+  });
+
+  it('shows the request_take banner on the bars the agent named', () => {
+    const harness = renderApp();
+    act(() => {
+      harness.engine.store.dispatch({
+        type: 'request_take',
+        args: { track_id: 'bass', bar_from: 5, bar_to: 8, prompt: 'Hum me a bassline' },
+        source: 'agent',
+        why: 'You know how it should move.',
+      });
+    });
+    const banner = screen.getByTestId('request-take-banner');
+    expect(banner).toHaveTextContent('bars 5-8');
+    expect(banner).toHaveTextContent('Hum me a bassline');
+  });
+
+  it('reports a refused human edit instead of throwing', async () => {
+    const harness = renderApp();
+    await act(async () => {
+      await harness.recorder.start({ trackId: 'melody', countInBars: 1, metronome: true });
+    });
+    const melody = screen.getAllByTestId('track')[0] as HTMLElement;
+    act(() => {
+      fireEvent.click(within(melody).getByRole('button', { name: 'Mute' }));
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('being recorded');
+  });
+
+  it('loads the example song from the header', () => {
+    const harness = renderApp();
+    act(() => {
+      harness.engine.store.dispatch({
+        type: 'set_tempo',
+        args: { bpm: 140 },
+        source: 'human',
+        why: 'Too fast.',
+      });
+    });
+    expect(screen.getByTestId('song-revision')).toHaveTextContent('r1');
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Example song' }));
+    });
+    expect(harness.engine.store.getDocument().bpm).toBe(92);
   });
 
   it('opens and closes the diagnostics and about panels', () => {
-    const runtime = createRuntime({ contexts: () => [], storage: null });
-    render(<App runtime={runtime} />);
+    renderApp();
     expect(screen.queryByLabelText('Diagnostics')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
     expect(screen.getByLabelText('Diagnostics')).toBeInTheDocument();
@@ -51,5 +160,39 @@ describe('App', () => {
     expect(screen.getByLabelText('About')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close about' }));
     expect(screen.queryByLabelText('About')).not.toBeInTheDocument();
+  });
+
+  it('polls the transport for a playhead only while it is playing', () => {
+    const harness = createHarness();
+    const idle = createPlayheadStore(harness.engine, false, 4, 5);
+    expect(idle.getSnapshot()).toBeNull();
+    expect(idle.subscribe(() => undefined)()).toBeUndefined();
+
+    const playing = createPlayheadStore(harness.engine, true, 4, 5);
+    expect(playing.getSnapshot()).toBe(0);
+    const listener = vi.fn();
+    const stop = playing.subscribe(listener);
+    vi.advanceTimersByTime(12);
+    stop();
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it('reads the track a command touched from its changed list', () => {
+    const song = loadExampleSong();
+    expect(
+      trackFromActivity(
+        {
+          id: 1,
+          at: 0,
+          type: 'set_notes',
+          source: 'agent',
+          revision: 1,
+          changed: ['tracks', 'track:bass:notes'],
+          summary: 'x',
+        },
+        song,
+      ),
+    ).toBe('bass');
+    expect(trackFromActivity(undefined, song)).toBeNull();
   });
 });

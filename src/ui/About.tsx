@@ -9,6 +9,8 @@ import { parseMeasured, type MeasuredBlock } from './measured.ts';
 
 export interface AboutProps {
   onClose: () => void;
+  /** Replaces the song with the original example, for the agent-only path. */
+  onLoadExample?: (() => void) | undefined;
 }
 
 const measuredFiles = import.meta.glob('../../docs/research/day-one-checks.md', {
@@ -85,7 +87,7 @@ function renderBlock(block: MeasuredBlock, index: number) {
  * @param props - The close handler.
  * @returns The panel.
  */
-export function About({ onClose }: AboutProps) {
+export function About({ onClose, onLoadExample }: AboutProps) {
   const markdown = measuredMarkdown();
   const measured = markdown === null ? null : parseMeasured(markdown);
   return (
@@ -104,6 +106,19 @@ export function About({ onClose }: AboutProps) {
           Challenge; repository and package name <code>euter</code>.
         </p>
       </section>
+
+      {onLoadExample === undefined ? null : (
+        <section className="diag-section">
+          <h3>Example song</h3>
+          <p>
+            "First Light" is an original eight-bar example: melody, chords, bass and drums. Load it
+            to explore the app, or to give your agent something to work on before you record.
+          </p>
+          <button type="button" onClick={onLoadExample}>
+            Load the example song
+          </button>
+        </section>
+      )}
 
       <section className="diag-section">
         <h3>Versions</h3>
