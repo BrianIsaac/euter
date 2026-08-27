@@ -252,10 +252,15 @@ export function createEngine(options: EngineOptions = {}): Engine {
 
   const activate = (): Promise<void> => {
     if (activation) return activation;
+    // The reconciler is built only after `activateFromGesture` resolves, because that is where
+    // lane A hands our AudioContext to Tone. Building it earlier is a race: on a gesture the
+    // context is already running, so the reconciler would ask Tone for a destination before
+    // `setContext`, Tone would answer from its own default context, and smplr's native nodes
+    // could not connect to it ("Overload resolution failed"). Measured in Chrome 151, 27 Aug.
     const running = audio.activateFromGesture();
-    reconciler ??= (options.createReconciler ?? createAudioReconciler)(playback, audio);
     activation = running.then(async () => {
-      reconciler?.reconcile();
+      reconciler ??= (options.createReconciler ?? createAudioReconciler)(playback, audio);
+      reconciler.reconcile();
       await startInstrument().catch(() => undefined);
       notify();
     });
