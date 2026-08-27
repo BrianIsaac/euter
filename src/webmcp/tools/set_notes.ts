@@ -14,6 +14,7 @@ export const setNotes: ToolDefinition<typeof setNotesInput> = {
   kind: 'write',
   description: descriptions.set_notes,
   input: setNotesInput,
+  untrustedContent: true,
   example: {
     track_id: 'melody',
     bar_from: 1,

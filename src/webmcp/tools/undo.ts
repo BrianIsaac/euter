@@ -13,6 +13,7 @@ export const undo: ToolDefinition<typeof undoInput> = {
   kind: 'write',
   description: descriptions.undo,
   input: undoInput,
+  untrustedContent: true,
   example: {},
   badExample: { steps: 2 },
   execute(_args, context) {

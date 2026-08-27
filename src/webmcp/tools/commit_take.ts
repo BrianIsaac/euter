@@ -14,6 +14,7 @@ export const commitTake: ToolDefinition<typeof commitTakeInput> = {
   kind: 'write',
   description: descriptions.commit_take,
   input: commitTakeInput,
+  untrustedContent: true,
   example: {
     take_id: 'take-1',
     track_id: 'melody',

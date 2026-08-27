@@ -14,6 +14,7 @@ export const arrange: ToolDefinition<typeof arrangeInput> = {
   kind: 'write',
   description: descriptions.arrange,
   input: arrangeInput,
+  untrustedContent: true,
   example: {
     sections: [
       { name: 'Verse', bar_from: 1, bar_to: 4, repeat: true },

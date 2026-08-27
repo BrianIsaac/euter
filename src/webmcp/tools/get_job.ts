@@ -29,6 +29,7 @@ export const getJob: ToolDefinition<typeof getJobInput> = {
   kind: 'read',
   description: descriptions.get_job,
   input: getJobInput,
+  untrustedContent: true,
   example: { job_id: 'job-1' },
   badExample: {},
   execute(args, context) {

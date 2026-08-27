@@ -14,6 +14,7 @@ export const proposeOptions: ToolDefinition<typeof proposeOptionsInput> = {
   kind: 'write',
   description: descriptions.propose_options,
   input: proposeOptionsInput,
+  untrustedContent: true,
   example: {
     kind: 'chords',
     bar_from: 1,

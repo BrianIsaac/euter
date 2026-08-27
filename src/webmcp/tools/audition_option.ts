@@ -13,6 +13,7 @@ export const auditionOption: ToolDefinition<typeof auditionOptionInput> = {
   kind: 'write',
   description: descriptions.audition_option,
   input: auditionOptionInput,
+  untrustedContent: true,
   example: { option_id: 'option-1' },
   badExample: { option_id: '' },
   async execute(args, context) {

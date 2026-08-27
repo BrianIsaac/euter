@@ -14,6 +14,7 @@ export const setQuantize: ToolDefinition<typeof setQuantizeInput> = {
   kind: 'write',
   description: descriptions.set_quantize,
   input: setQuantizeInput,
+  untrustedContent: true,
   example: {
     track_id: 'melody',
     grid: '16n',

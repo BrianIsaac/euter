@@ -14,6 +14,7 @@ export const setInstrument: ToolDefinition<typeof setInstrumentInput> = {
   kind: 'write',
   description: descriptions.set_instrument,
   input: setInstrumentInput,
+  untrustedContent: true,
   example: {
     track_id: 'chords',
     instrument: 'electric-piano',

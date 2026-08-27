@@ -30,6 +30,26 @@ const DOCUMENT_WRITES = new Set([
   'arrange',
 ]);
 
+/** Tools whose output can contain names, labels, prompts or filenames supplied by the person. */
+const UNTRUSTED_OUTPUTS = new Set([
+  'get_song_state',
+  'get_take',
+  'start_recording',
+  'commit_take',
+  'set_notes',
+  'propose_options',
+  'audition_option',
+  'request_take',
+  'set_quantize',
+  'add_track',
+  'set_instrument',
+  'set_mix',
+  'arrange',
+  'undo',
+  'redo',
+  'get_job',
+]);
+
 /** Tools that need something in the song, the recorder or the job list before their example runs. */
 const seeds: Record<string, (harness: Harness) => Promise<void> | void> = {
   get_take: (harness) => {
@@ -105,11 +125,13 @@ describe('tool contract', () => {
     expect(new Set(tools.map((tool) => tool.name)).size).toBe(tools.length);
   });
 
-  it('marks the reads that echo names the person typed as untrusted content', () => {
+  it('marks every output that can echo person-supplied text as untrusted content', () => {
     const untrusted = productTools
       .filter(({ untrustedContent }) => untrustedContent === true)
       .map(({ name }) => name);
-    expect(untrusted).toEqual(['get_song_state', 'get_take']);
+    expect(untrusted).toEqual(
+      productTools.filter(({ name }) => UNTRUSTED_OUTPUTS.has(name)).map(({ name }) => name),
+    );
   });
 
   it('asks for a reason on every product tool that changes the document', () => {
