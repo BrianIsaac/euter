@@ -11,6 +11,8 @@ export interface ActivityStripProps {
   bus: CommandBus<SongDocument>;
   /** Given the revision an entry produced; omitted when history is not available. */
   onUndoItem?: ((revision: number) => void) | undefined;
+  /** True only while that original revision remains on the applied history stack. */
+  canUndoItem?: ((revision: number) => boolean) | undefined;
 }
 
 /**
@@ -19,7 +21,7 @@ export interface ActivityStripProps {
  * @param props - The command bus and the per-item undo handler.
  * @returns The strip.
  */
-export function ActivityStrip({ bus, onUndoItem }: ActivityStripProps) {
+export function ActivityStrip({ bus, onUndoItem, canUndoItem }: ActivityStripProps) {
   const activities = useSyncExternalStore(bus.subscribe, bus.getActivities);
   return (
     <section className="strip" aria-label="Activity">
@@ -43,7 +45,7 @@ export function ActivityStrip({ bus, onUndoItem }: ActivityStripProps) {
               <span className="strip-source">{entry.source}</span>
               <span className="strip-summary">{entry.summary}</span>
               {entry.why ? <span className="strip-why">{entry.why}</span> : null}
-              {onUndoItem === undefined ? null : (
+              {onUndoItem === undefined || canUndoItem?.(entry.revision) === false ? null : (
                 <button
                   type="button"
                   className="strip-undo"

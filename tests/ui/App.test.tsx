@@ -67,6 +67,10 @@ describe('App', () => {
     expect(
       harness.engine.store.getDocument().tracks.find(({ id }) => id === 'bass')?.notes,
     ).toEqual(loadExampleSong().tracks.find(({ id }) => id === 'bass')?.notes);
+    expect(
+      screen.queryByRole('button', { name: /Undo Generated lofi bass/u }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Undo Undid/u })).not.toBeInTheDocument();
   });
 
   it('renders the agent options as cards and applies the one the person chooses', async () => {
