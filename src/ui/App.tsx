@@ -340,7 +340,11 @@ export function App({ runtime }: AppProps) {
         <Diagnostics runtime={runtime} onClose={() => setPanel('none')} />
       ) : null}
       {panel === 'about' ? (
-        <About onClose={() => setPanel('none')} onLoadExample={() => engine.loadExample()} />
+        <About
+          onClose={() => setPanel('none')}
+          onLoadExample={() => engine.loadExample()}
+          fallbacks={Object.values(engineState.fallbacks)}
+        />
       ) : null}
     </div>
   );

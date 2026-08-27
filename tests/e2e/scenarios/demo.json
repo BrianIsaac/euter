@@ -36,26 +36,42 @@
         "bass_id": "bass",
         "drums_id": "drums"
       },
-      "expect": { "data_defined": ["melody", "chords", "bass", "drums"] }
+      "expect": {
+        "data_defined": ["melody", "chords", "bass", "drums"]
+      }
     },
     {
       "action": "upload",
       "note": "The hum arrives as an import: the same Take object the recorder produces (Decision 10).",
-      "target": { "role": "button", "name": "Import audio file" },
+      "target": {
+        "role": "button",
+        "name": "Import audio file"
+      },
       "file": "tests/fixtures/original-hum-scale.wav"
     },
-    { "action": "wait_for", "text": ["Voiced"], "timeout_ms": 20000 },
+    {
+      "action": "wait_for",
+      "text": ["Voiced"],
+      "timeout_ms": 20000
+    },
     {
       "action": "tool",
       "tool": "get_song_state",
       "input": {},
-      "capture": { "take_id": "data.takes.0.id", "start_revision": "revision" },
+      "capture": {
+        "take_id": "data.takes.0.id",
+        "start_revision": "revision"
+      },
       "expect": {
         "ok": true,
         "revision": ">=1",
         "changed_exactly": [],
         "summary_includes": "First Light",
-        "data": { "data.bpm": 92, "data.time_sig": [4, 4], "data.bars": 8 },
+        "data": {
+          "data.bpm": 92,
+          "data.time_sig": [4, 4],
+          "data.bars": 8
+        },
         "data_defined": ["data.takes.0.id", "data.key.name", "data.audio.state"]
       }
     },
@@ -76,7 +92,11 @@
     {
       "action": "tool",
       "tool": "suggest_chords",
-      "input": { "bar_from": 1, "bar_to": 4, "style": "lofi" },
+      "input": {
+        "bar_from": 1,
+        "bar_to": 4,
+        "style": "lofi"
+      },
       "expect": {
         "ok": true,
         "revision": "+0",
@@ -96,43 +116,68 @@
             "label": "Stay home",
             "why": "It keeps the calm of your hum.",
             "chords": [
-              { "bar": 1, "symbol": "C" },
-              { "bar": 2, "symbol": "F" }
+              {
+                "bar": 1,
+                "symbol": "C"
+              },
+              {
+                "bar": 2,
+                "symbol": "F"
+              }
             ]
           },
           {
             "label": "Lift it",
             "why": "The minor turn opens into the chorus.",
             "chords": [
-              { "bar": 1, "symbol": "Am7" },
-              { "bar": 2, "symbol": "Fmaj7" }
+              {
+                "bar": 1,
+                "symbol": "Am7"
+              },
+              {
+                "bar": 2,
+                "symbol": "Fmaj7"
+              }
             ]
           }
         ],
         "why": "Two ways to harmonise the verse; hear both before we commit."
       },
-      "capture": { "option_two": "data.options.1.option_id" },
+      "capture": {
+        "option_two": "data.options.1.option_id"
+      },
       "expect": {
         "ok": true,
         "revision": "+1",
-        "data": { "data.options.1.label": "Lift it" },
+        "data": {
+          "data.options.1.label": "Lift it"
+        },
         "data_defined": ["data.option_set_id", "data.next"]
       }
     },
     {
       "action": "click",
       "note": "The person chooses the second card; the agent proposed, the person committed.",
-      "target": { "role": "button", "name": "Choose" },
+      "target": {
+        "role": "button",
+        "name": "Choose"
+      },
       "nth": 2
     },
     {
       "action": "tool",
       "tool": "get_chords",
-      "input": { "bar_from": 1, "bar_to": 2 },
+      "input": {
+        "bar_from": 1,
+        "bar_to": 2
+      },
       "expect": {
         "ok": true,
         "revision": "+1",
-        "data": { "data.chords.0.symbol": "Am7", "data.chords.1.symbol": "Fmaj7" }
+        "data": {
+          "data.chords.0.symbol": "Am7",
+          "data.chords.1.symbol": "Fmaj7"
+        }
       }
     },
     {
@@ -140,8 +185,14 @@
       "tool": "set_chords",
       "input": {
         "chords": [
-          { "bar": 3, "symbol": "G7" },
-          { "bar": 4, "symbol": "Cmaj7" }
+          {
+            "bar": 3,
+            "symbol": "G7"
+          },
+          {
+            "bar": 4,
+            "symbol": "Cmaj7"
+          }
         ],
         "why": "A dominant into the tonic so bar 4 lands."
       },
@@ -149,7 +200,10 @@
         "ok": true,
         "revision": "+1",
         "changed": ["chords", "notes_log"],
-        "data": { "data.chords.0.symbol": "G7", "data.chords.1.symbol": "Cmaj7" }
+        "data": {
+          "data.chords.0.symbol": "G7",
+          "data.chords.1.symbol": "Cmaj7"
+        }
       }
     },
     {
@@ -187,7 +241,11 @@
         "summary_includes": "bars 5-8"
       }
     },
-    { "action": "wait_for", "text": ["Hum me a bassline for the chorus"], "timeout_ms": 10000 },
+    {
+      "action": "wait_for",
+      "text": ["Hum me a bassline for the chorus"],
+      "timeout_ms": 10000
+    },
     {
       "action": "tool",
       "tool": "commit_take",
@@ -208,18 +266,25 @@
     {
       "action": "click",
       "note": "The person's gesture is what creates the audio context (Decision 24).",
-      "target": { "role": "button", "name": "Play" }
+      "target": {
+        "role": "button",
+        "name": "Play"
+      }
     },
     {
       "action": "tool",
       "tool": "play",
-      "input": { "from_bar": 1 },
+      "input": {
+        "from_bar": 1
+      },
       "expect": {
         "ok": true,
         "revision": "+0",
         "changed_exactly": [],
         "summary_includes": "Playing from bar 1",
-        "data": { "data.playing": true }
+        "data": {
+          "data.playing": true
+        }
       }
     },
     {
@@ -227,8 +292,17 @@
       "tool": "arrange",
       "input": {
         "sections": [
-          { "name": "Verse", "bar_from": 1, "bar_to": 4 },
-          { "name": "Chorus", "bar_from": 5, "bar_to": 8, "repeat": true }
+          {
+            "name": "Verse",
+            "bar_from": 1,
+            "bar_to": 4
+          },
+          {
+            "name": "Chorus",
+            "bar_from": 5,
+            "bar_to": 8,
+            "repeat": true
+          }
         ],
         "why": "A verse, then a chorus that comes round twice."
       },
@@ -236,7 +310,9 @@
         "ok": true,
         "revision": "+1",
         "changed": ["sections", "notes_log"],
-        "data": { "data.bars": 12 }
+        "data": {
+          "data.bars": 12
+        }
       }
     },
     {
@@ -250,7 +326,11 @@
         "bar_to": 8,
         "why": "Voicing the progression under the verse and the chorus."
       },
-      "expect": { "ok": true, "revision": "+1", "summary_includes": ["lofi", "chords"] }
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": ["lofi", "chords"]
+      }
     },
     {
       "action": "tool",
@@ -259,15 +339,21 @@
       "expect": {
         "ok": true,
         "revision": "+1",
-        "data": { "data.undone": true },
+        "data": {
+          "data.undone": true
+        },
         "summary_includes": "Undid"
       }
     },
     {
       "action": "tool",
       "tool": "render",
-      "input": { "format": "mp3" },
-      "capture": { "mp3_job": "data.job_id" },
+      "input": {
+        "format": "mp3"
+      },
+      "capture": {
+        "mp3_job": "data.job_id"
+      },
       "expect": {
         "ok": true,
         "revision": "+0",
@@ -283,47 +369,120 @@
     {
       "action": "poll",
       "tool": "get_job",
-      "input": { "job_id": "{{mp3_job}}" },
-      "until": { "data.state": "done" },
+      "input": {
+        "job_id": "{{mp3_job}}"
+      },
+      "until": {
+        "data.state": "done"
+      },
       "timeout_ms": 180000,
       "interval_ms": 500,
       "expect": {
         "ok": true,
-        "data": { "data.state": "done", "data.kind": "mp3", "data.progress_pct": 100 },
+        "data": {
+          "data.state": "done",
+          "data.kind": "mp3",
+          "data.progress_pct": 100
+        },
         "data_defined": ["data.download_url", "data.filename", "data.duration_s", "data.peak_dbfs"],
-        "data_includes": { "data.filename": ".mp3" }
+        "data_includes": {
+          "data.filename": ".mp3"
+        }
       }
     },
     {
       "action": "tool",
       "tool": "render",
-      "input": { "format": "midi", "bar_from": 5, "bar_to": 8 },
-      "capture": { "midi_job": "data.job_id" },
+      "input": {
+        "format": "midi",
+        "bar_from": 5,
+        "bar_to": 8
+      },
+      "capture": {
+        "midi_job": "data.job_id"
+      },
       "expect": {
         "ok": true,
         "revision": "+0",
-        "data": { "data.format": "midi", "data.bar_from": 5, "data.bar_to": 8 }
+        "data": {
+          "data.format": "midi",
+          "data.bar_from": 5,
+          "data.bar_to": 8
+        }
       }
     },
     {
       "action": "poll",
       "tool": "get_job",
-      "input": { "job_id": "{{midi_job}}" },
-      "until": { "data.state": "done" },
+      "input": {
+        "job_id": "{{midi_job}}"
+      },
+      "until": {
+        "data.state": "done"
+      },
       "timeout_ms": 120000,
       "interval_ms": 400,
       "expect": {
         "ok": true,
-        "data": { "data.state": "done", "data.kind": "midi" },
+        "data": {
+          "data.state": "done",
+          "data.kind": "midi"
+        },
         "data_defined": ["data.download_url", "data.filename"],
-        "data_includes": { "data.filename": ".mid" }
+        "data_includes": {
+          "data.filename": ".mid"
+        }
       }
     },
     {
       "action": "eval",
       "note": "The person sees what the agent did: one activity per call, each with its reason.",
       "function": "() => ({ activities: window.euter.bus.getActivities().length, notes: window.euter.bus.getDocument().notes_log.length, revision: window.euter.bus.getDocument().revision })",
-      "expect": { "data": { "activities": 11 }, "data_defined": ["notes", "revision"] }
+      "expect": {
+        "data": {
+          "activities": 11
+        },
+        "data_defined": ["notes", "revision"]
+      }
+    },
+    {
+      "action": "click",
+      "note": "The two panels the operator reads on the built bundle: Diagnostics for the checks, About for the licence, versions, measurements, sample sources and the remote-pack state.",
+      "target": {
+        "role": "button",
+        "name": "Diagnostics"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["Response headers from fetch(\"/\")"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Close diagnostics"
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "About"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["Sounds and licences"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Close about"
+      }
     },
     {
       "action": "console",
