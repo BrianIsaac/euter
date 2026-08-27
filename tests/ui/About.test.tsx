@@ -11,8 +11,9 @@ describe('About', () => {
     expect(screen.getByText('react')).toBeInTheDocument();
     expect(screen.getByText('Measured in the ChatGPT desktop app')).toBeInTheDocument();
     expect(measuredMarkdown()).toContain('# Day-one checks');
-    expect(screen.getByText(/have not been run on this build yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/have not been run on this build yet/)).not.toBeInTheDocument();
     expect(screen.getByText('Site tools appear and run')).toBeInTheDocument();
+    expect(screen.getByText('GPT-5.6 Sol, Extra High')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close about' }));
     expect(onClose).toHaveBeenCalled();
   });
