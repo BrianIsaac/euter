@@ -123,9 +123,6 @@ function setNotes(
   validateBarRange(document, command.args.bar_from, barTo);
   const start = (command.args.bar_from - 1) * beatsPerBar;
   const end = start + barCount * beatsPerBar;
-  if (command.args.notes.some(({ s, d }) => s + d > barCount * beatsPerBar)) {
-    throw new ToolError('OUT_OF_RANGE', 'A note extends past the replaced bar range.', true);
-  }
   const notes: Note[] = command.args.notes.map(({ p, s, d, v }) => ({
     p,
     s: start + s,
