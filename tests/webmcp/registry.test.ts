@@ -235,6 +235,19 @@ describe('registry', () => {
     expect(ran).not.toHaveBeenCalled();
   });
 
+  it('reports CANCELLED even when the caller supplies a non-DOM abort reason', async () => {
+    const ran = vi.fn(() => ok(0, [], 'ran', null));
+    const registry = createRegistry(deps({ tools: [customTool(ran)] }));
+    const controller = new AbortController();
+    controller.abort('person stopped the call');
+    expect(await registry.invoke('echo_text', { text: 'a' }, controller.signal)).toMatchObject({
+      ok: false,
+      code: 'CANCELLED',
+      recoverable: true,
+    });
+    expect(ran).not.toHaveBeenCalled();
+  });
+
   it('hands the execute context the signal, bus, environment and registry view', async () => {
     const seen = vi.fn((args: { text: string }, context) => {
       expect(context.signal).toBeInstanceOf(AbortSignal);

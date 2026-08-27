@@ -36,7 +36,18 @@ export function createQueue(options: QueueOptions = {}): CommandQueue {
   const gestureWaiters = new Set<() => void>();
 
   function abortReason(signal: AbortSignal): unknown {
-    return signal.reason ?? new DOMException('The call was aborted.', 'AbortError');
+    const reason = signal.reason;
+    if (
+      typeof reason === 'object' &&
+      reason !== null &&
+      'name' in reason &&
+      (reason as { name: unknown }).name === 'AbortError'
+    ) {
+      return reason;
+    }
+    const message =
+      typeof reason === 'string' && reason.length > 0 ? reason : 'The call was aborted.';
+    return new DOMException(message, 'AbortError');
   }
 
   function holdForGesture(signal: AbortSignal | undefined): Promise<void> {
