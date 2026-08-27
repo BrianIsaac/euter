@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RenderOptions } from '../../src/audio/render.ts';
+import { createEmptySong } from '../../src/song/types.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
 import { createTestEngine, fakeAudio, fakeAudioBuffer, makeTake } from '../helpers/harness.ts';
 
@@ -217,6 +218,26 @@ describe('engine', () => {
     release();
     await settle();
     expect(engine.jobs.get(job.id)?.state).toBe('cancelled');
+    engine.dispose();
+  });
+
+  it('completes two simultaneous renders of an empty song as silent files', async () => {
+    const silence = fakeAudioBuffer();
+    silence.getChannelData(0).fill(0);
+    silence.getChannelData(1).fill(0);
+    const { engine } = createTestEngine({
+      document: createEmptySong('Silence'),
+      exporters: { render: () => Promise.resolve(silence) },
+    });
+
+    const first = engine.startExport('wav', 1, 8);
+    const second = engine.startExport('wav', 1, 8);
+    await settle();
+
+    expect(engine.jobs.get(first.id)?.state).toBe('completed');
+    expect(engine.jobs.get(second.id)?.state).toBe('completed');
+    expect(engine.exportResult(first.id)?.peak_dbfs).toBeNull();
+    expect(engine.exportResult(second.id)?.peak_dbfs).toBeNull();
     engine.dispose();
   });
 

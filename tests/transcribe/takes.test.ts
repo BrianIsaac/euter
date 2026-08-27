@@ -32,6 +32,26 @@ describe('take transcription', () => {
     ]);
   });
 
+  it('keeps the voiced tail of a note that crosses the count-in boundary', () => {
+    const frames: PitchFrame[] = Array.from({ length: 31 }, (_, index) => ({
+      t: 0.9 + index * 0.01,
+      hz: 261.63,
+      clarity: 0.95,
+    }));
+    const take = createTakeFromPitchTrack(frames, {
+      id: 'straddled',
+      source: 'mic',
+      bpm: 120,
+      durationSeconds: 1.3,
+      countInOffsetSeconds: 1,
+    });
+
+    expect(take.notes).toHaveLength(1);
+    expect(take.notes[0]).toMatchObject({ p: 60, s: 0, s_raw: 0, source: 'take' });
+    expect(take.notes[0]?.d_raw).toBeGreaterThan(0.35);
+    expect(take.pitch_track[0]?.t).toBe(0);
+  });
+
   it('builds take quality metrics, range, raw notes and tempo hint', () => {
     const frames: PitchFrame[] = [
       { t: 1.1, hz: 261.63, clarity: 0.92 },

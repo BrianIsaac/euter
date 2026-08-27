@@ -164,6 +164,49 @@ describe('PianoRoll', () => {
     expect(scroll.scrollLeft).toBe(384);
   });
 
+  it('recentres vertically when switching between empty, low and high tracks', () => {
+    const baseNote = melody.notes[0];
+    if (!baseNote) throw new Error('The roll fixture needs one note.');
+    const low: Track = { ...melody, id: 'low', notes: [{ ...baseNote, p: 24 }] };
+    const high: Track = { ...melody, id: 'high', notes: [{ ...baseNote, p: 96 }] };
+    const empty: Track = { ...melody, id: 'empty', notes: [] };
+    const switched = { ...song(), tracks: [low, high, empty] };
+    const view = render(
+      <PianoRoll
+        song={switched}
+        trackId="low"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={vi.fn()}
+      />,
+    );
+    const scroll = screen.getByTestId('roll-scroll');
+    const lowTop = scroll.scrollTop;
+
+    view.rerender(
+      <PianoRoll
+        song={switched}
+        trackId="high"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={vi.fn()}
+      />,
+    );
+    expect(scroll.scrollTop).toBeLessThan(lowTop);
+
+    view.rerender(
+      <PianoRoll
+        song={switched}
+        trackId="empty"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'aria-label',
+      'Lead melody notes across 8 bars',
+    );
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+  });
+
   it('shows a missing-track error instead of drawing stale notes', () => {
     render(
       <PianoRoll

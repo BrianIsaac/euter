@@ -344,6 +344,37 @@ describe('registry', () => {
     expect(results.map((envelope) => (envelope.ok ? envelope.revision : -1))).toEqual([1, 2, 2]);
   });
 
+  it('lets only the first of two concurrent writes at the same revision land', async () => {
+    const bus = createTestEngine().engine.store;
+    const registry = createRegistry(deps({ bus }));
+    const results = await Promise.all([
+      registry.invoke('set_tempo', { bpm: 96, why: 'First.', expected_revision: 0 }),
+      registry.invoke('set_tempo', { bpm: 101, why: 'Second.', expected_revision: 0 }),
+    ]);
+
+    expect(results[0]).toMatchObject({ ok: true, revision: 1 });
+    expect(results[1]).toMatchObject({ ok: false, code: 'STALE_REVISION' });
+    expect(bus.getDocument().bpm).toBe(96);
+  });
+
+  it('rejects an agent write when a human edit lands during its gesture hold', async () => {
+    const bus = createTestEngine().engine.store;
+    const queue = createQueue();
+    const registry = createRegistry(deps({ bus, queue }));
+    queue.setGestureActive(true);
+    const pending = registry.invoke('set_tempo', {
+      bpm: 96,
+      why: 'Agent change.',
+      expected_revision: 0,
+    });
+
+    bus.dispatch({ type: 'set_tempo', args: { bpm: 110 }, source: 'human', why: 'Human change.' });
+    queue.setGestureActive(false);
+
+    await expect(pending).resolves.toMatchObject({ ok: false, code: 'STALE_REVISION' });
+    expect(bus.getDocument().bpm).toBe(110);
+  });
+
   it('describes tools with the registered description and title', () => {
     const registry = createRegistry(deps());
     const described = registry.describe();
