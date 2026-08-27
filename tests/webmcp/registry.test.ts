@@ -11,7 +11,7 @@ import {
   type RegistryDeps,
 } from '../../src/webmcp/registry.ts';
 import { tools } from '../../src/webmcp/tools/index.ts';
-import type { ToolDefinition } from '../../src/webmcp/types.ts';
+import type { ModelContext, ToolDefinition } from '../../src/webmcp/types.ts';
 import { createFakeContext, installContexts } from '../helpers/fakeContext.ts';
 import { createTestEngine } from '../helpers/harness.ts';
 
@@ -127,6 +127,29 @@ describe('registry', () => {
     expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
     expect((await documentContext.getTools()).map((tool) => tool.name)).toContain('set_tempo');
     expect(await documentContext.getTools()).toHaveLength(tools.length);
+  });
+
+  it('does not continue onto another context when disposed during registration', async () => {
+    const pending = {
+      registerTool(_tool, options = {}) {
+        return new Promise<void>((_resolve, reject) => {
+          options.signal?.addEventListener(
+            'abort',
+            () => reject(options.signal?.reason ?? new DOMException('aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      },
+    } as ModelContext;
+    const second = createFakeContext();
+    const registry = createRegistry(deps({ contexts: () => [pending, second] }));
+
+    const registering = registry.register();
+    registry.dispose();
+
+    await registering;
+    expect(registry.getStatus()).toEqual({ kind: 'unavailable' });
+    expect(second.registerCalls).toBe(0);
   });
 
   it('runs a tool through the browser path and returns the envelope as JSON', async () => {

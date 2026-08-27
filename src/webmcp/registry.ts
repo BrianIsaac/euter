@@ -159,6 +159,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
   let calls: readonly ToolCall[] = [];
   let controllers: AbortController[] = [];
   let nextCallId = 1;
+  let registrationGeneration = 0;
 
   function notify(): void {
     for (const listener of listeners) {
@@ -273,6 +274,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
   return {
     tools,
     async register(): Promise<RegistryStatus> {
+      const generation = (registrationGeneration += 1);
       setStatus({ kind: 'initialising' });
       const contexts = deps.contexts ? deps.contexts() : discoverContexts();
       if (contexts.length === 0) {
@@ -283,6 +285,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
       let failure: Error | null = null;
       for (const context of contexts) {
         const outcome = await registerOn(context);
+        if (generation !== registrationGeneration) return status;
         if (outcome === 'registered') {
           registered += 1;
         } else if (outcome === 'duplicate' && registered > 0) {
@@ -293,6 +296,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
           failure ??= new Error('A tool with the same name is already registered.');
         }
       }
+      if (generation !== registrationGeneration) return status;
       if (registered > 0) {
         setStatus({ kind: 'ready', count: tools.length });
       } else {
@@ -301,6 +305,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
       return status;
     },
     dispose(): void {
+      registrationGeneration += 1;
       for (const controller of controllers) {
         controller.abort();
       }
