@@ -320,7 +320,7 @@ async function waitForTools(driver, expected, timeoutMs = 30_000) {
 /**
  * Runs one scenario.
  *
- * @param {{ scenario: ReturnType<typeof loadScenario>, driver: import('./e2e-chrome.mjs').Driver, browser: Awaited<ReturnType<typeof connectCdp>>, url: string, report: (line: string) => void }} run - The run.
+ * @param {{ scenario: ReturnType<typeof loadScenario>, driver: import('./e2e-chrome.mjs').Driver, browser: Awaited<ReturnType<typeof connectCdp>>, url: string, report: (line: string) => void, continueOnFailure?: boolean }} run - The run.
  * @returns {Promise<{ name: string, steps: Record<string, unknown>[], failures: string[] }>} The result.
  */
 async function runScenario(run) {
@@ -520,7 +520,7 @@ async function runScenario(run) {
     failures.push(
       ...stepFailures.map((failure) => `${scenario.name} step ${index + 1} (${label}): ${failure}`),
     );
-    if (!passed) {
+    if (!passed && !run.continueOnFailure) {
       break;
     }
   }
@@ -539,6 +539,8 @@ async function main() {
       [
         'pnpm e2e [--url <url>] [--driver mcp|cdp] [--scenario <name>]... [--port <n>]',
         '         [--chrome <path>] [--headless] [--keep-open] [--continue] [--json <file>]',
+        '',
+        '--continue keeps going after a failed step instead of stopping at the first one.',
         '',
         `Default URL: ${DEFAULT_URL} (the harness starts scripts/preview-headers.mjs over dist/ if nothing is listening).`,
         `Scenarios in ${scenarioDir}.`,
@@ -644,7 +646,14 @@ async function main() {
       if (refreshPage) {
         await refreshPage();
       }
-      const result = await runScenario({ scenario, driver, browser, url: options.url, report });
+      const result = await runScenario({
+        scenario,
+        driver,
+        browser,
+        url: options.url,
+        report,
+        continueOnFailure: options.continueOnFailure,
+      });
       results.push(result);
       if (result.failures.length > 0) {
         failed = true;
