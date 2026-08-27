@@ -24,5 +24,7 @@ describe('main', () => {
     });
     expect(container.querySelector('h1')?.textContent).toBe('Euterpe');
     expect(runtime?.registry.getStatus()).toEqual({ kind: 'unavailable' });
+    expect(window.euter).toBe(runtime);
+    runtime?.engine.dispose();
   });
 });
