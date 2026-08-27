@@ -14,6 +14,7 @@ export const setMix: ToolDefinition<typeof setMixInput> = {
   kind: 'write',
   description: descriptions.set_mix,
   input: setMixInput,
+  untrustedContent: true,
   example: { track_id: 'bass', volume_db: -9, why: 'Taking the bass back so the hum leads.' },
   badExample: { track_id: 'bass', why: 'No field to change.' },
   execute(args, context) {

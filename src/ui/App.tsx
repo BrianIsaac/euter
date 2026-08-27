@@ -326,6 +326,9 @@ export function App({ runtime }: AppProps) {
 
         <ActivityStrip
           bus={bus}
+          canUndoItem={(revision) =>
+            engine.store.history.getPast().some((item) => item.revision === revision)
+          }
           onUndoItem={(revision) => {
             const undone = engine.store.undoItem(revision, 'human');
             if (undone === null) setError('That edit is no longer in the history.');

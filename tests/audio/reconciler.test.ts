@@ -9,7 +9,11 @@ import {
   type ToneGraphFactory,
 } from '../../src/audio/reconciler.ts';
 import type { AudioContextManager } from '../../src/audio/context.ts';
-import type { AudioInstrument, InstrumentLoadResult } from '../../src/audio/instruments.ts';
+import type {
+  AudioInstrument,
+  InstrumentLoadRequest,
+  InstrumentLoadResult,
+} from '../../src/audio/instruments.ts';
 import { createSongReducer } from '../../src/song/reducer.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
 import { createSongStore } from '../../src/song/store.ts';
@@ -223,6 +227,98 @@ describe('audio graph reconciler', () => {
     expect(reconciler.getSnapshot().fallbacks).toMatchObject({
       'melody:vcsl-recorder': 'R2 is not configured; playing piano instead.',
     });
+  });
+
+  it('keeps the current instrument audible when a replacement load fails', async () => {
+    const graph = graphFactory();
+    let rejectReplacement: ((error: Error) => void) | undefined;
+    const instruments = new Map<string, AudioInstrument>();
+    const instrumentLoader = vi.fn(
+      (id: string, request: InstrumentLoadRequest): Promise<InstrumentLoadResult> => {
+        if (id === 'vcsl-recorder') {
+          request.onProgress?.(0);
+          return new Promise((_resolve, reject) => {
+            rejectReplacement = reject;
+          });
+        }
+        const instrument: AudioInstrument = { id, trigger: vi.fn(), dispose: vi.fn() };
+        instruments.set(id, instrument);
+        return Promise.resolve({ instrument, loaded: true });
+      },
+    );
+    const store = createSongStore(loadExampleSong(), createSongReducer());
+    const reconciler = createAudioReconciler(store, audio(), {
+      provideGraphFactory: async () => graph.factory,
+      instrumentLoader,
+    });
+    await reconciler.ready();
+    const originalPart = graph.parts.find(({ label }) => label === 'part:melody');
+
+    store.dispatch({
+      type: 'set_instrument',
+      args: { track_id: 'melody', instrument: 'vcsl-recorder' },
+      source: 'human',
+      why: 'Try the recorder.',
+    });
+    expect(instruments.get('grand-piano')?.dispose).not.toHaveBeenCalled();
+    expect(originalPart?.dispose).not.toHaveBeenCalled();
+    expect(reconciler.getSnapshot().loading['melody:vcsl-recorder']).toBe(0);
+
+    rejectReplacement?.(new Error('sample request failed'));
+    await expect(reconciler.ready()).resolves.toBeUndefined();
+    expect(instruments.get('grand-piano')?.dispose).not.toHaveBeenCalled();
+    expect(originalPart?.dispose).not.toHaveBeenCalled();
+    expect(reconciler.getSnapshot().fallbacks['melody:vcsl-recorder']).toContain(
+      'sample request failed',
+    );
+    reconciler.dispose();
+  });
+
+  it('clears a late instrument load when its track disappears', async () => {
+    const graph = graphFactory();
+    let finishReplacement: ((result: InstrumentLoadResult) => void) | undefined;
+    const instrumentLoader = vi.fn(
+      (id: string, request: InstrumentLoadRequest): Promise<InstrumentLoadResult> => {
+        if (id === 'vcsl-recorder') {
+          request.onProgress?.(0);
+          return new Promise((resolve) => {
+            finishReplacement = resolve;
+          });
+        }
+        return Promise.resolve({
+          instrument: { id, trigger: vi.fn(), dispose: vi.fn() },
+          loaded: true,
+        });
+      },
+    );
+    const store = createSongStore(loadExampleSong(), createSongReducer());
+    const reconciler = createAudioReconciler(store, audio(), {
+      provideGraphFactory: async () => graph.factory,
+      instrumentLoader,
+    });
+    await reconciler.ready();
+    store.dispatch({
+      type: 'set_instrument',
+      args: { track_id: 'melody', instrument: 'vcsl-recorder' },
+      source: 'human',
+      why: 'Try the recorder.',
+    });
+    const withoutMelody = {
+      ...store.getDocument(),
+      tracks: store.getDocument().tracks.filter(({ id }) => id !== 'melody'),
+    };
+    store.dispatch({
+      type: '__restore_snapshot',
+      args: { document: withoutMelody, summary: 'Removed Melody' },
+      source: 'human',
+    });
+    const late = { id: 'vcsl-recorder', trigger: vi.fn(), dispose: vi.fn() };
+    finishReplacement?.({ instrument: late, loaded: true });
+    await Promise.resolve();
+    expect(late.dispose).toHaveBeenCalledOnce();
+    expect(reconciler.getSnapshot().loading).not.toHaveProperty('melody:vcsl-recorder');
+    expect(reconciler.getSnapshot().nodes).not.toContain('channel:melody');
+    reconciler.dispose();
   });
 
   it('converts fractional beats to Tone positions', () => {

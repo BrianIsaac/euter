@@ -19,7 +19,7 @@ export interface RankedKey extends ParsedKey {
 
 /** Parses the product's `C major` / `A minor` key names. */
 export function parseKeyName(name: string): ParsedKey | null {
-  const match = /^([^\s]+)\s+(major|minor)$/iu.exec(name.trim());
+  const match = /^([A-G](?:#|b)?)\s+(major|minor)$/iu.exec(name.trim());
   if (!match) return null;
   const note = TonalNote.get(match[1] ?? '');
   if (note.empty || !note.pc) return null;

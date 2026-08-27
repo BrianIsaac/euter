@@ -66,4 +66,47 @@ describe('MP3 worker client', () => {
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
     expect(worker.terminate).toHaveBeenCalledOnce();
   });
+
+  it('rejects worker construction and postMessage failures without leaking a worker', async () => {
+    await expect(
+      encodeMp3(buffer(), {
+        workerFactory: () => {
+          throw new DOMException('Workers are blocked.', 'SecurityError');
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'SecurityError' });
+
+    const worker = new FakeWorker();
+    worker.postMessage = vi.fn(() => {
+      throw new DOMException('Transfer failed.', 'DataCloneError');
+    });
+    await expect(encodeMp3(buffer(), { workerFactory: () => worker })).rejects.toMatchObject({
+      name: 'DataCloneError',
+    });
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  });
+
+  it('turns worker error events and encoded error messages into rejected jobs', async () => {
+    const crashed = new FakeWorker();
+    crashed.postMessage = vi.fn(() => {
+      queueMicrotask(() => crashed.onerror?.(new ErrorEvent('error', { message: 'worker died' })));
+    });
+    await expect(encodeMp3(buffer(), { workerFactory: () => crashed })).rejects.toThrow(
+      'worker died',
+    );
+    expect(crashed.terminate).toHaveBeenCalledOnce();
+
+    const refused = new FakeWorker();
+    refused.postMessage = vi.fn((request: Mp3WorkerRequest) => {
+      queueMicrotask(() =>
+        refused.onmessage?.({
+          data: { type: 'error', id: request.id, error: 'encoder unavailable' },
+        } as MessageEvent<Mp3WorkerResponse>),
+      );
+    });
+    await expect(encodeMp3(buffer(), { workerFactory: () => refused })).rejects.toThrow(
+      'encoder unavailable',
+    );
+    expect(refused.terminate).toHaveBeenCalledOnce();
+  });
 });

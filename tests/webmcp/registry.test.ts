@@ -11,7 +11,7 @@ import {
   type RegistryDeps,
 } from '../../src/webmcp/registry.ts';
 import { tools } from '../../src/webmcp/tools/index.ts';
-import type { ToolDefinition } from '../../src/webmcp/types.ts';
+import type { ModelContext, ToolDefinition } from '../../src/webmcp/types.ts';
 import { createFakeContext, installContexts } from '../helpers/fakeContext.ts';
 import { createTestEngine } from '../helpers/harness.ts';
 
@@ -129,6 +129,29 @@ describe('registry', () => {
     expect(await documentContext.getTools()).toHaveLength(tools.length);
   });
 
+  it('does not continue onto another context when disposed during registration', async () => {
+    const pending = {
+      registerTool(_tool, options = {}) {
+        return new Promise<void>((_resolve, reject) => {
+          options.signal?.addEventListener(
+            'abort',
+            () => reject(options.signal?.reason ?? new DOMException('aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      },
+    } as ModelContext;
+    const second = createFakeContext();
+    const registry = createRegistry(deps({ contexts: () => [pending, second] }));
+
+    const registering = registry.register();
+    registry.dispose();
+
+    await registering;
+    expect(registry.getStatus()).toEqual({ kind: 'unavailable' });
+    expect(second.registerCalls).toBe(0);
+  });
+
   it('runs a tool through the browser path and returns the envelope as JSON', async () => {
     const context = createFakeContext();
     const bus = createTestEngine().engine.store;
@@ -213,6 +236,16 @@ describe('registry', () => {
     });
   });
 
+  it('keeps an error thrown by a tool inside the output budget', async () => {
+    const throwing = customTool(() => {
+      throw new Error(`failure: ${'x'.repeat(2000)}`);
+    });
+    const registry = createRegistry(deps({ tools: [throwing] }));
+    const envelope = await registry.invoke('echo_text', { text: 'a' });
+    expect(envelope).toMatchObject({ ok: false, code: 'RESULT_TOO_LARGE' });
+    expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(1500);
+  });
+
   it('forwards options.signal to the queue and reports CANCELLED', async () => {
     const ran = vi.fn(() => ok(0, [], 'ran', null));
     const registry = createRegistry(deps({ tools: [customTool(ran)] }));
@@ -221,6 +254,19 @@ describe('registry', () => {
     expect(await registry.invoke('echo_text', { text: 'a' }, controller.signal)).toMatchObject({
       ok: false,
       code: 'CANCELLED',
+    });
+    expect(ran).not.toHaveBeenCalled();
+  });
+
+  it('reports CANCELLED even when the caller supplies a non-DOM abort reason', async () => {
+    const ran = vi.fn(() => ok(0, [], 'ran', null));
+    const registry = createRegistry(deps({ tools: [customTool(ran)] }));
+    const controller = new AbortController();
+    controller.abort('person stopped the call');
+    expect(await registry.invoke('echo_text', { text: 'a' }, controller.signal)).toMatchObject({
+      ok: false,
+      code: 'CANCELLED',
+      recoverable: true,
     });
     expect(ran).not.toHaveBeenCalled();
   });
@@ -298,6 +344,37 @@ describe('registry', () => {
     expect(results.map((envelope) => (envelope.ok ? envelope.revision : -1))).toEqual([1, 2, 2]);
   });
 
+  it('lets only the first of two concurrent writes at the same revision land', async () => {
+    const bus = createTestEngine().engine.store;
+    const registry = createRegistry(deps({ bus }));
+    const results = await Promise.all([
+      registry.invoke('set_tempo', { bpm: 96, why: 'First.', expected_revision: 0 }),
+      registry.invoke('set_tempo', { bpm: 101, why: 'Second.', expected_revision: 0 }),
+    ]);
+
+    expect(results[0]).toMatchObject({ ok: true, revision: 1 });
+    expect(results[1]).toMatchObject({ ok: false, code: 'STALE_REVISION' });
+    expect(bus.getDocument().bpm).toBe(96);
+  });
+
+  it('rejects an agent write when a human edit lands during its gesture hold', async () => {
+    const bus = createTestEngine().engine.store;
+    const queue = createQueue();
+    const registry = createRegistry(deps({ bus, queue }));
+    queue.setGestureActive(true);
+    const pending = registry.invoke('set_tempo', {
+      bpm: 96,
+      why: 'Agent change.',
+      expected_revision: 0,
+    });
+
+    bus.dispatch({ type: 'set_tempo', args: { bpm: 110 }, source: 'human', why: 'Human change.' });
+    queue.setGestureActive(false);
+
+    await expect(pending).resolves.toMatchObject({ ok: false, code: 'STALE_REVISION' });
+    expect(bus.getDocument().bpm).toBe(110);
+  });
+
   it('describes tools with the registered description and title', () => {
     const registry = createRegistry(deps());
     const described = registry.describe();
@@ -307,9 +384,11 @@ describe('registry', () => {
     const probe = described.find((tool) => tool.name === 'play');
     expect(read?.title).toBe('Read the song');
     expect(read?.description).not.toContain('Include why.');
-    expect(write?.description).toMatch(/Include why\. Returns revision, changed and summary/u);
+    expect(write?.description).toMatch(
+      /The why field is pinned to the change as a producer note\. Returns revision, changed and summary/u,
+    );
     expect(write?.description).toMatch(/on error returns ok:false with a code\.$/u);
     expect(probe?.description).toMatch(/on error returns ok:false with a code\.$/u);
-    expect(probe?.description).not.toContain('Include why.');
+    expect(probe?.description).not.toContain('The why field is pinned');
   });
 });

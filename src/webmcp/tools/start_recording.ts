@@ -29,6 +29,7 @@ export const startRecording: ToolDefinition<typeof startRecordingInput> = {
   kind: 'write',
   description: descriptions.start_recording,
   input: startRecordingInput,
+  untrustedContent: true,
   example: { count_in_bars: 1, metronome: true },
   badExample: { count_in_bars: 3, metronome: true },
   async execute(args, context) {

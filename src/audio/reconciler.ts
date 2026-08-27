@@ -75,6 +75,7 @@ interface ReconciledTrack {
   channel: ChannelNode;
   send: GraphNode;
   instrumentKey: string;
+  loadingKey: string | null;
   instrument: AudioInstrument | null;
   part: PartNode | null;
   notesRev: number;
@@ -144,6 +145,7 @@ export function createAudioReconciler(
     const liveIds = new Set(song.tracks.map(({ id }) => id));
     for (const [trackId, state] of tracks) {
       if (!liveIds.has(trackId)) {
+        clearTrackLoadState(trackId, state);
         disposeTrack(state);
         tracks.delete(trackId);
       }
@@ -160,6 +162,7 @@ export function createAudioReconciler(
           channel,
           send,
           instrumentKey: '',
+          loadingKey: null,
           instrument: null,
           part: null,
           notesRev: -1,
@@ -170,7 +173,13 @@ export function createAudioReconciler(
       }
       state.channel.setMix(track);
       const key = `${track.id}:${track.instrument}`;
-      if (state.instrumentKey !== key) loadTrackInstrument(song, track, state, key);
+      if (state.loadingKey && state.instrumentKey === key) {
+        clearTrackLoadState(track.id, state);
+        state.loadVersion += 1;
+      }
+      if (state.instrumentKey !== key && state.loadingKey !== key) {
+        loadTrackInstrument(song, track, state, key);
+      }
       if (state.instrument && state.notesRev !== track.notes_rev) rebuildPart(song, track, state);
     }
     notify();
@@ -184,12 +193,9 @@ export function createAudioReconciler(
   ): void {
     state.loadVersion += 1;
     const version = state.loadVersion;
-    state.instrumentKey = key;
-    state.instrument?.dispose();
-    state.instrument = null;
-    state.part?.dispose();
-    state.part = null;
-    state.notesRev = -1;
+    clearTrackLoadState(track.id, state);
+    state.loadingKey = key;
+    fallbackReasons.delete(key);
     state.loadPromise = instrumentLoader(track.instrument, {
       context: audio.requireRunning(),
       destination: state.channel.raw,
@@ -200,23 +206,37 @@ export function createAudioReconciler(
           notify();
         }
       },
-    }).then((result) => {
-      if (disposed || state.loadVersion !== version) {
-        result.instrument.dispose();
-        return;
-      }
-      state.instrument = result.instrument;
-      loadingProgress.delete(key);
-      if (!result.loaded && result.reason) fallbackReasons.set(key, result.reason);
-      else fallbackReasons.delete(key);
-      const currentTrack = store.getDocument().tracks.find(({ id }) => id === track.id);
-      if (currentTrack) rebuildPart(store.getDocument(), currentTrack, state);
-      notify();
-    });
-    void state.loadPromise.catch(() => {
-      if (state.loadVersion === version) loadingProgress.delete(key);
-      notify();
-    });
+    })
+      .then((result) => {
+        if (disposed || state.loadVersion !== version) {
+          result.instrument.dispose();
+          return;
+        }
+        state.instrument?.dispose();
+        state.part?.dispose();
+        state.instrument = result.instrument;
+        state.instrumentKey = key;
+        state.loadingKey = null;
+        state.part = null;
+        state.notesRev = -1;
+        loadingProgress.delete(key);
+        if (!result.loaded && result.reason) fallbackReasons.set(key, result.reason);
+        else fallbackReasons.delete(key);
+        const currentTrack = store.getDocument().tracks.find(({ id }) => id === track.id);
+        if (currentTrack) rebuildPart(store.getDocument(), currentTrack, state);
+        notify();
+      })
+      .catch((error: unknown) => {
+        if (disposed || state.loadVersion !== version) return;
+        state.loadingKey = null;
+        loadingProgress.delete(key);
+        const detail = error instanceof Error ? error.message : String(error);
+        const continuity = state.instrument
+          ? `Continuing with ${state.instrument.id}.`
+          : 'This track is silent.';
+        fallbackReasons.set(key, `Failed to load ${track.instrument}: ${detail}. ${continuity}`);
+        notify();
+      });
     // `song` is intentionally captured by the call site so bpm/time signature and load start are
     // one document observation; the current document is used after the asynchronous load.
     void song;
@@ -240,6 +260,14 @@ export function createAudioReconciler(
 
   const loadingProgress = new Map<string, number>();
   const fallbackReasons = new Map<string, string>();
+
+  function clearTrackLoadState(trackId: string, state: ReconciledTrack): void {
+    if (state.loadingKey) loadingProgress.delete(state.loadingKey);
+    state.loadingKey = null;
+    for (const key of fallbackReasons.keys()) {
+      if (key.startsWith(`${trackId}:`)) fallbackReasons.delete(key);
+    }
+  }
   const unsubscribeStore = store.subscribe(reconcile);
   const unsubscribeAudio = audio.subscribe(reconcile);
   reconcile();

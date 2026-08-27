@@ -60,6 +60,17 @@ describe('song serialisation', () => {
     expect(loadSong({ getItem: () => JSON.stringify(duplicateChord) })).toBeNull();
   });
 
+  it('migrates a saved song from before teaching options were added', () => {
+    const older = loadExampleSong() as unknown as Record<string, unknown>;
+    delete older.option_sets;
+    delete older.take_request;
+    expect(loadSong({ getItem: () => JSON.stringify(older) })).toMatchObject({
+      title: 'First Light',
+      option_sets: [],
+      take_request: null,
+    });
+  });
+
   it('debounces store changes and flushes the latest song', () => {
     vi.useFakeTimers();
     let song = createEmptySong();
@@ -83,6 +94,31 @@ describe('song serialisation', () => {
     expect(JSON.parse(setItem.mock.calls[0]?.[1] as string)).toMatchObject({ bpm: 110 });
     persistence.dispose();
     expect(listeners.size).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it('flushes a pending edit before a page reload', () => {
+    vi.useFakeTimers();
+    let song = createEmptySong();
+    const listeners = new Set<() => void>();
+    const store = {
+      getDocument: () => song,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const setItem = vi.fn();
+    const lifecycle = new EventTarget();
+    const persistence = createSongPersistence(store, { setItem }, { lifecycle });
+    song = { ...song, bpm: 123 };
+    for (const listener of listeners) listener();
+
+    lifecycle.dispatchEvent(new Event('pagehide'));
+    expect(JSON.parse(setItem.mock.calls[0]?.[1] as string)).toMatchObject({ bpm: 123 });
+    vi.advanceTimersByTime(250);
+    expect(setItem).toHaveBeenCalledTimes(1);
+    persistence.dispose();
     vi.useRealTimers();
   });
 

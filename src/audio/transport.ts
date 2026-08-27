@@ -77,6 +77,7 @@ export function createSongTransport(
       return snapshot;
     },
     async stop() {
+      if (!toneTransport) return snapshot;
       const transport = await getTransport();
       transport.stop();
       snapshot = { ...snapshot, playing: false, position_bar: positionBar(transport.position) };

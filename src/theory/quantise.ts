@@ -8,6 +8,8 @@ export interface QuantiseOptions {
   strength: number;
   /** Delays each odd grid division by up to half a division. */
   swing?: number;
+  /** Optional exclusive song-end beat used by the document reducer. */
+  maximumBeat?: number;
 }
 
 const GRID_BEATS: Record<QuantiseGrid, number> = {
@@ -35,7 +37,7 @@ export function gridBeats(grid: QuantiseGrid): number {
  */
 export function quantiseNotes(
   notes: readonly Note[],
-  { grid, strength, swing = 0 }: QuantiseOptions,
+  { grid, strength, swing = 0, maximumBeat }: QuantiseOptions,
 ): Note[] {
   assertUnitInterval(strength, 'strength');
   if (!Number.isFinite(swing) || swing < 0 || swing > 0.5) {
@@ -51,10 +53,25 @@ export function quantiseNotes(
     const snappedStart = divisionIndex * division + swingOffset;
     const snappedDuration = Math.max(division, Math.round(rawDuration / division) * division);
 
+    const interpolatedStart =
+      strength === 0 ? rawStart : roundBeat(rawStart + (snappedStart - rawStart) * strength);
+    const interpolatedDuration =
+      strength === 0
+        ? rawDuration
+        : roundBeat(rawDuration + (snappedDuration - rawDuration) * strength);
+    const start =
+      maximumBeat === undefined
+        ? interpolatedStart
+        : Math.min(interpolatedStart, maximumBeat - 0.001);
+    const duration =
+      maximumBeat === undefined
+        ? interpolatedDuration
+        : Math.min(interpolatedDuration, maximumBeat - start);
+
     return {
       ...note,
-      s: roundBeat(rawStart + (snappedStart - rawStart) * strength),
-      d: roundBeat(rawDuration + (snappedDuration - rawDuration) * strength),
+      s: start,
+      d: Math.max(0.001, duration),
       s_raw: rawStart,
       d_raw: rawDuration,
     };
@@ -67,6 +84,12 @@ export function quantizeNotes(
   grid: QuantiseGrid,
   strength: number,
   swing = 0,
+  maximumBeat?: number,
 ): Note[] {
-  return quantiseNotes(notes, { grid, strength, swing });
+  return quantiseNotes(notes, {
+    grid,
+    strength,
+    swing,
+    ...(maximumBeat === undefined ? {} : { maximumBeat }),
+  });
 }

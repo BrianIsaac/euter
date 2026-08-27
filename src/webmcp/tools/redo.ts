@@ -12,6 +12,7 @@ export const redo: ToolDefinition<typeof redoInput> = {
   kind: 'write',
   description: descriptions.redo,
   input: redoInput,
+  untrustedContent: true,
   example: {},
   badExample: { steps: 2 },
   execute(_args, context) {

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, createPlayheadStore, trackFromActivity } from '../../src/ui/App.tsx';
 import { loadExampleSong } from '../../src/song/serialise.ts';
+import { createEmptySong } from '../../src/song/types.ts';
 import { createHarness } from '../helpers/harness.ts';
 
 function renderApp(harness = createHarness()) {
@@ -46,6 +47,14 @@ describe('App', () => {
     expect(screen.getByTestId('audio-state')).toHaveTextContent('running');
   });
 
+  it('shows the add-track path without trying to draw a roll when the song has no tracks', () => {
+    renderApp(createHarness({ engine: { document: createEmptySong('Blank') } }));
+
+    expect(screen.queryByLabelText('Piano roll')).not.toBeInTheDocument();
+    expect(screen.getByText('Add a track to start writing notes.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add track' })).toBeEnabled();
+  });
+
   it('shows an agent write in the strip, the notes rail and the roll, and undoes it', () => {
     const harness = renderApp();
     act(() => {
@@ -67,6 +76,10 @@ describe('App', () => {
     expect(
       harness.engine.store.getDocument().tracks.find(({ id }) => id === 'bass')?.notes,
     ).toEqual(loadExampleSong().tracks.find(({ id }) => id === 'bass')?.notes);
+    expect(
+      screen.queryByRole('button', { name: /Undo Generated lofi bass/u }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Undo Undid/u })).not.toBeInTheDocument();
   });
 
   it('renders the agent options as cards and applies the one the person chooses', async () => {

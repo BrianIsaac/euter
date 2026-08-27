@@ -48,6 +48,16 @@ describe('queue', () => {
     expect(ran).not.toHaveBeenCalled();
   });
 
+  it('normalises a custom abort reason to AbortError', async () => {
+    const queue = createQueue();
+    const controller = new AbortController();
+    controller.abort('person stopped the call');
+    await expect(queue.enqueue(() => 'late', { signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'person stopped the call',
+    });
+  });
+
   it('holds tasks while a gesture is active and releases when it ends', async () => {
     const queue = createQueue();
     queue.setGestureActive(true);

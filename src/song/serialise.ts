@@ -185,10 +185,21 @@ export interface PersistenceOptions {
   delayMs?: number;
   setTimer?: typeof setTimeout;
   clearTimer?: typeof clearTimeout;
+  lifecycle?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
+}
+
+function migratePersistedSong(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  return {
+    ...record,
+    option_sets: Object.hasOwn(record, 'option_sets') ? record.option_sets : [],
+    take_request: Object.hasOwn(record, 'take_request') ? record.take_request : null,
+  };
 }
 
 /**
- * Loads and validates a song. Malformed or stale values are ignored rather than crashing startup.
+ * Loads, migrates and validates a song. Malformed values are ignored rather than crashing startup.
  *
  * @param storage - Usually `window.localStorage`.
  * @param key - Storage key.
@@ -201,7 +212,7 @@ export function loadSong(
   const value = storage.getItem(key);
   if (value === null) return null;
   try {
-    return persistedSongSchema.parse(JSON.parse(value));
+    return persistedSongSchema.parse(migratePersistedSong(JSON.parse(value)));
   } catch {
     return null;
   }
@@ -233,6 +244,12 @@ export function createSongPersistence(
   const delayMs = options.delayMs ?? 250;
   const setTimer = options.setTimer ?? setTimeout;
   const clearTimer = options.clearTimer ?? clearTimeout;
+  const lifecycle =
+    options.lifecycle === undefined
+      ? typeof window === 'undefined'
+        ? null
+        : window
+      : options.lifecycle;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const flush = (): void => {
@@ -246,11 +263,14 @@ export function createSongPersistence(
     if (timer !== undefined) clearTimer(timer);
     timer = setTimer(flush, delayMs);
   });
+  const onPageHide = (): void => flush();
+  lifecycle?.addEventListener('pagehide', onPageHide);
 
   return {
     flush,
     dispose() {
       unsubscribe();
+      lifecycle?.removeEventListener('pagehide', onPageHide);
       if (timer !== undefined) flush();
     },
   };

@@ -14,6 +14,7 @@ export const addTrack: ToolDefinition<typeof addTrackInput> = {
   kind: 'write',
   description: descriptions.add_track,
   input: addTrackInput,
+  untrustedContent: true,
   example: {
     kind: 'drums',
     instrument: 'studio-kit',

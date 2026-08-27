@@ -73,8 +73,8 @@ describe('OptionCards', () => {
     expect(onChoose).toHaveBeenCalledWith(set, set.options[0]);
   });
 
-  it('marks the chosen option and refuses to choose it twice', () => {
-    render(
+  it('removes a chosen set instead of leaving stale actions on screen', () => {
+    const { container } = render(
       <OptionCards
         song={songWith([{ ...set, chosen_option_id: 'option-1' }])}
         previewOptionId={null}
@@ -82,7 +82,31 @@ describe('OptionCards', () => {
         onChoose={() => undefined}
       />,
     );
-    const cards = screen.getAllByTestId('option-card');
-    expect(within(cards[0] as HTMLElement).getByRole('button', { name: 'Chosen' })).toBeDisabled();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows only the newest open proposal for the same kind and bars', () => {
+    const replacement: TeachingOptionSet = {
+      ...set,
+      id: 'options-2',
+      options: set.options.map((option, index) => ({
+        ...option,
+        id: `replacement-${index}`,
+        label: `New ${option.label}`,
+      })),
+    };
+    render(
+      <OptionCards
+        song={songWith([set, replacement])}
+        previewOptionId={null}
+        onAudition={() => undefined}
+        onChoose={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByTestId('option-set')).toHaveLength(1);
+    expect(screen.getAllByTestId('option-card')).toHaveLength(2);
+    expect(screen.getByText('New Stay home')).toBeInTheDocument();
+    expect(screen.queryByText('Stay home', { exact: true })).not.toBeInTheDocument();
   });
 });

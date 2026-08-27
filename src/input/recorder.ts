@@ -328,7 +328,17 @@ export class RecorderController {
     }
   }
 
+  dispose(): void {
+    if (this.#active) {
+      this.#active.graph.port.onmessage = null;
+      this.#cleanup(this.#active);
+    }
+    this.#snapshot = INITIAL_SNAPSHOT;
+    this.#listeners.clear();
+  }
+
   #cleanup(active: ActiveCapture): void {
+    if (this.#active !== active) return;
     active.graph.disconnect();
     stopStream(active.stream);
     this.#active = null;

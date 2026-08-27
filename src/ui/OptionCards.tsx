@@ -29,7 +29,14 @@ function describe(option: TeachingOption): string | null {
  * @returns The cards, or nothing when the agent has proposed nothing.
  */
 export function OptionCards({ song, previewOptionId, onAudition, onChoose }: OptionCardsProps) {
-  const sets = [...song.option_sets].reverse();
+  const signatures = new Set<string>();
+  const sets: TeachingOptionSet[] = [];
+  for (const set of [...song.option_sets].reverse()) {
+    const signature = `${set.kind}:${set.bar_from}:${set.bar_to}`;
+    if (signatures.has(signature)) continue;
+    signatures.add(signature);
+    if (set.chosen_option_id === null) sets.push(set);
+  }
   if (sets.length === 0) return null;
 
   return (
@@ -47,14 +54,11 @@ export function OptionCards({ song, previewOptionId, onAudition, onChoose }: Opt
           </header>
           <div className="option-cards">
             {set.options.map((option) => {
-              const chosen = set.chosen_option_id === option.id;
               const detail = describe(option);
               return (
                 <div
                   key={option.id}
-                  className={`option-card${chosen ? ' chosen' : ''}${
-                    previewOptionId === option.id ? ' auditioning' : ''
-                  }`}
+                  className={`option-card${previewOptionId === option.id ? ' auditioning' : ''}`}
                   data-testid="option-card"
                 >
                   <strong>{option.label}</strong>
@@ -68,8 +72,8 @@ export function OptionCards({ song, previewOptionId, onAudition, onChoose }: Opt
                     >
                       Play
                     </button>
-                    <button type="button" disabled={chosen} onClick={() => onChoose(set, option)}>
-                      {chosen ? 'Chosen' : 'Choose'}
+                    <button type="button" onClick={() => onChoose(set, option)}>
+                      Choose
                     </button>
                   </div>
                 </div>

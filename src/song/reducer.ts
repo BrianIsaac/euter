@@ -7,6 +7,7 @@ import { generateBass } from '../theory/generate/bass.ts';
 import { generateChords } from '../theory/generate/chords.ts';
 import { generateDrums } from '../theory/generate/drums.ts';
 import { detectKey, keyFit, parseKeyName } from '../theory/key.ts';
+import { quantizeNotes } from '../theory/quantise.ts';
 import { parseSongCommand, type SongCommand } from './commands.ts';
 import { cloneSong, type Note, type SongDocument, type Track, type TrackKind } from './types.ts';
 
@@ -122,9 +123,6 @@ function setNotes(
   validateBarRange(document, command.args.bar_from, barTo);
   const start = (command.args.bar_from - 1) * beatsPerBar;
   const end = start + barCount * beatsPerBar;
-  if (command.args.notes.some(({ s, d }) => s + d > barCount * beatsPerBar)) {
-    throw new ToolError('OUT_OF_RANGE', 'A note extends past the replaced bar range.', true);
-  }
   const notes: Note[] = command.args.notes.map(({ p, s, d, v }) => ({
     p,
     s: start + s,
@@ -194,10 +192,15 @@ function setKey(
     .flatMap(({ notes }) => notes);
   const name = `${parsed.tonic} ${parsed.mode}`;
   const detected = detectKey(melody);
-  const alternatives = [
-    ...(detected.name === name ? [] : [{ name: detected.name, confidence: detected.confidence }]),
-    ...detected.alternatives.filter((alternative) => alternative.name !== name),
-  ].slice(0, 3);
+  const alternatives =
+    melody.length === 0
+      ? []
+      : [
+          ...(detected.name === name
+            ? []
+            : [{ name: detected.name, confidence: detected.confidence }]),
+          ...detected.alternatives.filter((alternative) => alternative.name !== name),
+        ].slice(0, 3);
   return finish(
     document,
     command,
@@ -683,39 +686,6 @@ function validateBarRange(document: SongDocument, barFrom: number, barTo: number
   if (barTo > document.bars) {
     throw new ToolError('OUT_OF_RANGE', `The song has ${document.bars} bars.`, true);
   }
-}
-
-function quantizeNotes(
-  notes: readonly Note[],
-  grid: '8n' | '16n',
-  strength: number,
-  swing: number,
-  maximumBeat: number,
-): Note[] {
-  const unit = grid === '8n' ? 0.5 : 0.25;
-  return notes.map((note) => {
-    const rawStart = note.s_raw ?? note.s;
-    const rawDuration = note.d_raw ?? note.d;
-    const step = Math.round(rawStart / unit);
-    const swingOffset = step % 2 === 1 ? unit * swing : 0;
-    const targetStart = step * unit + swingOffset;
-    const targetDuration = Math.max(unit, Math.round(rawDuration / unit) * unit);
-    const start = Math.min(
-      round(rawStart + (targetStart - rawStart) * strength),
-      maximumBeat - 0.001,
-    );
-    const duration = Math.min(
-      round(rawDuration + (targetDuration - rawDuration) * strength),
-      maximumBeat - start,
-    );
-    return {
-      ...note,
-      s_raw: rawStart,
-      d_raw: rawDuration,
-      s: start,
-      d: Math.max(0.001, duration),
-    };
-  });
 }
 
 function trackTouchedBy(

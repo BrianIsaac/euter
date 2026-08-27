@@ -41,6 +41,7 @@ interface DragState {
   originX: number;
   originY: number;
   original: Note;
+  expectedRevision: number;
   mode: 'move' | 'resize';
 }
 
@@ -313,12 +314,14 @@ export function PianoRoll({
     notes: Note[],
     summary: string,
     [barFrom, barTo]: readonly [number, number],
+    expectedRevision?: number,
   ): void => {
     onDispatch(
       humanNotesCommand(track.id, notes, summary, {
         barFrom,
         barTo,
         beatsPerBar: geometry.beatsPerBar,
+        ...(expectedRevision === undefined ? {} : { expectedRevision }),
       }),
     );
   };
@@ -354,6 +357,7 @@ export function PianoRoll({
       originX: x,
       originY: y,
       original: { ...hit.note },
+      expectedRevision: song.revision,
       mode: x >= hit.rectangle.x + hit.rectangle.width - 8 ? 'resize' : 'move',
     };
   };
@@ -387,6 +391,7 @@ export function PianoRoll({
       notes,
       `${drag.mode === 'move' ? 'Moved' : 'Resized'} ${pitchName(edited.p, song.key.name)}`,
       [Math.min(originalBars[0], editedBars[0]), Math.max(originalBars[1], editedBars[1])],
+      drag.expectedRevision,
     );
     dragRef.current = null;
     gesture.setGestureActive(false);

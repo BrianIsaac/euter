@@ -14,6 +14,7 @@ export const requestTake: ToolDefinition<typeof requestTakeInput> = {
   kind: 'write',
   description: descriptions.request_take,
   input: requestTakeInput,
+  untrustedContent: true,
   example: {
     track_id: 'bass',
     bar_from: 1,

@@ -88,6 +88,40 @@ describe('PianoRoll', () => {
     expect(command.args.notes[0]).toEqual({ p: 61, s: 2, d: 1, v: 0.8 });
   });
 
+  it('guards a drag with the revision where the gesture began', () => {
+    const onDispatch = vi.fn();
+    const initial = song();
+    const view = render(
+      <PianoRoll
+        song={initial}
+        trackId="melody"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={onDispatch}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByRole('img'), {
+      clientX: 110,
+      clientY: 356,
+      pointerId: 1,
+    });
+    view.rerender(
+      <PianoRoll
+        song={{ ...initial, revision: 1 }}
+        trackId="melody"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={onDispatch}
+      />,
+    );
+    fireEvent.pointerUp(screen.getByRole('img'), {
+      clientX: 158,
+      clientY: 344,
+      pointerId: 1,
+    });
+
+    expect(onDispatch).toHaveBeenCalledOnce();
+    expect(onDispatch.mock.calls[0]?.[0]).toMatchObject({ expected_revision: 0 });
+  });
+
   it('clicks empty space to add and Delete removes the selected note', () => {
     const onDispatch = vi.fn();
     const view = render(
@@ -128,6 +162,49 @@ describe('PianoRoll', () => {
     const scroll = screen.getByTestId('roll-scroll');
     expect(scroll).toHaveClass('target-flash');
     expect(scroll.scrollLeft).toBe(384);
+  });
+
+  it('recentres vertically when switching between empty, low and high tracks', () => {
+    const baseNote = melody.notes[0];
+    if (!baseNote) throw new Error('The roll fixture needs one note.');
+    const low: Track = { ...melody, id: 'low', notes: [{ ...baseNote, p: 24 }] };
+    const high: Track = { ...melody, id: 'high', notes: [{ ...baseNote, p: 96 }] };
+    const empty: Track = { ...melody, id: 'empty', notes: [] };
+    const switched = { ...song(), tracks: [low, high, empty] };
+    const view = render(
+      <PianoRoll
+        song={switched}
+        trackId="low"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={vi.fn()}
+      />,
+    );
+    const scroll = screen.getByTestId('roll-scroll');
+    const lowTop = scroll.scrollTop;
+
+    view.rerender(
+      <PianoRoll
+        song={switched}
+        trackId="high"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={vi.fn()}
+      />,
+    );
+    expect(scroll.scrollTop).toBeLessThan(lowTop);
+
+    view.rerender(
+      <PianoRoll
+        song={switched}
+        trackId="empty"
+        gesture={{ setGestureActive: vi.fn() }}
+        onDispatch={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'aria-label',
+      'Lead melody notes across 8 bars',
+    );
+    expect(scroll.scrollTop).toBeGreaterThan(0);
   });
 
   it('shows a missing-track error instead of drawing stale notes', () => {

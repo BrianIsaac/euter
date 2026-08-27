@@ -45,7 +45,7 @@ export function selectSongState(song: SongDocument, context: SongStateContext = 
     key: song.key,
     bars: song.bars,
     sections: song.sections,
-    tracks: song.tracks.map(selectTrackSummary),
+    tracks: song.tracks.map((track) => selectTrackSummary(track, song.time_sig[0])),
     takes: song.takes.map((take) => ({ id: take.id, source: take.source })),
     options: song.option_sets.map((set) => ({ id: set.id, kind: set.kind })),
     take_request: song.take_request,

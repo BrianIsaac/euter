@@ -88,6 +88,35 @@ describe('RecorderController', () => {
     if (!result.ok) expect(result.message).toContain('Import or Keyboard');
   });
 
+  it('returns MIC_DENIED when mediaDevices is absent', async () => {
+    const test = harness();
+    const descriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    try {
+      const recorder = new RecorderController(test.transport);
+      await expect(recorder.start({ countInBars: 1, metronome: true })).resolves.toMatchObject({
+        ok: false,
+        code: 'MIC_DENIED',
+      });
+    } finally {
+      if (descriptor) Object.defineProperty(navigator, 'mediaDevices', descriptor);
+      else Reflect.deleteProperty(navigator, 'mediaDevices');
+    }
+  });
+
+  it('stops the microphone stream when the worklet module cannot load', async () => {
+    const test = harness();
+    test.addModule.mockRejectedValueOnce(new DOMException('missing', 'AbortError'));
+    const recorder = new RecorderController(test.transport, test.dependencies);
+
+    await expect(recorder.start({ countInBars: 1, metronome: true })).resolves.toMatchObject({
+      ok: false,
+      code: 'CAPTURE_FAILED',
+    });
+    expect(test.dependencies.connectWorklet).not.toHaveBeenCalled();
+    expect(test.stopTrack).toHaveBeenCalledOnce();
+  });
+
   it('runs count-in, publishes the live line, transcribes target bars and saves a WAV', async () => {
     const test = harness();
     const recorder = new RecorderController(test.transport, test.dependencies);
@@ -135,6 +164,19 @@ describe('RecorderController', () => {
     });
     await recorder.stop();
     await expect(recorder.stop()).resolves.toMatchObject({ ok: false, code: 'NOT_RECORDING' });
+  });
+
+  it('disconnects the worklet and microphone stream when disposed mid-take', async () => {
+    const test = harness();
+    const recorder = new RecorderController(test.transport, test.dependencies);
+    await recorder.start({ countInBars: 1, metronome: false });
+
+    recorder.dispose();
+
+    expect(test.disconnect).toHaveBeenCalledOnce();
+    expect(test.stopTrack).toHaveBeenCalledOnce();
+    expect(test.port.onmessage).toBeNull();
+    expect(recorder.getSnapshot().status).toBe('idle');
   });
 });
 

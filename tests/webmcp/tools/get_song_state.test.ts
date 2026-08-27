@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SONG_STATE_BUDGET } from '../../../src/song/selectors.ts';
+import { loadExampleSong } from '../../../src/song/serialise.ts';
 import { getSongState } from '../../../src/webmcp/tools/get_song_state.ts';
 import { createHarness, makeTake } from '../../helpers/harness.ts';
 
@@ -42,5 +43,37 @@ describe('get_song_state', () => {
   it('is a read that echoes names the person typed, so it is marked untrusted', () => {
     expect(getSongState.kind).toBe('read');
     expect(getSongState.untrustedContent).toBe(true);
+  });
+
+  it('stays successful and bounded for a 64-bar song with 24 tracks', async () => {
+    const song = loadExampleSong();
+    const template = song.tracks[0];
+    if (!template) throw new Error('example track missing');
+    const templateNote = template.notes[0];
+    if (!templateNote) throw new Error('example note missing');
+    song.bars = 64;
+    song.sections = Array.from({ length: 16 }, (_, index) => ({
+      name: `Person section ${index + 1}`,
+      bar_from: index * 4 + 1,
+      bar_to: index * 4 + 4,
+    }));
+    song.tracks = Array.from({ length: 24 }, (_, index) => ({
+      ...template,
+      id: `track-${index + 1}`,
+      name: `Person track ${index + 1}`,
+      notes: [{ ...templateNote, s: index * 4 }],
+    }));
+    const harness = createHarness({ engine: { document: song } });
+    const envelope = (await harness.invoke('get_song_state')) as {
+      ok: boolean;
+      revision: number;
+      data: { bars: number; truncated?: boolean };
+    };
+    expect(envelope.ok).toBe(true);
+    expect(envelope.revision).toBe(0);
+    expect(envelope.data.bars).toBe(64);
+    expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(1500);
+    expect(harness.engine.store.getDocument().revision).toBe(0);
+    harness.engine.dispose();
   });
 });

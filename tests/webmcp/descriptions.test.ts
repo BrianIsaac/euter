@@ -21,12 +21,11 @@ describe('descriptions', () => {
     }
   });
 
-  it('tells the agent what to call first and what comes next', () => {
-    expect(descriptions.get_song_state).toContain('Call this first');
-    expect(descriptions.stop_recording).toContain('Next: set_key');
-    expect(descriptions.get_take).toContain('commit_take');
-    expect(descriptions.set_chords).toContain('Set chords before generate_part');
-    expect(descriptions.render).toContain('poll get_job');
+  it('states cross-tool data relationships without directing the agent', () => {
+    expect(descriptions.get_song_state).toContain('get_track_notes');
+    expect(descriptions.get_take).toContain('get_song_state');
+    expect(descriptions.set_chords).toContain('generate_part');
+    expect(descriptions.render).toContain('get_job reports');
   });
 
   it('carries one description for every registered tool and nothing else', () => {

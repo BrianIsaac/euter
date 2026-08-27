@@ -43,6 +43,33 @@ describe('importAudioFile', () => {
       importAudioFile(new File(['bad'], 'bad.txt'), context, { id: 'bad', bpm: 90 }),
     ).resolves.toMatchObject({ ok: false, code: 'DECODE_FAILED', recoverable: true });
   });
+
+  it('rejects a decoded container that has no audio track or frames', async () => {
+    const noTrack = {
+      length: 1024,
+      numberOfChannels: 0,
+      sampleRate: 48_000,
+      getChannelData: vi.fn(),
+    } as unknown as AudioBuffer;
+    const noFrames = audioBuffer([new Float32Array()], 48_000);
+    const context = {
+      decodeAudioData: vi.fn().mockResolvedValueOnce(noTrack).mockResolvedValueOnce(noFrames),
+    };
+    const file = new File(['container'], 'empty.m4a', { type: 'audio/mp4' });
+
+    await expect(importAudioFile(file, context, { id: 'empty-1', bpm: 90 })).resolves.toMatchObject(
+      {
+        ok: false,
+        code: 'DECODE_FAILED',
+      },
+    );
+    await expect(importAudioFile(file, context, { id: 'empty-2', bpm: 90 })).resolves.toMatchObject(
+      {
+        ok: false,
+        code: 'DECODE_FAILED',
+      },
+    );
+  });
 });
 
 describe('bindAudioImport', () => {

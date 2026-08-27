@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   INSTRUMENT_CATALOGUE,
   instrumentPitchName,
   instrumentsByFamily,
   loadInstrument,
+  nativeDestination,
   type InstrumentBackend,
   type InstrumentFactories,
 } from '../../src/audio/instruments.ts';
@@ -22,6 +23,8 @@ function factories() {
 const context = { destination: {} } as BaseAudioContext;
 
 describe('instrument catalogue', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('gives every entry a loader, licence row and honest byte size', () => {
     expect(INSTRUMENT_CATALOGUE.length).toBeGreaterThanOrEqual(10);
     for (const entry of INSTRUMENT_CATALOGUE) {
@@ -126,5 +129,21 @@ describe('instrument catalogue', () => {
       loadInstrument('missing', { context, destination: {}, factories: factories().value }),
     ).rejects.toThrow('Unknown instrument');
     expect(instrumentPitchName(61)).toBe('C#4');
+  });
+
+  it('hands smplr only a native AudioNode, never a connectable Tone wrapper', () => {
+    class FakeAudioNode {
+      readonly native = true;
+    }
+    vi.stubGlobal('AudioNode', FakeAudioNode);
+    const fallback = new FakeAudioNode() as unknown as AudioNode;
+    const native = new FakeAudioNode() as unknown as AudioNode;
+    const audioContext = { destination: fallback } as BaseAudioContext;
+    const wrapper = {
+      input: { connect: vi.fn(), disconnect: vi.fn() },
+    };
+
+    expect(nativeDestination({ input: native }, audioContext)).toBe(native);
+    expect(nativeDestination(wrapper, audioContext)).toBe(fallback);
   });
 });

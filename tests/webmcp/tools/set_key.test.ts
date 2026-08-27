@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createEmptySong } from '../../../src/song/types.ts';
 import { createHarness } from '../../helpers/harness.ts';
 
 interface KeyEnvelope {
@@ -69,6 +70,25 @@ describe('set_key', () => {
     const song = harness.engine.store.getDocument();
     expect(song.key.name).toBe('C major');
     expect(song.revision).toBe(0);
+    harness.engine.dispose();
+  });
+
+  it('sets a requested key without inventing alternatives when there is no melody evidence', async () => {
+    const harness = createHarness({ engine: { document: createEmptySong('Blank') } });
+    const envelope = (await harness.invoke('set_key', {
+      key: 'A minor',
+      why: 'Start this empty sketch in A minor.',
+    })) as KeyEnvelope;
+
+    expect(envelope).toMatchObject({
+      ok: true,
+      data: { key: 'A minor', confidence: 0, alternatives: [] },
+    });
+    expect(harness.engine.store.getDocument().key).toEqual({
+      name: 'A minor',
+      confidence: 0,
+      alternatives: [],
+    });
     harness.engine.dispose();
   });
 });

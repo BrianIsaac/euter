@@ -9,58 +9,58 @@ import type { ToolKind } from './types.ts';
 export const WRITE_SUFFIX =
   'Returns revision, changed and summary; on error returns ok:false with a code.';
 
-export const WHY_SENTENCE = 'Include why.';
+export const WHY_SENTENCE = 'The why field is pinned to the change as a producer note.';
 
 export const descriptions = {
   get_song_state:
-    'Read the song: revision, bpm, time signature, key with confidence, bar count, sections, tracks with id, kind, instrument, mix and which bars have notes, takes waiting to be committed, instrument and style names, transport (playing, position_bar), audio (running or locked, microphone granted) and running jobs. Call this first and after any error. Under 1,200 characters; notes come from get_track_notes.',
+    'Reads revision, tempo, time signature, key confidence, bar count, sections, bounded track summaries, pending takes, instrument and style names, transport, audio and running jobs. The payload stays under 1,200 characters; note detail is available from get_track_notes.',
   get_track_notes:
-    'Read one track’s notes for up to 8 bars as {p: MIDI pitch, s: start in beats from the bar start, d: duration in beats, v: velocity 0-1}. Track ids and bar counts come from get_song_state.',
+    'Reads one track’s notes for up to 8 bars as {p: MIDI pitch, s: start in beats from the bar start, d: duration in beats, v: velocity 0-1}. Dense ranges page at up to 24 notes through note_offset and report next_note_offset. Track ids and bar counts are reported by get_song_state.',
   get_chords:
-    'Read the chord per bar as symbol and Roman numeral in the current key. Bars without a chord are omitted.',
+    'Reads each chord as a symbol and Roman numeral in the current key. Bars without a chord are omitted.',
   get_take:
-    'Read a recorded, imported or played take: transcribed notes, duration_s, voiced_ratio, median_clarity (below 0.6 means a noisy take; ask for another), pitch_range, tempo_hint and refining_job_id if refinement is running. Take ids come from get_song_state or stop_recording. Next: commit_take or set_key.',
+    'Reads a recorded, imported or played take: bounded transcribed notes, duration, voiced ratio, median clarity, pitch range, tempo hint and any refinement job id. A clarity below 0.6 denotes a noisy take. Take ids are reported by get_song_state and stop_recording.',
   suggest_chords:
-    'Propose a diatonic chord per bar from the melody’s notes and the current key, in a style, with a fit score per bar. Changes nothing; pass the result to set_chords, edited as you like. Tell the person the choice in plain words: name what is on screen, then the term.',
+    'Proposes one diatonic chord per bar from the melody, current key and named style, with a fit score for each bar. The song remains unchanged; the returned chords have the same shape accepted by set_chords.',
   get_job:
-    'Read a job: state (running, done, failed, cancelled), progress_pct, and when done download_url, duration_s and peak_dbfs, or an error.',
+    'Reads a job state, progress percentage, and on completion its download URL, duration and peak dBFS, or its failure message.',
   start_recording:
-    'Arm the recorder on the melody track with a count-in and click, using the input the person selected in the app (microphone, keyboard or MIDI). The person must have clicked once in the app and granted the microphone; otherwise returns AUDIO_LOCKED or MIC_DENIED. Edits to the recorded track are refused with RECORDING_IN_PROGRESS until stop_recording.',
+    'Arms the selected microphone, keyboard or MIDI input on a track with a count-in and optional continuing click. A prior person gesture and microphone permission are required for microphone capture. The recorded track is locked against edits until stop_recording.',
   stop_recording:
-    'Stop the recorder and transcribe the take to notes. Returns the take (as get_take) and placed_on_track; the notes are already on the piano roll with the raw pitch curve under them. Next: set_key, then suggest_chords or set_chords.',
+    'Stops the recorder and transcribes the take to notes. The result contains the bounded take data and placed_on_track; the piano roll already contains its notes and raw pitch curve.',
   commit_take:
-    'Commit a take to a track as its notes, quantised to grid with strength 0-1 (0 keeps the sung timing, 1 snaps fully). Replaces that track’s notes in the bars the take covers; the sung timing is kept so set_quantize can change it later.',
+    'Commits a take to a track, quantised to a grid with strength 0-1. Zero keeps the performed timing and one snaps fully. Notes in the covered bars are replaced while raw timing remains available to set_quantize.',
   set_notes:
-    'Write notes to a track from bar_from, replacing the notes in the bars covered. p is MIDI pitch 24-96, s start in beats from the bar start, d duration in beats, v velocity 0-1. At most 8 bars per call. Rejects pitches out of range and notes past the bar.',
+    'Writes notes to a track from bar_from and replaces the covered bars. p is MIDI pitch 24-96, s is a beat offset from bar_from, d is duration in beats and v is velocity 0-1. Each invocation covers at most 8 bars and rejects notes outside the range.',
   set_chords:
-    'Set the chord for one or more bars by symbol (C, Am7, F/A, G). Symbols the app cannot parse are rejected with INVALID_ARGUMENT. Returns each bar with its Roman numeral in the current key. Set chords before generate_part.',
+    'Sets chord symbols such as C, Am7, F/A or G on one or more bars. Unrecognised symbols return INVALID_ARGUMENT. The result includes each chord’s Roman numeral; generate_part derives parts from the stored chords.',
   propose_options:
-    'Register two or three alternatives for the person to compare, each with a label and one sentence on why. Changes nothing until one is chosen: the app shows them as cards with Play and Choose; the agent may play one with audition_option. Use this before set_chords or generate_part when more than one good answer exists.',
+    'Registers two or three labelled alternatives over a bar range. The app shows Play and Choose cards and audition_option previews one without committing it. The song changes only when a card is chosen.',
   audition_option:
-    'Play one registered option over its bars without committing it. Not an edit. Returns AUDIO_LOCKED if the person has not clicked in the app.',
+    'Plays one registered option over its bars without committing an edit. AUDIO_LOCKED is returned until a person gesture has activated audio.',
   request_take:
-    'Ask the person to hum or play a portion themselves: the app shows the prompt ("Hum me a bassline for the chorus") on those bars, arms the recorder on that track and range with a count-in, and returns at once. The take arrives later in get_song_state under takes; check for it before writing that part yourself. Ask before inventing a part the person might want to sing.',
+    'Shows a prompt over a bar range and arms that track for a person-performed take with a count-in. The request returns immediately; a completed take later appears in get_song_state.',
   set_key:
-    'Set the song key, e.g. "C major" or "A minor". Returns the key with the melody’s fit score and the ranked alternatives the app detected. Call after a take is placed; the app’s own estimate is in get_song_state.',
-  set_tempo: 'Set the tempo in BPM. Notes keep their beat positions.',
+    'Sets a tonal song key such as "C major" or "A minor". The result contains the melody fit score and ranked detected alternatives; get_song_state contains the current estimate.',
+  set_tempo: 'Sets the tempo in BPM. Notes keep their beat positions.',
   set_quantize:
-    'Re-quantise a track’s notes from their recorded timing to a grid with strength and optional swing. Reversible: strength 0 restores the sung timing.',
+    'Re-quantises a track from its recorded timing to a grid with strength and optional swing. Strength zero restores the performed timing.',
   add_track:
-    'Add a track of kind melody, chords, bass or drums with an instrument (names in get_song_state) and optional name. Returns the track with its id.',
+    'Adds a melody, chords, bass or drums track with a listed instrument and optional display name. The result contains the new track and id; instrument names are reported by get_song_state.',
   set_instrument:
-    'Change a track’s instrument by name (names in get_song_state). Samples load lazily; loaded:false means the sound starts within a few seconds.',
-  set_mix: 'Set a track’s volume_db, pan, mute or solo. Only the fields given change.',
+    'Changes a track’s instrument to a name reported by get_song_state. Samples load lazily; loaded:false means the sound is still loading.',
+  set_mix: 'Sets a track’s volume_db, pan, mute or solo. Only the supplied fields change.',
   generate_part:
-    'Write a part for a track in a role from the song’s chords and key over a bar range, in a style (pop, soul, lofi). Deterministic and rule-based: bass follows roots and fifths in the style’s pattern, chords are voiced with smooth voice leading, drums use the style’s kit pattern. Replaces the track’s notes in those bars. Set chords first.',
+    'Writes a deterministic bass, chords or drums part from the stored chords, key and pop, soul or lofi style over a bar range. Bass follows roots and fifths, chords have smooth voice leading and drums follow the style pattern. Notes in those bars are replaced.',
   arrange:
-    'Set the song’s sections in order (intro, verse, chorus, bridge) as bar ranges; repeat copies a section’s notes and chords into the next bars. Extends the bar count; uncovered bars stay empty for generate_part. Returns sections and total bars.',
-  play: 'Start playback from a bar, optionally looping a range. Not an edit: revision does not change. Returns AUDIO_LOCKED if the person has not clicked in the app yet; ask them to press play once.',
-  stop: 'Stop playback. Not an edit.',
-  undo: 'Undo the last edit, whether the person or the agent made it. Returns the new revision and what was undone.',
-  redo: 'Redo the last undone edit.',
+    'Sets ordered section ranges such as intro, verse, chorus and bridge. A repeat copies a section’s notes and chords into appended bars. The song extends to the final covered bar and uncovered bars remain empty.',
+  play: 'Starts playback from a bar with an optional loop range. Playback is not an edit and leaves revision unchanged. AUDIO_LOCKED is returned until a person gesture has activated audio.',
+  stop: 'Stops playback without changing revision.',
+  undo: 'Undoes the last person or agent edit and returns the new revision and edit count.',
+  redo: 'Redoes the last undone edit and returns the new revision and edit count.',
   render:
-    'Start rendering the song or a bar range to a file. Returns a job_id at once; poll get_job for progress and the download link, which the person clicks.',
-  cancel_job: 'Cancel a running job.',
+    'Starts rendering the song or a bar range to WAV, MP3 or MIDI. The result immediately contains a job id; get_job reports progress and the person-facing download link.',
+  cancel_job: 'Cancels a running render job.',
 } as const;
 
 export type ToolName = keyof typeof descriptions;

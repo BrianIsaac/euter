@@ -81,6 +81,24 @@ describe('set_notes', () => {
     harness.engine.dispose();
   });
 
+  it('accepts a note ending exactly at the eight-bar replacement boundary', async () => {
+    const harness = createHarness();
+    await expect(
+      harness.invoke('set_notes', {
+        track_id: 'melody',
+        bar_from: 1,
+        notes: [{ p: 60, s: 0, d: 32 }],
+        replace: true,
+        why: 'One held note across the complete eight-bar song.',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { target_bars: [1, 8] },
+    });
+    expect(harness.engine.store.getDocument().tracks[0]?.notes[0]).toMatchObject({ s: 0, d: 32 });
+    harness.engine.dispose();
+  });
+
   it('refuses a track that is not on the song', async () => {
     const harness = createHarness();
     await expect(

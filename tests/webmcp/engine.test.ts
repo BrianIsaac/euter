@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RenderOptions } from '../../src/audio/render.ts';
+import { createEmptySong } from '../../src/song/types.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
 import { createTestEngine, fakeAudio, fakeAudioBuffer, makeTake } from '../helpers/harness.ts';
 
@@ -30,6 +32,38 @@ describe('engine', () => {
     await engine.activate();
     expect(engine.audio.getSnapshot().state).toBe('running');
     engine.dispose();
+  });
+
+  it('releases live audio, capture and render resources when disposed', async () => {
+    const audio = fakeAudio('uninitialised');
+    const close = vi.spyOn(audio, 'close');
+    const render = vi.fn(
+      (_song: unknown, _range: unknown, options?: RenderOptions): Promise<AudioBuffer> =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        }),
+    );
+    const { engine, recorder, transport } = createTestEngine({
+      audio,
+      exporters: { render },
+    });
+    const disposeRecorder = vi.spyOn(recorder, 'dispose');
+    const stopTransport = vi.spyOn(transport, 'stop');
+    await engine.activate();
+    await recorder.start({ countInBars: 1, metronome: true });
+    const job = engine.startExport('wav', 1, 8);
+    await settle();
+    expect(engine.jobs.get(job.id)?.state).toBe('running');
+
+    engine.dispose();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(stopTransport).toHaveBeenCalledTimes(1);
+    expect(disposeRecorder).toHaveBeenCalledTimes(1);
+    expect(recorder.getSnapshot().status).toBe('idle');
+    expect(engine.jobs.get(job.id)?.state).toBe('cancelled');
   });
 
   it('lands a take, remembers it as pending and clears it on demand', () => {
@@ -154,10 +188,15 @@ describe('engine', () => {
 
   it('exports MIDI without rendering audio', async () => {
     const render = vi.fn(() => Promise.resolve(fakeAudioBuffer()));
-    const { engine } = createTestEngine({ exporters: { render } });
-    const job = engine.startExport('midi', 1, 8);
+    const midi = vi.fn(() => new Uint8Array([77, 84, 104, 100]));
+    const { engine } = createTestEngine({ exporters: { render, midi } });
+    const job = engine.startExport('midi', 5, 8);
     await settle();
     expect(render).not.toHaveBeenCalled();
+    expect(midi).toHaveBeenCalledWith(engine.store.getDocument(), {
+      start_bar: 5,
+      end_bar: 8,
+    });
     expect(engine.exportResult(job.id)?.filename).toBe('first-light.mid');
     engine.dispose();
   });
@@ -182,6 +221,26 @@ describe('engine', () => {
     engine.dispose();
   });
 
+  it('completes two simultaneous renders of an empty song as silent files', async () => {
+    const silence = fakeAudioBuffer();
+    silence.getChannelData(0).fill(0);
+    silence.getChannelData(1).fill(0);
+    const { engine } = createTestEngine({
+      document: createEmptySong('Silence'),
+      exporters: { render: () => Promise.resolve(silence) },
+    });
+
+    const first = engine.startExport('wav', 1, 8);
+    const second = engine.startExport('wav', 1, 8);
+    await settle();
+
+    expect(engine.jobs.get(first.id)?.state).toBe('completed');
+    expect(engine.jobs.get(second.id)?.state).toBe('completed');
+    expect(engine.exportResult(first.id)?.peak_dbfs).toBeNull();
+    expect(engine.exportResult(second.id)?.peak_dbfs).toBeNull();
+    engine.dispose();
+  });
+
   it('reports the state the agent reads in get_song_state', async () => {
     const { engine } = createTestEngine();
     await engine.activate();
@@ -195,7 +254,7 @@ describe('engine', () => {
     engine.dispose();
   });
 
-  it('loads the example song and clears history', () => {
+  it('loads the example song as an undoable replacement of unsaved work', () => {
     const { engine } = createTestEngine();
     engine.store.dispatch({
       type: 'set_tempo',
@@ -206,7 +265,9 @@ describe('engine', () => {
     expect(engine.store.history.getPast()).toHaveLength(1);
     engine.loadExample();
     expect(engine.store.getDocument().bpm).toBe(92);
-    expect(engine.store.history.getPast()).toHaveLength(0);
+    expect(engine.store.history.getPast()).toHaveLength(2);
+    expect(engine.store.undo('human')).toMatchObject({ edits: 1 });
+    expect(engine.store.getDocument().bpm).toBe(140);
     engine.dispose();
   });
 });
