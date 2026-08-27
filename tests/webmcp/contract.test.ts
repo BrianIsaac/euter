@@ -87,6 +87,17 @@ async function seeded(name: string): Promise<Harness> {
 describe('tool contract', () => {
   const described = createHarness().runtime.registry.describe();
 
+  it('keeps registered metadata free of agent-directed instructions', () => {
+    const agentDirected = /\b(?:ask|call|check|include|pass|poll|tell|use|you|your)\b/iu;
+    for (const tool of described) {
+      expect(tool.description, tool.name).not.toMatch(agentDirected);
+      const schema = tool.inputSchema as JsonSchemaObject;
+      for (const { path, description } of collectParameterDescriptions(schema)) {
+        expect(description, `${tool.name}.${path}`).not.toMatch(agentDirected);
+      }
+    }
+  });
+
   it('registers the twenty-eight tools, six of them reads, with unique names', () => {
     expect(productTools).toHaveLength(28);
     expect(tools).toBe(productTools);

@@ -20,16 +20,14 @@ export const whyField = z
   .string()
   .min(1)
   .max(200)
-  .describe(
-    'One sentence for the person on why you made this change; it is pinned to the change as a producer note',
-  );
+  .describe('One sentence explaining the change; it is pinned for the person as a producer note');
 
 export const expectedRevisionField = z
   .number()
   .int()
   .nonnegative()
   .optional()
-  .describe('The revision you last read; refused with STALE_REVISION if the song has moved on');
+  .describe('Previously read revision; STALE_REVISION is returned when the song has moved on');
 
 const trackIdField = z.string().min(1).max(64).describe('Track id from get_song_state');
 const takeIdField = z
@@ -61,7 +59,7 @@ export const getSongStateInput = z.strictObject({});
 export const getTrackNotesInput = z.strictObject({
   track_id: trackIdField,
   bar_from: barField.describe('First bar, one-based and inclusive'),
-  bar_to: barField.describe('Last bar; at most 8 bars per call'),
+  bar_to: barField.describe('Last bar; at most 8 bars per invocation'),
 });
 
 export const getChordsInput = z.strictObject({
@@ -116,7 +114,7 @@ export const proposeOptionsInput = z.strictObject({
   options: z
     .array(
       z.strictObject({
-        label: z.string().min(1).max(80).describe('Two or three words the person will read'),
+        label: z.string().min(1).max(80).describe('Two or three words shown to the person'),
         why: z.string().min(1).max(200).describe('One sentence on why this one is worth hearing'),
         chords: z.array(chordField).min(1).optional().describe('Chords this option would set'),
         style: styleField.optional(),
@@ -140,7 +138,7 @@ export const requestTakeInput = z.strictObject({
   track_id: trackIdField,
   bar_from: barField.describe('First bar to record'),
   bar_to: barField.describe('Last bar to record'),
-  prompt: z.string().min(1).max(200).describe('What to ask for, in the person’s words'),
+  prompt: z.string().min(1).max(200).describe('Prompt shown to the person over the requested bars'),
   ...write,
 });
 
@@ -197,7 +195,11 @@ export const arrangeInput = z.strictObject({
   sections: z
     .array(
       z.strictObject({
-        name: z.string().min(1).max(80).describe('intro, verse, chorus, bridge or your own'),
+        name: z
+          .string()
+          .min(1)
+          .max(80)
+          .describe('Section label such as intro, verse, chorus or bridge'),
         bar_from: barField.describe('First bar of the section'),
         bar_to: barField.describe('Last bar of the section'),
         repeat: z

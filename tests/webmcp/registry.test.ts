@@ -307,9 +307,11 @@ describe('registry', () => {
     const probe = described.find((tool) => tool.name === 'play');
     expect(read?.title).toBe('Read the song');
     expect(read?.description).not.toContain('Include why.');
-    expect(write?.description).toMatch(/Include why\. Returns revision, changed and summary/u);
+    expect(write?.description).toMatch(
+      /The why field is pinned to the change as a producer note\. Returns revision, changed and summary/u,
+    );
     expect(write?.description).toMatch(/on error returns ok:false with a code\.$/u);
     expect(probe?.description).toMatch(/on error returns ok:false with a code\.$/u);
-    expect(probe?.description).not.toContain('Include why.');
+    expect(probe?.description).not.toContain('The why field is pinned');
   });
 });
