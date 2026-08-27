@@ -60,6 +60,17 @@ describe('song serialisation', () => {
     expect(loadSong({ getItem: () => JSON.stringify(duplicateChord) })).toBeNull();
   });
 
+  it('migrates a saved song from before teaching options were added', () => {
+    const older = loadExampleSong() as unknown as Record<string, unknown>;
+    delete older.option_sets;
+    delete older.take_request;
+    expect(loadSong({ getItem: () => JSON.stringify(older) })).toMatchObject({
+      title: 'First Light',
+      option_sets: [],
+      take_request: null,
+    });
+  });
+
   it('debounces store changes and flushes the latest song', () => {
     vi.useFakeTimers();
     let song = createEmptySong();

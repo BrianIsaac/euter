@@ -188,8 +188,18 @@ export interface PersistenceOptions {
   lifecycle?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
 }
 
+function migratePersistedSong(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  return {
+    ...record,
+    option_sets: Object.hasOwn(record, 'option_sets') ? record.option_sets : [],
+    take_request: Object.hasOwn(record, 'take_request') ? record.take_request : null,
+  };
+}
+
 /**
- * Loads and validates a song. Malformed or stale values are ignored rather than crashing startup.
+ * Loads, migrates and validates a song. Malformed values are ignored rather than crashing startup.
  *
  * @param storage - Usually `window.localStorage`.
  * @param key - Storage key.
@@ -202,7 +212,7 @@ export function loadSong(
   const value = storage.getItem(key);
   if (value === null) return null;
   try {
-    return persistedSongSchema.parse(JSON.parse(value));
+    return persistedSongSchema.parse(migratePersistedSong(JSON.parse(value)));
   } catch {
     return null;
   }
