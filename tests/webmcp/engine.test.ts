@@ -195,7 +195,7 @@ describe('engine', () => {
     engine.dispose();
   });
 
-  it('loads the example song and clears history', () => {
+  it('loads the example song as an undoable replacement of unsaved work', () => {
     const { engine } = createTestEngine();
     engine.store.dispatch({
       type: 'set_tempo',
@@ -206,7 +206,9 @@ describe('engine', () => {
     expect(engine.store.history.getPast()).toHaveLength(1);
     engine.loadExample();
     expect(engine.store.getDocument().bpm).toBe(92);
-    expect(engine.store.history.getPast()).toHaveLength(0);
+    expect(engine.store.history.getPast()).toHaveLength(2);
+    expect(engine.store.undo('human')).toMatchObject({ edits: 1 });
+    expect(engine.store.getDocument().bpm).toBe(140);
     engine.dispose();
   });
 });

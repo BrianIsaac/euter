@@ -444,13 +444,14 @@ export function createEngine(options: EngineOptions = {}): Engine {
       return result.data;
     },
     loadExample() {
+      const before = store.getDocument();
       const example = loadExampleSong();
-      store.dispatch({
+      const result = store.dispatch({
         type: '__restore_snapshot',
         args: { document: example, summary: 'Loaded the example song' },
         source: 'human',
       });
-      store.history.clear();
+      store.history.record(before, store.getDocument(), result.summary);
       pendingTakeId = null;
       notify();
     },
