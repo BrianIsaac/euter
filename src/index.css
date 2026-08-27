@@ -412,12 +412,30 @@ th {
   background: rgba(255, 123, 123, 0.08);
 }
 
-.stage,
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
 .rail {
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+  overflow: hidden;
+}
+
+.rail > .take-panel,
+.rail > .exports {
+  flex: 0 0 auto;
+}
+
+.rail > .notes {
+  flex: 1 1 auto;
+  min-height: 90px;
   overflow: auto;
 }
 
@@ -510,6 +528,14 @@ th {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.stage > .piano-roll-panel {
+  flex: 0 0 auto;
+}
+
+.stage .roll-scroll {
+  max-height: 336px;
 }
 
 .grid-bar {

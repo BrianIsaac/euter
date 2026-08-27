@@ -90,6 +90,7 @@ interface DrawOptions {
   playheadBeat: number | null;
   targetBars: readonly [number, number] | null;
   scrollLeft: number;
+  scrollTop: number;
   viewportWidth: number;
 }
 
@@ -102,6 +103,7 @@ function drawPianoRoll({
   playheadBeat,
   targetBars,
   scrollLeft,
+  scrollTop,
   viewportWidth,
 }: DrawOptions): void {
   const context = canvas.getContext('2d');
@@ -115,10 +117,10 @@ function drawPianoRoll({
     const width =
       (section.bar_to - section.bar_from + 1) * geometry.beatsPerBar * geometry.pixelsPerBeat;
     context.fillStyle = section.name.toLowerCase().includes('chorus') ? '#302642' : '#242b35';
-    context.fillRect(x, 0, width, 22);
+    context.fillRect(x, scrollTop, width, 22);
     context.fillStyle = '#e7e9ee';
     context.font = '11px system-ui';
-    context.fillText(section.name, x + 6, 15);
+    context.fillText(section.name, x + 6, scrollTop + 15);
   }
 
   if (targetBars !== null) {
@@ -130,20 +132,20 @@ function drawPianoRoll({
   }
 
   context.fillStyle = '#1c1f26';
-  context.fillRect(0, 0, geometry.labelWidth, geometry.height);
-  context.fillRect(geometry.labelWidth, 22, geometry.width - geometry.labelWidth, 44);
+  context.fillRect(scrollLeft, 0, geometry.labelWidth, geometry.height);
+  context.fillRect(geometry.labelWidth, scrollTop + 22, geometry.width - geometry.labelWidth, 44);
   context.font = '10px system-ui';
   const keyRoot = (song.key.name.split(' ')[0] ?? '').replace('b', '♭').replace('#', '♯');
   for (let bar = 0; bar < geometry.bars; bar += 1) {
     const barBeat = bar * geometry.beatsPerBar;
     const x = beatToX(barBeat, geometry);
-    drawLine(context, x, 22, x, geometry.height, '#505667');
+    drawLine(context, x, 0, x, geometry.height, '#505667');
     context.fillStyle = '#9aa3b2';
-    context.fillText(String(bar + 1), x + 5, 37);
+    context.fillText(String(bar + 1), x + 5, scrollTop + 37);
     const chord = song.chords.find((entry) => entry.bar === bar + 1);
     if (chord !== undefined) {
       context.fillStyle = '#e8c26a';
-      context.fillText(chord.symbol, x + 5, 57);
+      context.fillText(chord.symbol, x + 5, scrollTop + 57);
     }
     for (let beat = 1; beat < geometry.beatsPerBar; beat += 1) {
       const beatX = beatToX(barBeat + beat, geometry);
@@ -167,7 +169,7 @@ function drawPianoRoll({
     const label = pitchName(pitch, song.key.name);
     if (pitchClass === 0 || label.replace(/-?\d+$/, '') === keyRoot) {
       context.fillStyle = pitchClass === 0 ? '#9aa3b2' : '#7dd3c0';
-      context.fillText(label, 7, y + 10);
+      context.fillText(label, scrollLeft + 7, y + 10);
     }
   }
 
@@ -235,6 +237,7 @@ export function PianoRoll({
   const dragRef = useRef<DragState | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
   const [flashing, setFlashing] = useState(false);
   const targetFrom = targetBars?.[0] ?? null;
   const targetTo = targetBars?.[1] ?? null;
@@ -251,9 +254,27 @@ export function PianoRoll({
       playheadBeat,
       targetBars,
       scrollLeft,
+      scrollTop,
       viewportWidth: scrollRef.current?.clientWidth ?? geometry.width,
     });
-  }, [geometry, playheadBeat, scrollLeft, song, take, targetBars, track]);
+  }, [geometry, playheadBeat, scrollLeft, scrollTop, song, take, targetBars, track]);
+
+  const noteCentre =
+    track === undefined || track.notes.length === 0
+      ? Math.round((geometry.pitchMin + geometry.pitchMax) / 2)
+      : Math.round(
+          (Math.min(...track.notes.map((note) => note.p)) +
+            Math.max(...track.notes.map((note) => note.p))) /
+            2,
+        );
+
+  useEffect(() => {
+    const surface = scrollRef.current;
+    if (surface === null) return;
+    const top = Math.max(0, pitchToY(noteCentre, geometry) - surface.clientHeight / 2);
+    surface.scrollTop = top;
+    setScrollTop(top);
+  }, [geometry, noteCentre]);
 
   useEffect(() => {
     if (targetFrom === null || targetTo === null) return;
@@ -397,6 +418,7 @@ export function PianoRoll({
 
   const onScroll = (event: UIEvent<HTMLDivElement>): void => {
     setScrollLeft(event.currentTarget.scrollLeft);
+    setScrollTop(event.currentTarget.scrollTop);
   };
 
   const selected = selectedIndex === null ? undefined : track.notes[selectedIndex];
