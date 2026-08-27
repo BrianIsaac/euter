@@ -12,11 +12,14 @@ export interface CountInOptions {
   bars: 1 | 2;
   metronome: boolean;
   targetBar?: number;
+  mutedTrackId?: string;
 }
 
 export interface CountInResult {
   /** Actual capture-clock time occupied by the count-in. */
   durationSeconds: number;
+  /** Stops backing/click playback and restores the normal song graph after the take. */
+  finish?: (() => void) | undefined;
 }
 
 export interface TransportPort {

@@ -25,6 +25,10 @@ export interface CountInOptions {
   bars: 1 | 2;
   bpm: number;
   beatsPerBar?: number;
+  /** One-based arranged bar where the first count-in click lands. */
+  startBar?: number;
+  /** False when SongTransport starts the shared Tone transport after the clicks are scheduled. */
+  startTransport?: boolean;
   continueClick?: boolean;
   onBeat?: ((beat: MetronomeBeat) => void) | undefined;
   onComplete?: (() => void) | undefined;
@@ -67,21 +71,31 @@ export function createMetronome(
       dependencies ??= await provideDependencies();
       clear();
       const beatsPerBar = options.beatsPerBar ?? 4;
+      const startBar = options.startBar ?? 1;
+      if (!Number.isInteger(startBar) || startBar < 1) {
+        throw new RangeError('Count-in start bar must be a positive integer.');
+      }
+      const startBarIndex = startBar - 1;
       dependencies.transport.bpm.value = options.bpm;
-      dependencies.transport.position = '0:0:0';
+      if (options.startTransport !== false) {
+        dependencies.transport.position = `${startBarIndex}:0:0`;
+      }
       for (let bar = 0; bar < options.bars; bar += 1) {
         for (let beat = 0; beat < beatsPerBar; beat += 1) {
           const accented = beat === 0;
-          const id = dependencies.transport.schedule((time) => {
-            dependencies?.click.play(time, accented);
-            options.onBeat?.({ bar: bar + 1, beat: beat + 1, accented, time });
-          }, `${bar}:${beat}:0`);
+          const id = dependencies.transport.schedule(
+            (time) => {
+              dependencies?.click.play(time, accented);
+              options.onBeat?.({ bar: bar + 1, beat: beat + 1, accented, time });
+            },
+            `${startBarIndex + bar}:${beat}:0`,
+          );
           scheduled.push(id);
         }
       }
       const completion = dependencies.transport.schedule(
         () => options.onComplete?.(),
-        `${options.bars}:0:0`,
+        `${startBarIndex + options.bars}:0:0`,
       );
       scheduled.push(completion);
       if (options.continueClick) {
@@ -93,11 +107,11 @@ export function createMetronome(
             beat += 1;
           },
           '4n',
-          `${options.bars}:0:0`,
+          `${startBarIndex + options.bars}:0:0`,
         );
         scheduled.push(repeat);
       }
-      dependencies.transport.start();
+      if (options.startTransport !== false) dependencies.transport.start();
       return {
         duration_s: (options.bars * beatsPerBar * 60) / options.bpm,
         cancel: clear,

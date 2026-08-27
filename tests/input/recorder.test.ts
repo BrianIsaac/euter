@@ -22,7 +22,7 @@ function harness(contextState: AudioContextState = 'running') {
     outputLatency: 0.01,
     audioWorklet: { addModule },
   };
-  const countIn = vi.fn(async () => ({ durationSeconds: 0.5 }));
+  const countIn = vi.fn<TransportPort['countIn']>(async () => ({ durationSeconds: 0.5 }));
   const transport: TransportPort = {
     getAudioContext: () => context,
     getBpm: () => 120,
@@ -145,13 +145,35 @@ describe('RecorderController', () => {
     expect(stopped.data.wav.type).toBe('audio/wav');
     const header = new TextDecoder().decode((await stopped.data.wav.arrayBuffer()).slice(0, 4));
     expect(header).toBe('RIFF');
-    expect(test.countIn).toHaveBeenCalledWith({ bars: 1, metronome: true, targetBar: 3 });
+    expect(test.countIn).toHaveBeenCalledWith({
+      bars: 1,
+      metronome: true,
+      targetBar: 3,
+      mutedTrackId: 'bass',
+    });
     expect(test.addModule).toHaveBeenCalledTimes(1);
     expect(test.disconnect).toHaveBeenCalledOnce();
     expect(test.stopTrack).toHaveBeenCalledOnce();
     expect(snapshots).toEqual(
       expect.arrayContaining(['requesting-mic', 'counting-in', 'recording', 'transcribing']),
     );
+  });
+
+  it('finishes the arranged backing when the take is cleaned up', async () => {
+    const test = harness();
+    const finish = vi.fn();
+    test.countIn.mockResolvedValueOnce({ durationSeconds: 0.5, finish });
+    const recorder = new RecorderController(test.transport, test.dependencies);
+    await recorder.start({
+      trackId: 'bass',
+      targetBars: { barFrom: 5, barTo: 8 },
+      countInBars: 1,
+      metronome: true,
+    });
+
+    await recorder.stop();
+
+    expect(finish).toHaveBeenCalledOnce();
   });
 
   it('refuses overlapping and absent recording operations', async () => {

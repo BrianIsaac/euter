@@ -1,4 +1,14 @@
-import type { Note, SongDocument } from '../song/types.ts';
+import type { Note, SongDocument, Track } from '../song/types.ts';
+import { loadInstrument, type InstrumentLoadResult } from './instruments.ts';
+import {
+  DEFAULT_REVERB_SEND,
+  MASTER_COMPRESSOR,
+  MASTER_LIMITER_CEILING_DB,
+  MASTER_REVERB,
+  type ChannelNode,
+  type GraphNode,
+  type ToneGraphFactory,
+} from './reconciler.ts';
 
 export interface RenderRange {
   start_bar: number;
@@ -13,25 +23,69 @@ export interface OfflineNoteEvent {
   velocity: number;
 }
 
+export interface OfflineTrack {
+  track: Track;
+  notes: readonly OfflineNoteEvent[];
+}
+
 export interface OfflineRenderRequest {
   duration_seconds: number;
   sample_rate: number;
   channels: number;
-  notes: readonly OfflineNoteEvent[];
+  samples_base_url?: string | undefined;
+  tracks: readonly OfflineTrack[];
+}
+
+export interface OfflineRenderResult {
+  buffer: AudioBuffer;
+  fallbacks: readonly string[];
+}
+
+export interface OfflineRenderEngineOptions {
+  signal?: AbortSignal | undefined;
+  onProgress?: ((progressPercent: number) => void) | undefined;
 }
 
 export interface OfflineRenderEngine {
-  render(request: OfflineRenderRequest): Promise<AudioBuffer>;
+  render(
+    request: OfflineRenderRequest,
+    options?: OfflineRenderEngineOptions,
+  ): Promise<OfflineRenderResult>;
+}
+
+export type OfflineGraphFactory = Pick<
+  ToneGraphFactory,
+  'destination' | 'compressor' | 'limiter' | 'reverb' | 'channel' | 'send'
+>;
+
+export interface OfflineToneBoundary {
+  render(
+    request: Pick<OfflineRenderRequest, 'duration_seconds' | 'sample_rate' | 'channels'>,
+    build: (context: BaseAudioContext, graph: OfflineGraphFactory) => Promise<void>,
+  ): Promise<AudioBuffer>;
+}
+
+export interface CatalogueOfflineEngineDependencies {
+  boundary?: OfflineToneBoundary | undefined;
+  instrumentLoader?: typeof loadInstrument | undefined;
 }
 
 export interface RenderOptions {
   signal?: AbortSignal | undefined;
   sample_rate?: number | undefined;
+  samples_base_url?: string | undefined;
   onProgress?: ((progressPercent: number) => void) | undefined;
   engine?: OfflineRenderEngine | undefined;
 }
 
-/** Renders an inclusive bar range plus its release tail with Tone.Offline. */
+const renderFallbacks = new WeakMap<AudioBuffer, readonly string[]>();
+
+/** Returns the audible-fallback notices produced while this buffer was rendered. */
+export function getRenderFallbacks(buffer: AudioBuffer): readonly string[] {
+  return renderFallbacks.get(buffer) ?? [];
+}
+
+/** Renders an inclusive bar range plus its release tail with the live instrument catalogue. */
 export async function renderSong(
   song: SongDocument,
   range: RenderRange,
@@ -45,24 +99,101 @@ export async function renderSong(
   const startBeat = (range.start_bar - 1) * beatsPerBar;
   const endBeat = range.end_bar * beatsPerBar;
   const secondsPerBeat = 60 / song.bpm;
-  const notes = song.tracks.flatMap((track) =>
-    track.notes
+  const tracks = song.tracks.map((track) => ({
+    track,
+    notes: track.notes
       .filter((note) => note.s < endBeat && note.s + note.d > startBeat)
       .map((note) => renderEvent(note, startBeat, endBeat, secondsPerBeat)),
-  );
+  }));
   const tail = range.tail_seconds ?? 2;
   const request: OfflineRenderRequest = {
     duration_seconds: (endBeat - startBeat) * secondsPerBeat + tail,
     sample_rate: options.sample_rate ?? 44_100,
     channels: 2,
-    notes,
+    ...(options.samples_base_url === undefined
+      ? {}
+      : { samples_base_url: options.samples_base_url }),
+    tracks,
   };
-  progress(10);
-  const buffer = await (options.engine ?? DEFAULT_OFFLINE_ENGINE).render(request);
+  progress(5);
+  const rendering = (options.engine ?? DEFAULT_OFFLINE_ENGINE).render(request, {
+    signal: options.signal,
+    onProgress: (value) => progress(5 + Math.min(100, Math.max(0, value)) * 0.9),
+  });
+  const result = await abortable(rendering, options.signal);
   throwIfAborted(options.signal);
-  limitPeak(buffer);
+  limitPeak(result.buffer);
+  renderFallbacks.set(result.buffer, [...result.fallbacks]);
   progress(100);
-  return buffer;
+  return result.buffer;
+}
+
+/** Builds the same Channel/send/master topology and loaders as the live reconciler. */
+export function createCatalogueOfflineEngine(
+  dependencies: CatalogueOfflineEngineDependencies = {},
+): OfflineRenderEngine {
+  const boundary = dependencies.boundary ?? DEFAULT_TONE_BOUNDARY;
+  const instrumentLoader = dependencies.instrumentLoader ?? loadInstrument;
+  return {
+    async render(request, options = {}) {
+      const progress = options.onProgress ?? (() => undefined);
+      const fallbacks: string[] = [];
+      const trackProgress = new Map<string, number>();
+      const reportLoadProgress = (trackId: string, value: number): void => {
+        trackProgress.set(trackId, Math.min(1, Math.max(0, value)));
+        const total = request.tracks.reduce(
+          (sum, { track }) => sum + (trackProgress.get(track.id) ?? 0),
+          0,
+        );
+        progress(request.tracks.length === 0 ? 70 : (total / request.tracks.length) * 70);
+      };
+
+      const buffer = await abortable(
+        boundary.render(request, async (context, graph) => {
+          throwIfAborted(options.signal);
+          const destination = graph.destination();
+          const compressor = graph.compressor();
+          const limiter = graph.limiter(MASTER_LIMITER_CEILING_DB);
+          const reverb = graph.reverb();
+          compressor.connect(limiter);
+          limiter.connect(destination);
+          reverb.connect(compressor);
+
+          await Promise.all(
+            request.tracks.map(async ({ track, notes }) => {
+              throwIfAborted(options.signal);
+              const channel = graph.channel(track);
+              const send = graph.send(DEFAULT_REVERB_SEND[track.kind], track.id);
+              channel.connect(compressor);
+              channel.connect(send);
+              send.connect(reverb);
+              const result = await instrumentLoader(track.instrument, {
+                context,
+                destination: channel.raw,
+                samplesBaseUrl: request.samples_base_url,
+                onProgress: (value) => reportLoadProgress(track.id, value),
+              });
+              throwIfAborted(options.signal);
+              if (!result.loaded && result.reason)
+                fallbacks.push(`${track.name}: ${result.reason}`);
+              scheduleTrack(result, notes);
+              reportLoadProgress(track.id, 1);
+            }),
+          );
+          progress(85);
+        }),
+        options.signal,
+      );
+      progress(100);
+      return { buffer, fallbacks };
+    },
+  };
+}
+
+function scheduleTrack(result: InstrumentLoadResult, notes: readonly OfflineNoteEvent[]): void {
+  for (const note of notes) {
+    result.instrument.trigger(note.pitch, note.time_seconds, note.duration_seconds, note.velocity);
+  }
 }
 
 /** Applies a transparent whole-buffer ceiling before any audio encoder sees the render. */
@@ -112,23 +243,66 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw signal.reason ?? new DOMException('Render cancelled.', 'AbortError');
 }
 
-const DEFAULT_OFFLINE_ENGINE: OfflineRenderEngine = {
-  async render(request) {
+function abortable<Result>(
+  promise: Promise<Result>,
+  signal: AbortSignal | undefined,
+): Promise<Result> {
+  if (!signal) return promise;
+  throwIfAborted(signal);
+  return new Promise<Result>((resolve, reject) => {
+    const abort = (): void =>
+      reject(signal.reason ?? new DOMException('Render cancelled.', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      },
+    );
+  });
+}
+
+const DEFAULT_TONE_BOUNDARY: OfflineToneBoundary = {
+  async render(request, build) {
     const tone = await import('tone');
     const result = await tone.Offline(
-      async () => {
-        const synth = new tone.PolySynth(tone.Synth, {
-          oscillator: { type: 'triangle' },
-          envelope: { attack: 0.005, decay: 0.08, sustain: 0.45, release: 0.8 },
-        }).toDestination();
-        for (const note of request.notes) {
-          synth.triggerAttackRelease(
-            tone.Frequency(note.pitch, 'midi').toNote(),
-            note.duration_seconds,
-            note.time_seconds,
-            note.velocity,
-          );
-        }
+      async (context) => {
+        const wrap = (label: string, raw: unknown): GraphNode => ({
+          label,
+          raw,
+          connect(destination) {
+            (raw as { connect(target: unknown): unknown }).connect(destination.raw);
+          },
+          dispose() {
+            (raw as { dispose?: () => void }).dispose?.();
+          },
+        });
+        const graph: OfflineGraphFactory = {
+          destination: () => wrap('destination', tone.getDestination()),
+          compressor: () => wrap('master:compressor', new tone.Compressor(MASTER_COMPRESSOR)),
+          limiter: (ceilingDb) => wrap('master:limiter', new tone.Limiter(ceilingDb)),
+          reverb: () => wrap('master:reverb', new tone.Reverb(MASTER_REVERB)),
+          channel: (track): ChannelNode => {
+            const raw = new tone.Channel({
+              volume: track.volume_db,
+              pan: track.pan,
+              mute: track.mute,
+              solo: track.solo,
+            });
+            return {
+              ...wrap(`channel:${track.id}`, raw),
+              setMix() {
+                // Offline mix is immutable for the duration of one render.
+              },
+            };
+          },
+          send: (gain, trackId) => wrap(`send:${trackId}`, new tone.Gain(gain)),
+        };
+        await build(context.rawContext as BaseAudioContext, graph);
       },
       request.duration_seconds,
       request.channels,
@@ -139,3 +313,5 @@ const DEFAULT_OFFLINE_ENGINE: OfflineRenderEngine = {
     return buffer;
   },
 };
+
+const DEFAULT_OFFLINE_ENGINE = createCatalogueOfflineEngine();

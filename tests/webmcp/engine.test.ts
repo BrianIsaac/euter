@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { RenderOptions } from '../../src/audio/render.ts';
+import {
+  renderSong,
+  type OfflineRenderEngine,
+  type RenderOptions,
+} from '../../src/audio/render.ts';
 import { createEmptySong } from '../../src/song/types.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
 import { createTestEngine, fakeAudio, fakeAudioBuffer, makeTake } from '../helpers/harness.ts';
@@ -109,6 +113,31 @@ describe('engine', () => {
     engine.dispose();
   });
 
+  it('plays arranged backing from bar four while muting the requested track for bars five-eight', async () => {
+    const { engine, transport } = createTestEngine();
+    const result = await engine.transportPort.countIn({
+      bars: 1,
+      metronome: true,
+      targetBar: 5,
+      mutedTrackId: 'bass',
+    });
+
+    expect(transport.calls.play.at(-1)).toEqual({ from_bar: 4 });
+    expect(engine.playback.getPreview()?.tracks.find(({ id }) => id === 'bass')).toMatchObject({
+      mute: true,
+      solo: false,
+    });
+    expect(engine.playback.getPreview()?.tracks.find(({ id }) => id === 'melody')?.mute).toBe(
+      false,
+    );
+
+    result.finish?.();
+    await settle();
+    expect(transport.calls.stop).toBe(1);
+    expect(engine.playback.getPreview()).toBeNull();
+    engine.dispose();
+  });
+
   it('auditions an option through the preview document and reverts on stop', async () => {
     const { engine, transport } = createTestEngine();
     await engine.activate();
@@ -158,6 +187,28 @@ describe('engine', () => {
     expect(result).toMatchObject({ filename: 'first-light.wav', bytes: 4 });
     expect(result?.download_url).toMatch(/^blob:euter\//u);
     expect(result?.peak_dbfs).toBeCloseTo(-12.04, 1);
+    engine.dispose();
+  });
+
+  it('carries an offline sample fallback into the completed job result', async () => {
+    const offline: OfflineRenderEngine = {
+      render: () =>
+        Promise.resolve({
+          buffer: fakeAudioBuffer(),
+          fallbacks: ['Harmony: remote samples failed; playing Grand piano instead.'],
+        }),
+    };
+    const { engine } = createTestEngine({
+      exporters: {
+        render: (song, range, options) => renderSong(song, range, { ...options, engine: offline }),
+      },
+    });
+    const job = engine.startExport('wav', 1, 8);
+    await settle();
+
+    expect(engine.exportResult(job.id)?.fallbacks).toEqual([
+      'Harmony: remote samples failed; playing Grand piano instead.',
+    ]);
     engine.dispose();
   });
 

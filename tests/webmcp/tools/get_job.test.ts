@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { renderSong, type OfflineRenderEngine } from '../../../src/audio/render.ts';
 import { createHarness } from '../../helpers/harness.ts';
 
 interface JobEnvelope {
@@ -14,6 +15,7 @@ interface JobEnvelope {
     filename?: string;
     duration_s?: number;
     peak_dbfs?: number | null;
+    fallbacks?: readonly string[];
     error?: string;
   };
 }
@@ -82,6 +84,36 @@ describe('get_job', () => {
     expect(envelope.data.duration_s).toBe(1);
     expect(envelope.data.peak_dbfs).toBeCloseTo(-12.04, 1);
     expect(envelope.summary).toContain('wav is ready: first-light.wav');
+    harness.engine.dispose();
+  });
+
+  it('tells the agent when the encoded render used an audible fallback', async () => {
+    const offline: OfflineRenderEngine = {
+      render: (_request) =>
+        Promise.resolve({
+          buffer: {
+            duration: 1,
+            length: 4,
+            numberOfChannels: 1,
+            sampleRate: 44_100,
+            getChannelData: () => new Float32Array([0.1, -0.1, 0.1, -0.1]),
+          } as unknown as AudioBuffer,
+          fallbacks: ['Harmony: playing Grand piano instead.'],
+        }),
+    };
+    const harness = createHarness({
+      engine: {
+        exporters: {
+          render: (song, range, options) =>
+            renderSong(song, range, { ...options, engine: offline }),
+        },
+      },
+    });
+    harness.engine.startExport('wav', 1, 8);
+    await settle();
+
+    const envelope = (await harness.invoke('get_job', { job_id: 'job-1' })) as JobEnvelope;
+    expect(envelope.data.fallbacks).toEqual(['Harmony: playing Grand piano instead.']);
     harness.engine.dispose();
   });
 });

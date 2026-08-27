@@ -80,6 +80,7 @@ interface ActiveCapture {
   pcm: Promise<WorkletTakeMessage>;
   options: StartRecordingOptions;
   countInSeconds: number;
+  finishBacking: (() => void) | null;
 }
 
 const INITIAL_SNAPSHOT: RecorderSnapshot = {
@@ -252,6 +253,7 @@ export class RecorderController {
         pcm,
         options,
         countInSeconds: 0,
+        finishBacking: null,
       };
       this.#active = capture;
       this.#publish({ ...this.#snapshot, status: 'counting-in' });
@@ -259,12 +261,14 @@ export class RecorderController {
         bars: options.countInBars,
         metronome: options.metronome,
         ...(options.targetBars === undefined ? {} : { targetBar: options.targetBars.barFrom }),
+        ...(options.trackId === undefined ? {} : { mutedTrackId: options.trackId }),
       };
       const countIn = await this.transport.countIn(countInOptions);
       if (this.#active !== capture) {
         return failure('CAPTURE_FAILED', 'The take ended during the count-in.');
       }
       capture.countInSeconds = countIn.durationSeconds;
+      capture.finishBacking = countIn.finish ?? null;
       this.#publish({ ...this.#snapshot, status: 'recording' });
       return { ok: true, data: this.#snapshot };
     } catch {
@@ -341,6 +345,7 @@ export class RecorderController {
     if (this.#active !== active) return;
     active.graph.disconnect();
     stopStream(active.stream);
+    active.finishBacking?.();
     this.#active = null;
   }
 }

@@ -58,6 +58,7 @@ export const getJob: ToolDefinition<typeof getJobInput> = {
               filename: result.filename,
               duration_s: result.duration_s,
               peak_dbfs: result.peak_dbfs,
+              ...(result.fallbacks === undefined ? {} : { fallbacks: result.fallbacks }),
             }),
         ...(job.error === undefined ? {} : { error: job.error }),
       },

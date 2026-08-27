@@ -90,11 +90,44 @@ describe('transport metronome', () => {
     expect(deps.click.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('schedules a later-bar click over backing without restarting the shared transport', async () => {
+    const deps = dependencies();
+    const metronome = createMetronome(async () => deps);
+    await metronome.scheduleCountIn({
+      bars: 1,
+      bpm: 92,
+      startBar: 4,
+      startTransport: false,
+      continueClick: true,
+    });
+
+    expect([...deps.scheduled.values()].map(({ position }) => position)).toEqual([
+      '3:0:0',
+      '3:1:0',
+      '3:2:0',
+      '3:3:0',
+      '4:0:0',
+    ]);
+    expect(deps.transport.scheduleRepeat).toHaveBeenCalledWith(expect.any(Function), '4n', '4:0:0');
+    expect(deps.transport.position).toBe('2:0:0');
+    expect(deps.transport.start).not.toHaveBeenCalled();
+  });
+
   it('rejects unusable tempos before importing Tone', async () => {
     const provider = vi.fn(async () => dependencies());
     await expect(createMetronome(provider).scheduleCountIn({ bars: 1, bpm: 20 })).rejects.toThrow(
       RangeError,
     );
     expect(provider).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid arranged start bar', async () => {
+    await expect(
+      createMetronome(async () => dependencies()).scheduleCountIn({
+        bars: 1,
+        bpm: 90,
+        startBar: 0,
+      }),
+    ).rejects.toThrow('positive integer');
   });
 });
