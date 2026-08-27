@@ -216,7 +216,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
       await nextTick();
       envelope = enforceOutputBudget(result);
     } catch (thrown) {
-      envelope = envelopeFromThrown(thrown);
+      envelope = enforceOutputBudget(envelopeFromThrown(thrown));
     }
     recordCall({
       ...call,

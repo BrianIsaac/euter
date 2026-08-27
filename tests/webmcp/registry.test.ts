@@ -213,6 +213,16 @@ describe('registry', () => {
     });
   });
 
+  it('keeps an error thrown by a tool inside the output budget', async () => {
+    const throwing = customTool(() => {
+      throw new Error(`failure: ${'x'.repeat(2000)}`);
+    });
+    const registry = createRegistry(deps({ tools: [throwing] }));
+    const envelope = await registry.invoke('echo_text', { text: 'a' });
+    expect(envelope).toMatchObject({ ok: false, code: 'RESULT_TOO_LARGE' });
+    expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(1500);
+  });
+
   it('forwards options.signal to the queue and reports CANCELLED', async () => {
     const ran = vi.fn(() => ok(0, [], 'ran', null));
     const registry = createRegistry(deps({ tools: [customTool(ran)] }));
