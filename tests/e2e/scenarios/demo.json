@@ -1,0 +1,342 @@
+{
+  "name": "demo",
+  "title": "The demo call order, from an imported hum to an MP3 and a MIDI file",
+  "reset": true,
+  "steps": [
+    {
+      "action": "tools",
+      "note": "The whole surface as the browser publishes it (plan Acceptance).",
+      "expect": {
+        "count": 28,
+        "read_only": 6,
+        "untrusted": 16,
+        "max_description_chars": 500,
+        "names_include": [
+          "get_song_state",
+          "get_track_notes",
+          "get_chords",
+          "get_take",
+          "suggest_chords",
+          "get_job",
+          "set_key",
+          "set_chords",
+          "generate_part",
+          "arrange",
+          "render"
+        ]
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The example song's track ids, read from the same runtime the README documents.",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody",
+        "chords_id": "chords",
+        "bass_id": "bass",
+        "drums_id": "drums"
+      },
+      "expect": { "data_defined": ["melody", "chords", "bass", "drums"] }
+    },
+    {
+      "action": "upload",
+      "note": "The hum arrives as an import: the same Take object the recorder produces (Decision 10).",
+      "target": { "role": "button", "name": "Import audio file" },
+      "file": "tests/fixtures/original-hum-scale.wav"
+    },
+    { "action": "wait_for", "text": ["Voiced"], "timeout_ms": 20000 },
+    {
+      "action": "tool",
+      "tool": "get_song_state",
+      "input": {},
+      "capture": { "take_id": "data.takes.0.id", "start_revision": "revision" },
+      "expect": {
+        "ok": true,
+        "revision": ">=1",
+        "changed_exactly": [],
+        "summary_includes": "First Light",
+        "data": { "data.bpm": 92, "data.time_sig": [4, 4], "data.bars": 8 },
+        "data_defined": ["data.takes.0.id", "data.key.name", "data.audio.state"]
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "set_key",
+      "input": {
+        "key": "C major",
+        "why": "Your hum sits on C and ends there, so C major is home."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["key", "notes_log"],
+        "summary_includes": "C major"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "suggest_chords",
+      "input": { "bar_from": 1, "bar_to": 4, "style": "lofi" },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "data_defined": ["data.chords.0.symbol", "data.chords.0.fit", "data.weakest_fit"]
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "propose_options",
+      "input": {
+        "kind": "chords",
+        "bar_from": 1,
+        "bar_to": 4,
+        "options": [
+          {
+            "label": "Stay home",
+            "why": "It keeps the calm of your hum.",
+            "chords": [
+              { "bar": 1, "symbol": "C" },
+              { "bar": 2, "symbol": "F" }
+            ]
+          },
+          {
+            "label": "Lift it",
+            "why": "The minor turn opens into the chorus.",
+            "chords": [
+              { "bar": 1, "symbol": "Am7" },
+              { "bar": 2, "symbol": "Fmaj7" }
+            ]
+          }
+        ],
+        "why": "Two ways to harmonise the verse; hear both before we commit."
+      },
+      "capture": { "option_two": "data.options.1.option_id" },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": { "data.options.1.label": "Lift it" },
+        "data_defined": ["data.option_set_id", "data.next"]
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person chooses the second card; the agent proposed, the person committed.",
+      "target": { "role": "button", "name": "Choose" },
+      "nth": 2
+    },
+    {
+      "action": "tool",
+      "tool": "get_chords",
+      "input": { "bar_from": 1, "bar_to": 2 },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": { "data.chords.0.symbol": "Am7", "data.chords.1.symbol": "Fmaj7" }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "set_chords",
+      "input": {
+        "chords": [
+          { "bar": 3, "symbol": "G7" },
+          { "bar": 4, "symbol": "Cmaj7" }
+        ],
+        "why": "A dominant into the tonic so bar 4 lands."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["chords", "notes_log"],
+        "data": { "data.chords.0.symbol": "G7", "data.chords.1.symbol": "Cmaj7" }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "generate_part",
+      "input": {
+        "track_id": "{{drums_id}}",
+        "role": "drums",
+        "style": "lofi",
+        "bar_from": 1,
+        "bar_to": 8,
+        "why": "A laid-back kit so the hum has something to lean on."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["notes_log"],
+        "summary_includes": ["lofi", "drums"]
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "request_take",
+      "input": {
+        "track_id": "{{bass_id}}",
+        "bar_from": 5,
+        "bar_to": 8,
+        "prompt": "Hum me a bassline for the chorus",
+        "why": "You know how the low line should move better than I do."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["take_request", "notes_log"],
+        "summary_includes": "bars 5-8"
+      }
+    },
+    { "action": "wait_for", "text": ["Hum me a bassline for the chorus"], "timeout_ms": 10000 },
+    {
+      "action": "tool",
+      "tool": "commit_take",
+      "input": {
+        "take_id": "{{take_id}}",
+        "track_id": "{{melody_id}}",
+        "quantize_strength": 0.75,
+        "grid": "16n",
+        "why": "Tightening the hum onto the grid without losing its feel."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["notes_log"],
+        "summary_includes": "Committed"
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person's gesture is what creates the audio context (Decision 24).",
+      "target": { "role": "button", "name": "Play" }
+    },
+    {
+      "action": "tool",
+      "tool": "play",
+      "input": { "from_bar": 1 },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "summary_includes": "Playing from bar 1",
+        "data": { "data.playing": true }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "arrange",
+      "input": {
+        "sections": [
+          { "name": "Verse", "bar_from": 1, "bar_to": 4 },
+          { "name": "Chorus", "bar_from": 5, "bar_to": 8, "repeat": true }
+        ],
+        "why": "A verse, then a chorus that comes round twice."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["sections", "notes_log"],
+        "data": { "data.bars": 12 }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "generate_part",
+      "input": {
+        "track_id": "{{chords_id}}",
+        "role": "chords",
+        "style": "lofi",
+        "bar_from": 1,
+        "bar_to": 8,
+        "why": "Voicing the progression under the verse and the chorus."
+      },
+      "expect": { "ok": true, "revision": "+1", "summary_includes": ["lofi", "chords"] }
+    },
+    {
+      "action": "tool",
+      "tool": "undo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": { "data.undone": true },
+        "summary_includes": "Undid"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "render",
+      "input": { "format": "mp3" },
+      "capture": { "mp3_job": "data.job_id" },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "summary_includes": "Poll get_job",
+        "data": {
+          "data.format": "mp3",
+          "data.state": "running",
+          "data.bar_from": 1,
+          "data.bar_to": 12
+        }
+      }
+    },
+    {
+      "action": "poll",
+      "tool": "get_job",
+      "input": { "job_id": "{{mp3_job}}" },
+      "until": { "data.state": "done" },
+      "timeout_ms": 180000,
+      "interval_ms": 500,
+      "expect": {
+        "ok": true,
+        "data": { "data.state": "done", "data.kind": "mp3", "data.progress_pct": 100 },
+        "data_defined": ["data.download_url", "data.filename", "data.duration_s", "data.peak_dbfs"],
+        "data_includes": { "data.filename": ".mp3" }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "render",
+      "input": { "format": "midi", "bar_from": 5, "bar_to": 8 },
+      "capture": { "midi_job": "data.job_id" },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": { "data.format": "midi", "data.bar_from": 5, "data.bar_to": 8 }
+      }
+    },
+    {
+      "action": "poll",
+      "tool": "get_job",
+      "input": { "job_id": "{{midi_job}}" },
+      "until": { "data.state": "done" },
+      "timeout_ms": 120000,
+      "interval_ms": 400,
+      "expect": {
+        "ok": true,
+        "data": { "data.state": "done", "data.kind": "midi" },
+        "data_defined": ["data.download_url", "data.filename"],
+        "data_includes": { "data.filename": ".mid" }
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The person sees what the agent did: one activity per call, each with its reason.",
+      "function": "() => ({ activities: window.euter.bus.getActivities().length, notes: window.euter.bus.getDocument().notes_log.length, revision: window.euter.bus.getDocument().revision })",
+      "expect": { "data": { "activities": 11 }, "data_defined": ["notes", "revision"] }
+    },
+    {
+      "action": "console",
+      "note": "No uncaught page error. The R2 sample 404s are the documented fallback while the remote half of the pack is not uploaded; the app names the substitution in the transport and the About panel.",
+      "expect": {
+        "excludes": [
+          "Uncaught",
+          "Unhandled",
+          "TypeError",
+          "is not a function",
+          "modelContext is not"
+        ]
+      }
+    }
+  ]
+}
