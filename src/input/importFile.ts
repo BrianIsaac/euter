@@ -46,6 +46,14 @@ export async function importAudioFile(
   }
   try {
     const decoded = await context.decodeAudioData(await file.arrayBuffer());
+    if (
+      decoded.numberOfChannels < 1 ||
+      decoded.length < 1 ||
+      !Number.isFinite(decoded.sampleRate) ||
+      decoded.sampleRate <= 0
+    ) {
+      throw new DOMException('Decoded container has no usable audio track.', 'EncodingError');
+    }
     const pcm = mixToMono(decoded);
     return {
       ok: true,
