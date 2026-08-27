@@ -26,6 +26,18 @@ describe('song selectors', () => {
     expect(JSON.parse(result)).toMatchObject({ revision: 0, title: 'First Light', bpm: 92 });
   });
 
+  it('summarises every track with the song metre instead of the map index', () => {
+    const state = JSON.parse(selectSongState(loadExampleSong())) as { tracks: string[] };
+
+    expect(state.tracks).toEqual([
+      'melody bars 1-4: melody 62-72 13 notes; grand-piano',
+      'chords chords/electric-piano: empty',
+      'bass bars 1-8: bass 36-45 8 notes; sub-bass',
+      'drums bars 1-8: drums 64 hits; studio-kit',
+    ]);
+    expect(state.tracks.join(' ')).not.toContain('NaN');
+  });
+
   it('pages notes by bar and returns relative starts', () => {
     const song = loadExampleSong();
     expect(selectTrackNotes(song, 'melody', 2, 2)).toEqual([
