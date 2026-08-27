@@ -134,11 +134,18 @@ code,
 }
 
 .app-main {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding: 12px 18px;
   min-height: 0;
+  overflow: auto;
+}
+
+.app-main > .keyboard-panel,
+.app-main > .strip,
+.app-main > .transport {
+  flex: 0 0 auto;
 }
 
 .placeholder {
@@ -157,9 +164,10 @@ code,
 
 .workspace {
   display: grid;
-  grid-template-columns: 220px 1fr 280px;
+  grid-template-columns: 220px 1fr 300px;
   gap: 10px;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 400px;
 }
 
 .roll {
@@ -178,7 +186,7 @@ code,
 }
 
 .strip {
-  max-height: 220px;
+  max-height: 190px;
   overflow: auto;
 }
 
@@ -206,12 +214,13 @@ code,
 
 .strip-item {
   display: grid;
-  grid-template-columns: 44px 60px 1fr;
-  gap: 10px;
+  grid-template-columns: 40px 52px 1fr auto;
+  gap: 4px 10px;
   align-items: baseline;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: 6px;
   background: var(--panel-2);
+  line-height: 1.3;
 }
 
 .strip-revision {
@@ -231,7 +240,7 @@ code,
 }
 
 .strip-why {
-  grid-column: 3;
+  grid-column: 3 / -1;
   color: var(--muted);
   font-style: italic;
 }
@@ -345,6 +354,341 @@ th {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--muted);
+}
+
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.transport-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transport-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.transport-field input {
+  width: 72px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.transport-readout {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+}
+
+.transport-readout dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.transport-readout dd {
+  margin: 0;
+}
+
+.transport-preview {
+  margin: 0;
+  color: var(--accent-2);
+}
+
+.shell-error {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+  background: rgba(255, 123, 123, 0.08);
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.rail > .take-panel,
+.rail > .exports {
+  flex: 0 0 auto;
+}
+
+.rail > .notes {
+  flex: 0 1 auto;
+  min-height: 90px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: auto;
+}
+
+.tracks-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.tracks-header h2 {
+  font-size: 14px;
+}
+
+.track-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.track {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.track.selected {
+  border-color: var(--accent);
+}
+
+.track-name {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-weight: 600;
+}
+
+.track-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.track-field select,
+.track-add select {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.track-field input[type='range'] {
+  flex: 1;
+}
+
+.track-toggles {
+  display: flex;
+  gap: 6px;
+}
+
+.track-toggles button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.track-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stage > .piano-roll-panel {
+  flex: 0 0 auto;
+}
+
+.stage .roll-scroll {
+  max-height: 336px;
+}
+
+.grid-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grid-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid-bar-controls button {
+  padding: 2px 10px;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.options-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.options-header h2 {
+  font-size: 14px;
+}
+
+.option-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-card {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.option-card.auditioning {
+  border-color: var(--accent-2);
+}
+
+.option-card.chosen {
+  border-color: var(--accent);
+}
+
+.option-card p {
+  margin: 0;
+}
+
+.option-detail {
+  color: var(--muted);
+}
+
+.option-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.exports {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.exports-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exports-header h2 {
+  font-size: 14px;
+}
+
+.export-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.export-buttons button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.export-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.export-list a {
+  color: var(--accent);
+}
+
+.strip-undo {
+  grid-column: 4;
+  grid-row: 1;
+  align-self: center;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 1200px) {
+  .workspace {
+    grid-template-columns: 200px 1fr;
+  }
+
+  .rail {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 900px) {

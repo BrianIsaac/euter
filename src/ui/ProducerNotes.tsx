@@ -1,7 +1,6 @@
 /**
- * The producer-notes rail (plan Architecture item 8): the `why` of every write, in song order,
- * so the song's reasoning reads without the chat. Writes with `why` arrive on 29 Aug; today the
- * rail lists `notes_log`, which is empty.
+ * The producer-notes rail (plan Architecture item 8): the `why` of every write, in song order, so
+ * the song's reasoning reads without the chat. Undo removes the note with the change it explains.
  */
 import { useSyncExternalStore } from 'react';
 import type { SongDocument } from '../song/types.ts';
@@ -26,11 +25,12 @@ export function ProducerNotes({ bus }: ProducerNotesProps) {
     <section className="notes" aria-label="Producer notes">
       <header className="notes-header">
         <h2>Producer notes</h2>
+        <span className="muted">{notes.length}</span>
       </header>
       {notes.length === 0 ? (
         <p className="muted">
-          Every change the agent makes carries one sentence on why. The sentences land here in song
-          order, pinned to their bars, from 29 Aug.
+          Every change carries one sentence on why. They land here in song order, pinned to the bars
+          they changed.
         </p>
       ) : (
         <ol className="notes-list">

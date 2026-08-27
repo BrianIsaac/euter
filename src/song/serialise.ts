@@ -79,7 +79,7 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
             z
               .object({
                 t: z.number().finite().nonnegative(),
-                hz: z.number().finite().positive(),
+                hz: z.number().finite().nonnegative(),
                 clarity: z.number().finite().min(0).max(1),
               })
               .strict(),

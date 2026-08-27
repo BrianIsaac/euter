@@ -9,6 +9,33 @@ import {
 import { createEmptySong } from '../../src/song/types.ts';
 
 describe('song serialisation', () => {
+  it('saves a take whose pitch track has unvoiced frames', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    const song = loadExampleSong();
+    song.takes = [
+      {
+        id: 'take-1',
+        source: 'mic',
+        notes: [{ p: 60, s: 0, d: 1, v: 0.8, source: 'take' }],
+        pitch_track: [
+          { t: 0, hz: 0, clarity: 0 },
+          { t: 0.05, hz: 261.6, clarity: 0.9 },
+        ],
+        duration_s: 1,
+        voiced_ratio: 0.5,
+        median_clarity: 0.9,
+        pitch_range: [60, 60],
+        tempo_hint: 92,
+      },
+    ];
+    expect(() => saveSong(storage, song)).not.toThrow();
+    expect(loadSong(storage)?.takes[0]?.pitch_track[0]?.hz).toBe(0);
+  });
+
   it('round-trips a validated document', () => {
     const values = new Map<string, string>();
     const storage = {

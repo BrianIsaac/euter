@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createCommandBus } from '../../src/webmcp/bus.ts';
 import { fail, ok, ToolError } from '../../src/webmcp/envelope.ts';
 import { createEnvironmentStore, readEnvironment } from '../../src/webmcp/environment.ts';
-import { createProbeDocument, probeReducer } from '../../src/webmcp/probe.ts';
 import { createQueue } from '../../src/webmcp/queue.ts';
 import {
   coerceInput,
@@ -15,11 +13,14 @@ import {
 import { tools } from '../../src/webmcp/tools/index.ts';
 import type { ToolDefinition } from '../../src/webmcp/types.ts';
 import { createFakeContext, installContexts } from '../helpers/fakeContext.ts';
+import { createTestEngine } from '../helpers/harness.ts';
 
 function deps(overrides: Partial<RegistryDeps> = {}): RegistryDeps {
+  const { engine } = createTestEngine();
   return {
     tools,
-    bus: createCommandBus(probeReducer, createProbeDocument()),
+    bus: engine.store,
+    engine,
     environment: createEnvironmentStore(readEnvironment()),
     queue: createQueue(),
     nextTick: () => Promise.resolve(),
@@ -72,13 +73,16 @@ describe('registry', () => {
     const navigatorContext = createFakeContext();
     const registry = createRegistry(deps({ contexts: () => [documentContext, navigatorContext] }));
     expect(registry.getStatus()).toEqual({ kind: 'initialising' });
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
     for (const context of [documentContext, navigatorContext]) {
       const listed = await context.getTools();
-      expect(listed.map((tool) => tool.name)).toEqual(['get_diagnostics', 'ping']);
-      expect(listed[0]?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
-      expect(listed[1]?.annotations).toEqual({ readOnlyHint: false, untrustedContentHint: false });
-      expect(listed[1]?.inputSchema).toMatchObject({ additionalProperties: false });
+      expect(listed).toHaveLength(tools.length);
+      expect(listed.map((tool) => tool.name)).toContain('get_song_state');
+      const read = listed.find((tool) => tool.name === 'get_song_state');
+      const write = listed.find((tool) => tool.name === 'set_chords');
+      expect(read?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
+      expect(write?.annotations).toEqual({ readOnlyHint: false, untrustedContentHint: false });
+      expect(write?.inputSchema).toMatchObject({ additionalProperties: false });
     }
   });
 
@@ -91,22 +95,22 @@ describe('registry', () => {
     const shared = createFakeContext();
     installContexts(shared, shared);
     const registry = createRegistry(deps());
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
-    expect(shared.registerCalls).toBe(2);
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
+    expect(shared.registerCalls).toBe(tools.length);
   });
 
   it('stays ready when the second context is an alias over the same tool map', async () => {
     const documentContext = createFakeContext();
-    const alias = createFakeContext({ preRegistered: ['get_diagnostics', 'ping'] });
+    const alias = createFakeContext({ preRegistered: tools.map(({ name }) => name) });
     const registry = createRegistry(deps({ contexts: () => [documentContext, alias] }));
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
   });
 
   it('reports an error when registration is refused everywhere', async () => {
     const broken = createFakeContext({ rejectWith: new Error('tools policy denied') });
     const registry = createRegistry(deps({ contexts: () => [broken] }));
     expect(await registry.register()).toEqual({ kind: 'error', message: 'tools policy denied' });
-    const duplicate = createFakeContext({ preRegistered: ['ping'] });
+    const duplicate = createFakeContext({ preRegistered: ['set_tempo'] });
     const second = createRegistry(deps({ contexts: () => [duplicate] }));
     expect((await second.register()).kind).toBe('error');
   });
@@ -120,54 +124,52 @@ describe('registry', () => {
     expect(registry.getStatus()).toEqual({ kind: 'unavailable' });
     expect(await documentContext.getTools()).toEqual([]);
     expect(await navigatorContext.getTools()).toEqual([]);
-    expect(await registry.register()).toEqual({ kind: 'ready', count: 2 });
-    expect((await documentContext.getTools()).map((tool) => tool.name)).toEqual([
-      'get_diagnostics',
-      'ping',
-    ]);
+    expect(await registry.register()).toEqual({ kind: 'ready', count: tools.length });
+    expect((await documentContext.getTools()).map((tool) => tool.name)).toContain('set_tempo');
+    expect(await documentContext.getTools()).toHaveLength(tools.length);
   });
 
   it('runs a tool through the browser path and returns the envelope as JSON', async () => {
     const context = createFakeContext();
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus, contexts: () => [context] }));
     await registry.register();
-    const [, pingTool] = await context.getTools();
-    if (!pingTool || !context.executeTool) {
-      throw new Error('ping was not registered');
+    const tempoTool = (await context.getTools()).find((tool) => tool.name === 'set_tempo');
+    if (!tempoTool || !context.executeTool) {
+      throw new Error('set_tempo was not registered');
     }
-    const raw = await context.executeTool(pingTool, { message: 'hello' });
+    const raw = await context.executeTool(tempoTool, { bpm: 96, why: 'A touch faster.' });
     expect(JSON.parse(raw)).toEqual({
       ok: true,
       revision: 1,
-      changed: ['revision'],
-      summary: 'ping: hello',
-      data: { message: 'hello' },
+      changed: ['bpm', 'notes_log'],
+      summary: 'Set tempo to 96 bpm',
+      data: { bpm: 96 },
     });
     expect(bus.getDocument().revision).toBe(1);
     expect(bus.getActivities()).toHaveLength(1);
   });
 
   it('survives execute being called without options and with a JSON-string input', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
-    const [, pingTool] = registry.describe();
-    if (!pingTool) {
-      throw new Error('ping not described');
+    const tempoTool = registry.describe().find((tool) => tool.name === 'set_tempo');
+    if (!tempoTool) {
+      throw new Error('set_tempo not described');
     }
-    const noOptions = (await pingTool.execute({ message: 'bare' })) as {
+    const noOptions = (await tempoTool.execute({ bpm: 96, why: 'Bare call.' })) as {
       ok: boolean;
       revision: number;
     };
     expect(noOptions).toMatchObject({ ok: true, revision: 1 });
-    const asString = (await pingTool.execute(
-      JSON.stringify({ message: 'text' }) as unknown as Record<string, unknown>,
+    const asString = (await tempoTool.execute(
+      JSON.stringify({ bpm: 101, why: 'As a JSON string.' }) as unknown as Record<string, unknown>,
     )) as {
       ok: boolean;
       summary: string;
     };
-    expect(asString).toMatchObject({ ok: true, summary: 'ping: text' });
-    const garbage = (await pingTool.execute('not json' as unknown as Record<string, unknown>)) as {
+    expect(asString).toMatchObject({ ok: true, summary: 'Set tempo to 101 bpm' });
+    const garbage = (await tempoTool.execute('not json' as unknown as Record<string, unknown>)) as {
       ok: boolean;
       code: string;
     };
@@ -177,9 +179,9 @@ describe('registry', () => {
   });
 
   it('parses before enqueueing and returns INVALID_ARGUMENT as data', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
-    const envelope = await registry.invoke('ping', { message: 7 });
+    const envelope = await registry.invoke('set_tempo', { bpm: 'fast', why: 'Not a number.' });
     expect(envelope).toMatchObject({ ok: false, code: 'INVALID_ARGUMENT', recoverable: true });
     expect(bus.getDocument().revision).toBe(0);
   });
@@ -263,22 +265,22 @@ describe('registry', () => {
     const listener = vi.fn();
     registry.subscribe(listener);
     for (let index = 0; index < 21; index += 1) {
-      await registry.invoke('ping', { message: `m${index}` });
+      await registry.invoke('set_tempo', { bpm: 100 + index, why: `m${index}` });
     }
-    await registry.invoke('ping', { message: 3 });
+    await registry.invoke('set_tempo', { bpm: 900, why: 'Too fast.' });
     const calls = registry.getCalls();
     expect(calls).toHaveLength(20);
-    expect(calls[0]?.args).toEqual({ message: 'm2' });
+    expect(calls[0]?.args).toEqual({ bpm: 102, why: 'm2' });
     expect(calls.at(-1)).toMatchObject({
-      tool: 'ping',
+      tool: 'set_tempo',
       status: 'error',
       code: 'INVALID_ARGUMENT',
-      args: { message: 3 },
+      args: { bpm: 900, why: 'Too fast.' },
     });
     expect(calls.at(-2)).toMatchObject({
       status: 'ok',
       code: null,
-      summary: 'ping: m20',
+      summary: 'Set tempo to 120 bpm',
       durationMs: 5,
     });
     expect(listener).toHaveBeenCalled();
@@ -286,12 +288,12 @@ describe('registry', () => {
   });
 
   it('serialises concurrent calls through the queue', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
     const results = await Promise.all([
-      registry.invoke('ping', { message: 'a' }),
-      registry.invoke('ping', { message: 'b' }),
-      registry.invoke('get_diagnostics', {}),
+      registry.invoke('set_tempo', { bpm: 96, why: 'First.' }),
+      registry.invoke('set_tempo', { bpm: 101, why: 'Second.' }),
+      registry.invoke('get_song_state', {}),
     ]);
     expect(results.map((envelope) => (envelope.ok ? envelope.revision : -1))).toEqual([1, 2, 2]);
   });
@@ -299,9 +301,15 @@ describe('registry', () => {
   it('describes tools with the registered description and title', () => {
     const registry = createRegistry(deps());
     const described = registry.describe();
-    expect(described.map((tool) => tool.name)).toEqual(['get_diagnostics', 'ping']);
-    expect(described[1]?.description).toMatch(/on error returns ok:false with a code\.$/);
-    expect(described[1]?.description).not.toContain('Include why.');
-    expect(described[0]?.title).toBe('Get diagnostics');
+    expect(described.map((tool) => tool.name)).toEqual(tools.map(({ name }) => name));
+    const read = described.find((tool) => tool.name === 'get_song_state');
+    const write = described.find((tool) => tool.name === 'set_chords');
+    const probe = described.find((tool) => tool.name === 'play');
+    expect(read?.title).toBe('Read the song');
+    expect(read?.description).not.toContain('Include why.');
+    expect(write?.description).toMatch(/Include why\. Returns revision, changed and summary/u);
+    expect(write?.description).toMatch(/on error returns ok:false with a code\.$/u);
+    expect(probe?.description).toMatch(/on error returns ok:false with a code\.$/u);
+    expect(probe?.description).not.toContain('Include why.');
   });
 });

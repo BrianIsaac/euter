@@ -5,6 +5,7 @@
  */
 import type { z } from 'zod';
 import type { CommandBus } from './bus.ts';
+import type { Engine } from './engine.ts';
 import type { Envelope } from './envelope.ts';
 import type { EnvironmentStore } from './environment.ts';
 import type { SongDocument } from '../song/types.ts';
@@ -86,7 +87,9 @@ export interface RegistryView {
 }
 
 export interface ToolContext {
+  /** The song store; the same object as `engine.store`. */
   bus: CommandBus<SongDocument>;
+  engine: Engine;
   environment: EnvironmentStore;
   registry: RegistryView;
   signal: AbortSignal;

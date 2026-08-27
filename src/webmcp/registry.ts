@@ -7,6 +7,7 @@
  */
 import type { SongDocument } from '../song/types.ts';
 import type { CommandBus } from './bus.ts';
+import type { Engine } from './engine.ts';
 import { registeredDescription } from './descriptions.ts';
 import { enforceOutputBudget, envelopeFromThrown, type Envelope } from './envelope.ts';
 import type { EnvironmentStore } from './environment.ts';
@@ -52,6 +53,7 @@ export interface Registry {
 export interface RegistryDeps {
   tools: readonly ToolDefinition[];
   bus: CommandBus<SongDocument>;
+  engine: Engine;
   environment: EnvironmentStore;
   queue?: CommandQueue;
   /** Where to register; defaults to `discoverContexts()`. */
@@ -146,7 +148,7 @@ function defaultNextTick(): Promise<void> {
  * @returns The registry, not yet registered.
  */
 export function createRegistry(deps: RegistryDeps): Registry {
-  const { tools, bus, environment } = deps;
+  const { tools, bus, engine, environment } = deps;
   const queue = deps.queue ?? createQueue();
   const now = deps.now ?? (() => Date.now());
   const callLimit = deps.callLimit ?? 20;
@@ -204,6 +206,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
         () =>
           definition.execute(args, {
             bus,
+            engine,
             environment,
             registry: view,
             signal: signal ?? new AbortController().signal,

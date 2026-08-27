@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Diagnostics } from '../../src/ui/Diagnostics.tsx';
+import { tools } from '../../src/webmcp/tools/index.ts';
 import { createRuntime } from '../../src/webmcp/runtime.ts';
 import { createFakeContext } from '../helpers/fakeContext.ts';
 
@@ -59,15 +60,15 @@ describe('Diagnostics', () => {
 
   it('shows identity, WebMCP state, headers, audio before and after, and the call log', async () => {
     const context = createFakeContext();
-    const runtime = createRuntime({ contexts: () => [context] });
+    const runtime = createRuntime({ contexts: () => [context], storage: null });
     await runtime.registry.register();
-    await runtime.registry.invoke('ping', { message: 'hello' });
-    await runtime.registry.invoke('ping', { message: 5 });
+    await runtime.registry.invoke('set_tempo', { bpm: 96, why: 'A touch faster.' });
+    await runtime.registry.invoke('set_tempo', { bpm: 5, why: 'Too slow.' });
     const onClose = vi.fn();
     render(<Diagnostics runtime={runtime} onClose={onClose} />);
 
     expect(screen.getByText(navigator.userAgent)).toBeInTheDocument();
-    expect(screen.getByTestId('registry-status')).toHaveTextContent('ready (2)');
+    expect(screen.getByTestId('registry-status')).toHaveTextContent(`ready (${tools.length})`);
     await waitFor(() => {
       expect(screen.getByText('tools=(self), microphone=(self), midi=(self)')).toBeInTheDocument();
     });
@@ -86,8 +87,8 @@ describe('Diagnostics', () => {
     const calls = screen.getAllByTestId('tool-call');
     expect(calls).toHaveLength(2);
     expect(calls[0]).toHaveTextContent('error INVALID_ARGUMENT');
-    expect(calls[1]).toHaveTextContent('ping');
-    expect(calls[1]).toHaveTextContent('{"message":"hello"}');
+    expect(calls[1]).toHaveTextContent('set_tempo');
+    expect(calls[1]).toHaveTextContent('{"bpm":96,"why":"A touch faster."}');
     expect(screen.getByText('Last 2 tool calls')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close diagnostics' }));
