@@ -1,0 +1,292 @@
+import { describe, expect, it } from 'vitest';
+import type { Command } from '../../src/webmcp/bus.ts';
+import { ToolError } from '../../src/webmcp/envelope.ts';
+import { createSongReducer } from '../../src/song/reducer.ts';
+import { loadExampleSong } from '../../src/song/serialise.ts';
+import { createSongStore } from '../../src/song/store.ts';
+import type { SongDocument } from '../../src/song/types.ts';
+
+const agent = (
+  type: string,
+  args: Record<string, unknown>,
+  why = 'It supports the song.',
+): Command => ({
+  type,
+  args,
+  source: 'agent',
+  why,
+});
+
+function store(song = loadExampleSong(), recordingTrackId: () => string | null = () => null) {
+  let id = 1;
+  return createSongStore(
+    song,
+    createSongReducer({
+      recordingTrackId,
+      idFactory: (prefix) => `${prefix}-${id++}`,
+    }),
+    { now: () => 100 },
+  );
+}
+
+describe('song reducer and command bus', () => {
+  it('keeps ping working on the song reducer', () => {
+    const songStore = store();
+    expect(
+      songStore.dispatch({ type: 'ping', args: { message: 'hello' }, source: 'agent' }),
+    ).toMatchObject({
+      revision: 1,
+      summary: 'ping: hello',
+    });
+    expect(songStore.history.getPast()).toEqual([]);
+  });
+
+  it('adds a track, changes its instrument and mix, and sets tempo atomically', () => {
+    const songStore = store();
+    songStore.dispatch(agent('add_track', { kind: 'bass', instrument: 'sub-bass', name: 'Low' }));
+    const id = songStore.getDocument().tracks.at(-1)?.id;
+    expect(id).toBe('bass-1');
+    songStore.dispatch(agent('set_instrument', { track_id: id, instrument: 'vcsl-strings' }));
+    songStore.dispatch(agent('set_mix', { track_id: id, volume_db: -10, pan: -0.1, mute: true }));
+    songStore.dispatch(agent('set_tempo', { bpm: 101.5 }));
+    expect(songStore.getDocument()).toMatchObject({ bpm: 101.5, revision: 4 });
+    expect(songStore.getDocument().tracks.at(-1)).toMatchObject({
+      name: 'Low',
+      instrument: 'vcsl-strings',
+      volume_db: -10,
+      pan: -0.1,
+      mute: true,
+    });
+    expect(songStore.getDocument().notes_log).toHaveLength(4);
+    expect(() =>
+      songStore.dispatch(
+        agent('set_instrument', { track_id: id, instrument: 'imaginary-orchestra' }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'INVALID_ARGUMENT' }));
+    expect(songStore.getDocument().revision).toBe(4);
+  });
+
+  it('translates set_notes from its starting bar and makes quantisation reversible', () => {
+    const songStore = store();
+    songStore.dispatch(
+      agent('set_notes', {
+        track_id: 'melody',
+        bar_from: 2,
+        notes: [{ p: 61, s: 0.13, d: 0.82, v: 0.7 }],
+        replace: true,
+      }),
+    );
+    expect(songStore.getDocument().tracks[0]?.notes.find(({ p }) => p === 61)).toMatchObject({
+      s: 4.13,
+      d: 0.82,
+    });
+    songStore.dispatch(
+      agent('set_quantize', { track_id: 'melody', grid: '16n', strength: 1, swing: 0 }),
+    );
+    expect(songStore.getDocument().tracks[0]?.notes.find(({ p }) => p === 61)).toMatchObject({
+      s: 4.25,
+      d: 0.75,
+      s_raw: 4.13,
+      d_raw: 0.82,
+    });
+    songStore.dispatch(agent('set_quantize', { track_id: 'melody', grid: '16n', strength: 0 }));
+    expect(songStore.getDocument().tracks[0]?.notes.find(({ p }) => p === 61)).toMatchObject({
+      s: 4.13,
+      d: 0.82,
+    });
+  });
+
+  it('keeps swung quantisation inside the fixed song boundary', () => {
+    const song = loadExampleSong();
+    const melody = song.tracks[0];
+    if (!melody) throw new Error('Example song has no melody track.');
+    song.tracks[0] = {
+      ...melody,
+      notes: [{ p: 60, s: 31.9, d: 0.1, v: 0.8, source: 'human' }],
+    };
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('set_quantize', { track_id: 'melody', grid: '8n', strength: 1, swing: 0.5 }),
+    );
+    const note = songStore.getDocument().tracks[0]?.notes[0];
+    expect((note?.s ?? 0) + (note?.d ?? 0)).toBeLessThanOrEqual(32);
+    expect(note?.s_raw).toBe(31.9);
+  });
+
+  it('validates every chord before applying and sets a ranked key', () => {
+    const songStore = store();
+    const before = JSON.stringify(songStore.getDocument());
+    expect(() =>
+      songStore.dispatch(
+        agent('set_chords', {
+          chords: [
+            { bar: 1, symbol: 'Dm7' },
+            { bar: 2, symbol: 'not a chord' },
+          ],
+        }),
+      ),
+    ).toThrow(ToolError);
+    expect(JSON.stringify(songStore.getDocument())).toBe(before);
+
+    songStore.dispatch(agent('set_chords', { chords: [{ bar: 1, symbol: 'Dm7' }] }));
+    songStore.dispatch(agent('set_key', { key: 'D minor' }));
+    expect(songStore.getDocument().chords[0]).toEqual({ bar: 1, symbol: 'Dm7' });
+    expect(songStore.getDocument().key.name).toBe('D minor');
+    expect(songStore.getDocument().key.alternatives.length).toBeGreaterThan(0);
+  });
+
+  it('returns stale revision detail and never applies the stale edit', () => {
+    const songStore = store();
+    songStore.dispatch(agent('set_tempo', { bpm: 100 }));
+    let thrown: unknown;
+    try {
+      songStore.dispatch({
+        ...agent('set_tempo', { bpm: 110 }),
+        expected_revision: 0,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ToolError);
+    expect((thrown as ToolError).code).toBe('STALE_REVISION');
+    expect((thrown as Error).message).toContain('revision 1, not 0');
+    expect((thrown as Error).message).toContain('Set tempo to 100 bpm');
+    expect(songStore.getDocument()).toMatchObject({ revision: 1, bpm: 100 });
+  });
+
+  it('locks only the track currently being recorded', () => {
+    const songStore = store(loadExampleSong(), () => 'melody');
+    expect(() =>
+      songStore.dispatch(
+        agent('set_notes', { track_id: 'melody', bar_from: 1, notes: [], replace: true }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'RECORDING_IN_PROGRESS' }));
+    expect(() =>
+      songStore.dispatch(agent('set_mix', { track_id: 'bass', pan: 0.2 })),
+    ).not.toThrow();
+  });
+
+  it('generates deterministic bass, chord and drum roles', () => {
+    const songStore = store();
+    for (const [track_id, role] of [
+      ['bass', 'bass'],
+      ['chords', 'chords'],
+      ['drums', 'drums'],
+    ] as const) {
+      songStore.dispatch(
+        agent('generate_part', { track_id, role, style: 'lofi', bar_from: 1, bar_to: 2 }),
+      );
+    }
+    expect(songStore.getDocument().tracks.find(({ id }) => id === 'bass')?.notes[0]).toMatchObject({
+      p: 36,
+      source: 'agent',
+    });
+    expect(
+      songStore.getDocument().tracks.find(({ id }) => id === 'chords')?.notes.length,
+    ).toBeGreaterThan(0);
+    expect(
+      songStore.getDocument().tracks.find(({ id }) => id === 'drums')?.notes.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('extends and repeats notes and chords without sharing note objects', () => {
+    const song = loadExampleSong();
+    song.bars = 4;
+    song.sections = [{ name: 'Loop', bar_from: 1, bar_to: 4 }];
+    song.chords = song.chords.slice(0, 4);
+    song.tracks = song.tracks.map((track) => ({
+      ...track,
+      notes: track.notes.filter(({ s }) => s < 16),
+    }));
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('arrange', { sections: [{ name: 'Verse', bar_from: 1, bar_to: 4, repeat: true }] }),
+    );
+    const arranged = songStore.getDocument();
+    expect(arranged.bars).toBe(8);
+    expect(arranged.sections).toEqual([{ name: 'Verse', bar_from: 1, bar_to: 8 }]);
+    expect(arranged.chords.slice(4)).toEqual([
+      { bar: 5, symbol: 'C' },
+      { bar: 6, symbol: 'F' },
+      { bar: 7, symbol: 'Am' },
+      { bar: 8, symbol: 'G' },
+    ]);
+    const first = arranged.tracks[0]?.notes.find(({ s }) => s === 0);
+    const copied = arranged.tracks[0]?.notes.find(({ s }) => s === 16);
+    expect(copied).toMatchObject({ p: first?.p, source: 'agent' });
+    expect(copied).not.toBe(first);
+  });
+
+  it('commits a take and clears its matching request', () => {
+    const song: SongDocument = {
+      ...loadExampleSong(),
+      takes: [
+        {
+          id: 'take-1',
+          source: 'mic',
+          notes: [{ p: 62, s: 0.12, d: 0.8, v: 0.7, source: 'take' }],
+          pitch_track: [],
+          duration_s: 1,
+          voiced_ratio: 0.9,
+          median_clarity: 0.8,
+          pitch_range: [62, 62],
+          tempo_hint: null,
+        },
+      ],
+      take_request: {
+        id: 'request-old',
+        track_id: 'melody',
+        bar_from: 1,
+        bar_to: 1,
+        prompt: 'Hum it.',
+      },
+    };
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('commit_take', {
+        take_id: 'take-1',
+        track_id: 'melody',
+        quantize_strength: 1,
+        grid: '8n',
+      }),
+    );
+    expect(songStore.getDocument().tracks[0]?.notes[0]).toMatchObject({
+      p: 62,
+      s: 0,
+      d: 1,
+      source: 'take',
+    });
+    expect(songStore.getDocument().take_request).toBeNull();
+  });
+
+  it('registers, chooses and visibly requests teaching options', () => {
+    const songStore = store();
+    songStore.dispatch(
+      agent('propose_options', {
+        kind: 'chords',
+        options: [
+          { label: 'Home', why: 'Resolves clearly.', chords: [{ bar: 1, symbol: 'C' }] },
+          { label: 'Lift', why: 'Starts away from home.', chords: [{ bar: 1, symbol: 'F' }] },
+        ],
+        bar_from: 1,
+        bar_to: 4,
+      }),
+    );
+    const optionId = songStore.getDocument().option_sets[0]?.options[1]?.id;
+    songStore.dispatch(agent('choose_option', { option_id: optionId }));
+    expect(songStore.getDocument().chords[0]).toEqual({ bar: 1, symbol: 'F' });
+    expect(songStore.getDocument().option_sets[0]?.chosen_option_id).toBe(optionId);
+    songStore.dispatch(
+      agent('request_take', {
+        track_id: 'bass',
+        bar_from: 5,
+        bar_to: 8,
+        prompt: 'Hum me a bassline for the chorus.',
+      }),
+    );
+    expect(songStore.getDocument().take_request).toMatchObject({
+      track_id: 'bass',
+      prompt: 'Hum me a bassline for the chorus.',
+    });
+  });
+});

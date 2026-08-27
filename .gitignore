@@ -21,3 +21,5 @@ next-env.d.ts
 # build and tool state
 node_modules/.tmp
 .wrangler
+.sample-cache/
+samples-dist/
