@@ -18,4 +18,31 @@ describe('MIDI encoder', () => {
       5,
     );
   });
+
+  it('clips a requested bar range and moves its first bar to time zero', () => {
+    const song = loadExampleSong();
+    const encoded = encodeMidi(song, { start_bar: 5, end_bar: 8 });
+    const decoded = new Midi(encoded);
+    const startBeat = 16;
+    const endBeat = 32;
+
+    for (const [index, track] of decoded.tracks.entries()) {
+      const source = song.tracks[index]?.notes.filter(
+        (note) => note.s < endBeat && note.s + note.d > startBeat,
+      );
+      expect(track.notes).toHaveLength(source?.length ?? 0);
+      expect(track.notes.every((note) => note.time >= 0)).toBe(true);
+    }
+    const sourceTrackIndex = song.tracks.findIndex((track) =>
+      track.notes.some((note) => note.s < endBeat && note.s + note.d > startBeat),
+    );
+    const firstSource = song.tracks[sourceTrackIndex]?.notes.find(
+      (note) => note.s < endBeat && note.s + note.d > startBeat,
+    );
+    expect(decoded.tracks[sourceTrackIndex]?.notes[0]?.midi).toBe(firstSource?.p);
+    expect(decoded.tracks[sourceTrackIndex]?.notes[0]?.time).toBeCloseTo(
+      (Math.max(firstSource?.s ?? startBeat, startBeat) - startBeat) * (60 / song.bpm),
+      5,
+    );
+  });
 });

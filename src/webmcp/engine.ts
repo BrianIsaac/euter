@@ -326,7 +326,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
         .replace(/^-|-$/gu, '') || 'euterpe'
     }`;
     if (format === 'midi') {
-      const bytes = exporters.midi(song);
+      const bytes = exporters.midi(song, { start_bar: barFrom, end_bar: barTo });
       setProgress(90);
       return {
         download_url: createObjectUrl(new Blob([bytes as BlobPart], { type: 'audio/midi' })),

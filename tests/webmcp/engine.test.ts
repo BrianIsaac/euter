@@ -187,10 +187,15 @@ describe('engine', () => {
 
   it('exports MIDI without rendering audio', async () => {
     const render = vi.fn(() => Promise.resolve(fakeAudioBuffer()));
-    const { engine } = createTestEngine({ exporters: { render } });
-    const job = engine.startExport('midi', 1, 8);
+    const midi = vi.fn(() => new Uint8Array([77, 84, 104, 100]));
+    const { engine } = createTestEngine({ exporters: { render, midi } });
+    const job = engine.startExport('midi', 5, 8);
     await settle();
     expect(render).not.toHaveBeenCalled();
+    expect(midi).toHaveBeenCalledWith(engine.store.getDocument(), {
+      start_bar: 5,
+      end_bar: 8,
+    });
     expect(engine.exportResult(job.id)?.filename).toBe('first-light.mid');
     engine.dispose();
   });
