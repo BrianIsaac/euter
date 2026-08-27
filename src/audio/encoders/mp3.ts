@@ -41,7 +41,12 @@ export function encodeMp3(
     );
   }
 
-  const worker = (options.workerFactory ?? createMp3Worker)();
+  let worker: Mp3WorkerLike;
+  try {
+    worker = (options.workerFactory ?? createMp3Worker)();
+  } catch (error) {
+    return Promise.reject(error);
+  }
   const id = (options.createId ?? (() => crypto.randomUUID()))();
   const channels = Array.from(
     { length: audioBuffer.numberOfChannels },
@@ -76,7 +81,12 @@ export function encodeMp3(
       reject(new Error(event.message || 'MP3 worker failed.'));
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
-    worker.postMessage(request, channels);
+    try {
+      worker.postMessage(request, channels);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
   });
 }
 
