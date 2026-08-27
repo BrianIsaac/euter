@@ -70,6 +70,19 @@ describe('song transport', () => {
     expect(provider).not.toHaveBeenCalled();
   });
 
+  it('does not import Tone when stop is pressed before playback starts', async () => {
+    const provider = vi.fn(async () => fakeToneTransport());
+    const transport = createSongTransport(fakeAudio(), provider);
+
+    await expect(transport.stop()).resolves.toEqual({
+      playing: false,
+      position_bar: 1,
+      loop: null,
+      bpm: 90,
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
   it('validates play, loop and tempo ranges', async () => {
     const transport = createSongTransport(fakeAudio(), async () => fakeToneTransport());
     await expect(transport.play(loadExampleSong(), { from_bar: 9 })).rejects.toMatchObject({
