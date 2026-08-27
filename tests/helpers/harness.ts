@@ -286,13 +286,13 @@ export function fakeReconciler(): AudioReconciler & { reconciles: number } {
 export function fakeAudioBuffer(seconds = 1): AudioBuffer {
   const sampleRate = 44_100;
   const length = Math.round(seconds * sampleRate);
-  const data = new Float32Array(length).fill(0.25);
+  const channels = [new Float32Array(length).fill(0.25), new Float32Array(length).fill(0.25)];
   return {
     duration: seconds,
     length,
-    numberOfChannels: 2,
+    numberOfChannels: channels.length,
     sampleRate,
-    getChannelData: () => data,
+    getChannelData: (channel: number) => channels[channel] ?? channels[0],
   } as unknown as AudioBuffer;
 }
 

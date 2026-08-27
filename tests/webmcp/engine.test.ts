@@ -127,6 +127,31 @@ describe('engine', () => {
     engine.dispose();
   });
 
+  it('scales a render down when the offline graph would clip', async () => {
+    const loud = fakeAudioBuffer();
+    loud.getChannelData(0).fill(2.4);
+    loud.getChannelData(1).fill(2.4);
+    const { engine } = createTestEngine({ exporters: { render: () => Promise.resolve(loud) } });
+    const job = engine.startExport('wav', 1, 8);
+    await settle();
+    const result = engine.exportResult(job.id);
+    expect(result?.peak_dbfs).toBeLessThanOrEqual(0);
+    expect(loud.getChannelData(0)[0]).toBeCloseTo(0.98, 5);
+    engine.dispose();
+  });
+
+  it('leaves a render that fits alone', async () => {
+    const quiet = fakeAudioBuffer();
+    quiet.getChannelData(0).fill(0.5);
+    quiet.getChannelData(1).fill(0.5);
+    const { engine } = createTestEngine({ exporters: { render: () => Promise.resolve(quiet) } });
+    const job = engine.startExport('wav', 1, 8);
+    await settle();
+    expect(quiet.getChannelData(0)[0]).toBe(0.5);
+    expect(engine.exportResult(job.id)?.peak_dbfs).toBeCloseTo(-6.02, 1);
+    engine.dispose();
+  });
+
   it('exports MIDI without rendering audio', async () => {
     const render = vi.fn(() => Promise.resolve(fakeAudioBuffer()));
     const { engine } = createTestEngine({ exporters: { render } });

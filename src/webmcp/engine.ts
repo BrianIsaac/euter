@@ -16,7 +16,7 @@ import {
 import { ExportJobManager, type ExportJob } from '../audio/jobs.ts';
 import { createMetronome, type Metronome } from '../audio/metronome.ts';
 import { createAudioReconciler, type AudioReconciler } from '../audio/reconciler.ts';
-import { analyseAudioBuffer } from '../audio/loudness.ts';
+import { analyseAudioBuffer, type LoudnessReading } from '../audio/loudness.ts';
 import { renderSong } from '../audio/render.ts';
 import { createSongTransport, type PlayOptions, type SongTransport } from '../audio/transport.ts';
 import { importAudioFile, type ImportedAudio } from '../input/importFile.ts';
@@ -283,6 +283,25 @@ export function createEngine(options: EngineOptions = {}): Engine {
     return { set, option };
   };
 
+  /**
+   * Scales a render down when it would clip, so the file the person downloads is the song rather
+   * than square waves. The offline graph has no limiter (lane A, `src/audio/render.ts`); measured
+   * on 27 Aug a twelve-bar WAV peaked at +6.6 dBFS.
+   *
+   * @param buffer - The rendered audio, scaled in place when it is over full scale.
+   * @returns The loudness reading after any scaling.
+   */
+  const trimClipping = (buffer: AudioBuffer): LoudnessReading => {
+    const before = analyseAudioBuffer(buffer);
+    if (before.peak <= 1) return before;
+    const gain = 0.98 / before.peak;
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      const data = buffer.getChannelData(channel);
+      for (let index = 0; index < data.length; index += 1) data[index] = (data[index] ?? 0) * gain;
+    }
+    return analyseAudioBuffer(buffer);
+  };
+
   const clearPreview = (): void => {
     if (preview === null) return;
     preview = null;
@@ -323,7 +342,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
       { signal, onProgress: (value) => setProgress(value * 0.7) },
     );
     setProgress(75);
-    const loudness = analyseAudioBuffer(buffer);
+    const loudness = trimClipping(buffer);
     const bytes =
       format === 'wav' ? exporters.wav(buffer) : await exporters.mp3(buffer, { signal });
     setProgress(95);
