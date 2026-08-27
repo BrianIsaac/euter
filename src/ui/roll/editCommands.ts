@@ -6,13 +6,14 @@ export interface HumanNotesRange {
   barFrom: number;
   barTo: number;
   beatsPerBar: number;
+  expectedRevision?: number;
 }
 
 export function humanNotesCommand(
   trackId: string,
   notes: readonly Note[],
   summary: string,
-  { barFrom, barTo, beatsPerBar }: HumanNotesRange,
+  { barFrom, barTo, beatsPerBar, expectedRevision }: HumanNotesRange,
 ): Command {
   const rangeStart = (barFrom - 1) * beatsPerBar;
   const rangeEnd = barTo * beatsPerBar;
@@ -20,6 +21,7 @@ export function humanNotesCommand(
     type: 'set_notes',
     source: 'human',
     why: summary.slice(0, 200),
+    ...(expectedRevision === undefined ? {} : { expected_revision: expectedRevision }),
     args: {
       track_id: trackId,
       bar_from: barFrom,
