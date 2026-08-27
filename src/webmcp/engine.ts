@@ -284,9 +284,8 @@ export function createEngine(options: EngineOptions = {}): Engine {
   };
 
   /**
-   * Scales a render down when it would clip, so the file the person downloads is the song rather
-   * than square waves. The offline graph has no limiter (lane A, `src/audio/render.ts`); measured
-   * on 27 Aug a twelve-bar WAV peaked at +6.6 dBFS.
+   * Final encoding-boundary defence for injected exporters. The real offline render already owns
+   * the same peak ceiling; measured on 27 Aug the earlier path reached +6.6 dBFS.
    *
    * @param buffer - The rendered audio, scaled in place when it is over full scale.
    * @returns The loudness reading after any scaling.

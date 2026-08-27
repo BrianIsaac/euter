@@ -60,8 +60,24 @@ export async function renderSong(
   progress(10);
   const buffer = await (options.engine ?? DEFAULT_OFFLINE_ENGINE).render(request);
   throwIfAborted(options.signal);
+  limitPeak(buffer);
   progress(100);
   return buffer;
+}
+
+/** Applies a transparent whole-buffer ceiling before any audio encoder sees the render. */
+function limitPeak(buffer: AudioBuffer): void {
+  let peak = 0;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (const sample of data) peak = Math.max(peak, Math.abs(sample));
+  }
+  if (peak <= 1) return;
+  const gain = 0.98 / peak;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (let index = 0; index < data.length; index += 1) data[index] = (data[index] ?? 0) * gain;
+  }
 }
 
 function renderEvent(
