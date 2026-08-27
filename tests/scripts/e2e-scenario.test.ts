@@ -1,6 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { tools as productTools } from '../../src/webmcp/tools/index.ts';
 import {
   ACTIONS,
   captureInto,
@@ -73,6 +74,20 @@ describe('validateScenario', () => {
         expect(ACTIONS).toContain(step.action);
       }
     }
+  });
+
+  it('invokes every registered tool somewhere across the four scenarios', () => {
+    const invoked = new Set<string>();
+    for (const file of readdirSync(scenarioDir).filter((name) => name.endsWith('.json'))) {
+      for (const step of loadScenario(join(scenarioDir, file)).steps) {
+        if ((step.action === 'tool' || step.action === 'poll') && typeof step.tool === 'string') {
+          invoked.add(step.tool);
+        }
+      }
+    }
+    const missing = productTools.map(({ name }) => name).filter((name) => !invoked.has(name));
+    expect(missing, `tools with no end-to-end scenario: ${missing.join(', ')}`).toEqual([]);
+    expect(invoked.size).toBe(productTools.length);
   });
 
   it('names the step and the key when a scenario is malformed', () => {

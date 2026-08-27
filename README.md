@@ -215,9 +215,9 @@ pnpm e2e --help                             # every flag
 ```
 
 The four scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
-MIDI file, touching all 28 tools), `errors` (every error code provoked once), `stale-revision` (a
-person edits between two agent calls) and `recording-lock` (one track closed to edits while it is
-being sung). Both drivers run all four; `--driver cdp` is the fallback route
+MIDI file), `errors` (every error code provoked once), `stale-revision` (a person edits between two
+agent calls) and `recording-lock` (one track closed to edits while it is being sung). Together they
+invoke all 28 tools, which a unit test pins. Both drivers run all four; `--driver cdp` is the fallback route
 (`WebMCP.enable`, `invokeTool`, `toolResponded`) for an environment where
 `chrome-devtools-mcp` cannot be started.
 
