@@ -464,7 +464,7 @@ function connectToneInstrument(instrument: unknown, destination: unknown): void 
   connectable.connect(destination);
 }
 
-function nativeDestination(destination: unknown, context: BaseAudioContext): AudioNode {
+export function nativeDestination(destination: unknown, context: BaseAudioContext): AudioNode {
   let current = destination;
   const seen = new Set<unknown>();
   while (
@@ -478,14 +478,7 @@ function nativeDestination(destination: unknown, context: BaseAudioContext): Aud
     if (next === current) break;
     current = next;
   }
-  if (
-    typeof current === 'object' &&
-    current !== null &&
-    'connect' in current &&
-    'disconnect' in current
-  ) {
-    return current as AudioNode;
-  }
+  if (typeof AudioNode !== 'undefined' && current instanceof AudioNode) return current;
   return context.destination;
 }
 
