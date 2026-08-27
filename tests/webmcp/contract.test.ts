@@ -2,10 +2,6 @@
  * The contract every registered tool keeps (plan Testing, "Contract"; Decisions 16 and 18).
  */
 import { describe, expect, it } from 'vitest';
-import { createCommandBus } from '../../src/webmcp/bus.ts';
-import { createEnvironmentStore, readEnvironment } from '../../src/webmcp/environment.ts';
-import { createProbeDocument, probeReducer } from '../../src/webmcp/probe.ts';
-import { createRegistry } from '../../src/webmcp/registry.ts';
 import {
   BUDGETS,
   collectParameterDescriptions,
@@ -14,18 +10,11 @@ import {
 } from '../../src/webmcp/schemas.ts';
 import { tools } from '../../src/webmcp/tools/index.ts';
 import type { JsonSchemaObject } from '../../src/webmcp/schemas.ts';
+import { createHarness } from '../helpers/harness.ts';
 
 function makeRegistry() {
-  const bus = createCommandBus(probeReducer, createProbeDocument());
-  return {
-    bus,
-    registry: createRegistry({
-      tools,
-      bus,
-      environment: createEnvironmentStore(readEnvironment()),
-      nextTick: () => Promise.resolve(),
-    }),
-  };
+  const harness = createHarness();
+  return { bus: harness.engine.store, registry: harness.runtime.registry };
 }
 
 describe('tool contract', () => {

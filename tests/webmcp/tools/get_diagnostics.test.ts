@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createCommandBus } from '../../../src/webmcp/bus.ts';
 import { createEnvironmentStore, readEnvironment } from '../../../src/webmcp/environment.ts';
-import { createProbeDocument, probeReducer } from '../../../src/webmcp/probe.ts';
 import {
   buildDiagnostics,
   DIAGNOSTICS_PAYLOAD_LENGTH,
   getDiagnostics,
   TAIL_MARKER,
 } from '../../../src/webmcp/tools/get_diagnostics.ts';
+import { createTestEngine } from '../../helpers/harness.ts';
 
 const view = { statusText: () => 'ready (2)', toolCount: () => 2, callCount: () => 4 };
 
@@ -61,11 +60,13 @@ describe('get_diagnostics', () => {
   });
 
   it('reads from the context as a read tool with untrusted content', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const { engine } = createTestEngine();
+    const bus = engine.store;
     const envelope = await getDiagnostics.execute(
       {},
       {
         bus,
+        engine,
         environment: createEnvironmentStore(readEnvironment()),
         registry: view,
         signal: new AbortController().signal,

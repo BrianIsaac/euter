@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createCommandBus } from '../../src/webmcp/bus.ts';
 import { fail, ok, ToolError } from '../../src/webmcp/envelope.ts';
 import { createEnvironmentStore, readEnvironment } from '../../src/webmcp/environment.ts';
-import { createProbeDocument, probeReducer } from '../../src/webmcp/probe.ts';
 import { createQueue } from '../../src/webmcp/queue.ts';
 import {
   coerceInput,
@@ -15,11 +13,14 @@ import {
 import { tools } from '../../src/webmcp/tools/index.ts';
 import type { ToolDefinition } from '../../src/webmcp/types.ts';
 import { createFakeContext, installContexts } from '../helpers/fakeContext.ts';
+import { createTestEngine } from '../helpers/harness.ts';
 
 function deps(overrides: Partial<RegistryDeps> = {}): RegistryDeps {
+  const { engine } = createTestEngine();
   return {
     tools,
-    bus: createCommandBus(probeReducer, createProbeDocument()),
+    bus: engine.store,
+    engine,
     environment: createEnvironmentStore(readEnvironment()),
     queue: createQueue(),
     nextTick: () => Promise.resolve(),
@@ -129,7 +130,7 @@ describe('registry', () => {
 
   it('runs a tool through the browser path and returns the envelope as JSON', async () => {
     const context = createFakeContext();
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus, contexts: () => [context] }));
     await registry.register();
     const [, pingTool] = await context.getTools();
@@ -149,7 +150,7 @@ describe('registry', () => {
   });
 
   it('survives execute being called without options and with a JSON-string input', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
     const [, pingTool] = registry.describe();
     if (!pingTool) {
@@ -177,7 +178,7 @@ describe('registry', () => {
   });
 
   it('parses before enqueueing and returns INVALID_ARGUMENT as data', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
     const envelope = await registry.invoke('ping', { message: 7 });
     expect(envelope).toMatchObject({ ok: false, code: 'INVALID_ARGUMENT', recoverable: true });
@@ -286,7 +287,7 @@ describe('registry', () => {
   });
 
   it('serialises concurrent calls through the queue', async () => {
-    const bus = createCommandBus(probeReducer, createProbeDocument());
+    const bus = createTestEngine().engine.store;
     const registry = createRegistry(deps({ bus }));
     const results = await Promise.all([
       registry.invoke('ping', { message: 'a' }),

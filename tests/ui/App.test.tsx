@@ -18,7 +18,7 @@ describe('App', () => {
 
   it('shows the name, the tool status, the placeholders and the strip', async () => {
     const context = createFakeContext();
-    const runtime = createRuntime({ contexts: () => [context] });
+    const runtime = createRuntime({ contexts: () => [context], storage: null });
     render(<App runtime={runtime} />);
     expect(screen.getByRole('heading', { level: 1, name: 'Euterpe' })).toBeInTheDocument();
     expect(screen.getByTestId('tool-status')).toHaveTextContent('Agent tools: initialising');
@@ -28,7 +28,7 @@ describe('App', () => {
     expect(screen.getByTestId('tool-status')).toHaveTextContent('Agent tools: ready (2)');
     expect(screen.getByLabelText('Transport')).toHaveTextContent('28 Aug');
     expect(screen.getByLabelText('Piano roll')).toHaveTextContent('lane B');
-    expect(screen.getByLabelText('Tracks')).toHaveTextContent('No tracks yet');
+    expect(screen.getByLabelText('Tracks')).toHaveTextContent('4 track(s)');
     expect(screen.getByLabelText('Activity')).toBeInTheDocument();
     expect(screen.getByLabelText('Producer notes')).toBeInTheDocument();
     expect(screen.getByTestId('song-revision')).toHaveTextContent('r0');
@@ -41,7 +41,7 @@ describe('App', () => {
   });
 
   it('opens and closes the diagnostics and about panels', () => {
-    const runtime = createRuntime({ contexts: () => [] });
+    const runtime = createRuntime({ contexts: () => [], storage: null });
     render(<App runtime={runtime} />);
     expect(screen.queryByLabelText('Diagnostics')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
