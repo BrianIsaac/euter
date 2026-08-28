@@ -268,22 +268,27 @@ export function instrumentsByFamily(): Record<InstrumentFamily, string[]> {
 }
 
 /**
- * The first sample file a remote instrument fetches, for the reachability probe.
+ * The first sample file a remote instrument fetches.
  *
  * @param entry - The catalogue entry.
  * @param baseUrl - The instrument's remote base, already including its id.
  * @returns The URL, or null when the entry names no sample file.
  */
 export function firstSampleUrl(entry: InstrumentCatalogueEntry, baseUrl: string): string | null {
-  const first = entry.sample_map?.[0]?.sample ?? entry.sample_files?.[0];
-  return first === undefined ? null : `${trimSlash(baseUrl)}/${first}.ogg`;
+  return sampleUrls(entry, baseUrl)[0] ?? null;
+}
+
+/** Every sample object a remote instrument needs before smplr can sound its full range. */
+export function sampleUrls(entry: InstrumentCatalogueEntry, baseUrl: string): string[] {
+  const samples = entry.sample_map?.map(({ sample }) => sample) ?? entry.sample_files ?? [];
+  return samples.map((sample) => `${trimSlash(baseUrl)}/${sample}.ogg`);
 }
 
 /**
  * Asks the sample origin for one file's headers.
  *
- * The R2 CORS policy allows `GET` and `HEAD` from this origin (hosting setup, step 3), so a
- * `HEAD` costs one Class B operation and no bytes.
+ * The R2 CORS policy allows `GET` and `HEAD` from this origin (hosting setup, step 3), so each
+ * `HEAD` costs one Class B operation and no response-body bytes.
  *
  * @param url - The sample URL.
  * @returns Whether the origin answered with a success status.
@@ -335,13 +340,17 @@ export async function loadInstrument(
     : `${trimSlash(configuredBase ?? '')}/${entry.id}`;
 
   if (!entry.bundled) {
-    // smplr's loaders log a failed buffer and resolve anyway, so without this the sample origin
-    // answering 404 would give a silent track and no notice. Measured on 28 Aug against the
-    // deployed site while the remote half of the pack was still not uploaded.
-    const probeUrl = firstSampleUrl(entry, baseUrl);
+    // smplr's loaders log failed buffers and resolve anyway, so every expected object is checked
+    // before the loader sees the pack. Otherwise an absent or partial upload can leave a silent
+    // range with no notice.
+    const probeUrls = sampleUrls(entry, baseUrl);
     const probe = request.probeRemote ?? headProbe;
-    if (probeUrl !== null && !(await probe(probeUrl))) {
-      return substitute(`${entry.name} is not on the sample origin`);
+    const served = await Promise.all(probeUrls.map((url) => probe(url)));
+    if (served.some((present) => !present)) {
+      const reason = served.every((present) => !present)
+        ? `${entry.name} is not on the sample origin`
+        : `${entry.name}'s sample origin is incomplete`;
+      return substitute(reason);
     }
   }
 
