@@ -59,6 +59,7 @@ describe('About', () => {
 
   it('shows the configured origin and every fallback notice in the panel', () => {
     vi.stubEnv('VITE_SAMPLES_BASE_URL', 'https://pack.example');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     render(
       <About
         onClose={() => undefined}
@@ -67,6 +68,7 @@ describe('About', () => {
     );
     expect(screen.getByTestId('sample-origin')).toHaveTextContent('https://pack.example');
     expect(screen.getAllByText('Electric piano needs the pack.')).toHaveLength(2);
+    expect(consoleError).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
 });
