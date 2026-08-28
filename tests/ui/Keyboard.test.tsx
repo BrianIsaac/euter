@@ -54,4 +54,22 @@ describe('Keyboard', () => {
     fireEvent.keyDown(screen.getByLabelText('Song title'), { key: 'a' });
     expect(input.getSnapshot().activePitches).toEqual([]);
   });
+
+  it('leaves modified browser shortcuts untouched', () => {
+    const input = recorder();
+    render(<Keyboard recorder={input} />);
+
+    for (const init of [
+      { key: 'z', ctrlKey: true },
+      { key: 'x', metaKey: true },
+      { key: 'c', ctrlKey: true },
+      { key: 'v', altKey: true },
+    ]) {
+      const event = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+
+    expect(input.getSnapshot()).toMatchObject({ octave: 4, velocity: 0.8 });
+  });
 });

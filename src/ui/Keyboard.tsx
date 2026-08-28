@@ -43,6 +43,7 @@ export function Keyboard({ recorder }: KeyboardProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (isEditableTarget(event.target)) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (recorder.pressKey(event.key, event.repeat)) event.preventDefault();
     };
     const onKeyUp = (event: KeyboardEvent): void => {
