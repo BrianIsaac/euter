@@ -22,9 +22,11 @@ export const getTake: ToolDefinition<typeof getTakeInput> = {
     const take = requireTake(song, args.take_id);
     const data = { ...takeData(take, song.time_sig[0]), context: takeContext(song, take) };
     const advice =
-      take.median_clarity < 0.6
-        ? ' The take is noisy; ask for another, or keep the raw take.'
-        : ' Next: propose_options with kind take; commit_take keeps the raw take.';
+      take.notes.length === 0
+        ? ' No notes were detected; ask for another take.'
+        : take.median_clarity < 0.6
+          ? ' The take is noisy; ask for another, or keep the raw take.'
+          : ' Next: propose_options with kind take; commit_take keeps the raw take.';
     return ok(
       song.revision,
       [],

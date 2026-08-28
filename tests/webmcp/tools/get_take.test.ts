@@ -87,6 +87,22 @@ describe('get_take', () => {
     harness.engine.dispose();
   });
 
+  it('asks for another take when no notes were detected, regardless of clarity', async () => {
+    const harness = createHarness();
+    harness.engine.addTake(
+      { ...makeTake('take-empty', []), median_clarity: 0.95, target_bars: [5, 8] },
+      'Kept the silent capture.',
+      'human',
+    );
+    const envelope = (await harness.invoke('get_take', { take_id: 'take-empty' })) as TakeEnvelope;
+
+    expect(envelope.data.notes_total).toBe(0);
+    expect(envelope.summary).toContain('No notes were detected; ask for another take.');
+    expect(envelope.summary).not.toContain('propose_options');
+    expect(envelope.data.context?.target_bars).toEqual([5, 8]);
+    harness.engine.dispose();
+  });
+
   it('refuses a take that is not in the song', async () => {
     const harness = createHarness();
     await expect(harness.invoke('get_take', { take_id: 'take-9' })).resolves.toMatchObject({

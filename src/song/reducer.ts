@@ -468,6 +468,13 @@ function commitTakeToTrack(
   range: [number, number];
   track: Track;
 } {
+  if (take.notes.length === 0) {
+    throw new ToolError(
+      'INVALID_ARGUMENT',
+      `Take "${take.id}" has no detected notes. Record or import another take.`,
+      true,
+    );
+  }
   const track = requireTrack(document, trackId);
   const maximumBeat = document.bars * document.time_sig[0];
   if (
@@ -520,6 +527,13 @@ function proposeOptions(
     interpretedTake = document.takes.find(({ id }) => id === command.args.take_id);
     if (interpretedTake === undefined) {
       throw new ToolError('TAKE_NOT_FOUND', `Take "${command.args.take_id}" does not exist.`, true);
+    }
+    if (interpretedTake.notes.length === 0) {
+      throw new ToolError(
+        'INVALID_ARGUMENT',
+        `Take "${interpretedTake.id}" has no detected notes. Record or import another take.`,
+        true,
+      );
     }
     destinationTrack = requireTrack(document, command.args.track_id);
     if (

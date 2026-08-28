@@ -38,9 +38,11 @@ export const stopRecording: ToolDefinition<typeof stopRecordingInput> = {
       ...data,
       placed_on_track: trackId,
       next:
-        data.median_clarity < 0.6
-          ? 'The take is noisy; offer another before committing it.'
-          : 'Next: get_take for context, then propose_options with kind take. commit_take keeps the raw take.',
+        data.notes_total === 0
+          ? 'No notes were detected; offer another take.'
+          : data.median_clarity < 0.6
+            ? 'The take is noisy; offer another before committing it.'
+            : 'Next: get_take for context, then propose_options with kind take. commit_take keeps the raw take.',
     });
   },
 };

@@ -122,6 +122,44 @@ describe('propose_options', () => {
     harness.engine.dispose();
   });
 
+  it('refuses to make an auditionable proposal from a take with no detected notes', async () => {
+    const harness = createHarness();
+    harness.engine.addTake(
+      {
+        ...transcribePcmToTake(new Float32Array(4096), 16_000, {
+          id: 'take-empty',
+          source: 'import',
+          bpm: 96,
+        }),
+        target_track_id: 'melody',
+        target_bars: [1, 2],
+      },
+      'Kept the silent capture.',
+      'human',
+    );
+
+    await expect(
+      harness.invoke('propose_options', {
+        kind: 'take',
+        take_id: 'take-empty',
+        track_id: 'melody',
+        bar_from: 1,
+        bar_to: 2,
+        options: [
+          { label: 'Guess one', why: 'A guess.', notes: [{ p: 60, s: 0, d: 1 }] },
+          { label: 'Guess two', why: 'Another guess.', notes: [{ p: 62, s: 0, d: 1 }] },
+        ],
+        why: 'There is no observed note evidence.',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'INVALID_ARGUMENT',
+      message: 'Take "take-empty" has no detected notes. Record or import another take.',
+    });
+    expect(harness.engine.store.getDocument().option_sets).toEqual([]);
+    harness.engine.dispose();
+  });
+
   it('binds interpretations to a real rough take and always adds its raw escape path', async () => {
     const harness = createHarness();
     const wav = decodePcm16Wav(
