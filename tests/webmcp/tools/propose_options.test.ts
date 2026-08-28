@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { decodePcm16Wav } from '../../../scripts/bench-takes.ts';
 import { transcribePcmToTake } from '../../../src/transcribe/takes.ts';
-import { createHarness } from '../../helpers/harness.ts';
+import { createHarness, makeTake } from '../../helpers/harness.ts';
 
 interface ProposeEnvelope {
   ok: true;
@@ -118,6 +118,39 @@ describe('propose_options', () => {
       message: 'The song has 8 bars.',
       recoverable: true,
     });
+    expect(harness.engine.store.getDocument().option_sets).toEqual([]);
+    harness.engine.dispose();
+  });
+
+  it('refuses a reading that would read as the application-owned raw card', async () => {
+    const harness = createHarness();
+    const take = {
+      ...makeTake('take-1'),
+      target_track_id: 'melody',
+      target_bars: [1, 1] as [number, number],
+    };
+    harness.engine.addTake(take, 'Kept the rough take.', 'human');
+
+    for (const label of [
+      'None of these — keep what I sang',
+      'none of these - keep what i sang',
+      '  None of these – keep  what I sang ',
+    ]) {
+      await expect(
+        harness.invoke('propose_options', {
+          kind: 'take',
+          take_id: take.id,
+          track_id: 'melody',
+          bar_from: 1,
+          bar_to: 1,
+          options: [
+            { label, why: 'It pretends to be the escape card.', notes: [{ p: 72, s: 0, d: 1 }] },
+            { label: 'A reading', why: 'An honest reading.', notes: [{ p: 62, s: 0, d: 1 }] },
+          ],
+          why: 'One card impersonates the app.',
+        }),
+      ).resolves.toMatchObject({ ok: false, code: 'INVALID_ARGUMENT' });
+    }
     expect(harness.engine.store.getDocument().option_sets).toEqual([]);
     harness.engine.dispose();
   });

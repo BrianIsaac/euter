@@ -85,6 +85,50 @@ describe('OptionCards', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('marks the application-owned raw card so no agent card can pass for it', () => {
+    const takeSet: TeachingOptionSet = {
+      id: 'options-take',
+      kind: 'take',
+      bar_from: 1,
+      bar_to: 1,
+      take_id: 'take-1',
+      track_id: 'melody',
+      options: [
+        {
+          id: 'option-1',
+          label: 'A reading',
+          why: 'It groups the drifting segments.',
+          track_id: 'melody',
+          notes: [{ p: 60, s: 0, d: 1, v: 0.8, source: 'agent' }],
+        },
+        {
+          id: 'option-2',
+          label: 'None of these — keep what I sang',
+          why: 'No correction: this keeps the rough transcription and timing exactly as captured.',
+          track_id: 'melody',
+          notes: [{ p: 60, s: 0, d: 1, v: 0.8, source: 'take' }],
+          raw_take: true,
+        },
+      ],
+      chosen_option_id: null,
+    };
+    render(
+      <OptionCards
+        song={songWith([takeSet])}
+        previewOptionId={null}
+        onAudition={() => undefined}
+        onChoose={() => undefined}
+      />,
+    );
+
+    const cards = screen.getAllByTestId('option-card');
+    expect(cards[0]).not.toHaveAttribute('data-raw-take');
+    expect(cards[1]).toHaveAttribute('data-raw-take', 'true');
+    expect(cards[1]).toHaveClass('option-card-raw');
+    expect(within(cards[1] as HTMLElement).getByText('from this app')).toBeInTheDocument();
+    expect(within(cards[0] as HTMLElement).queryByText('from this app')).not.toBeInTheDocument();
+  });
+
   it('shows only the newest open proposal for the same kind and bars', () => {
     const replacement: TeachingOptionSet = {
       ...set,

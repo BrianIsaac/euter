@@ -58,10 +58,18 @@ export function OptionCards({ song, previewOptionId, onAudition, onChoose }: Opt
               return (
                 <div
                   key={option.id}
-                  className={`option-card${previewOptionId === option.id ? ' auditioning' : ''}`}
+                  className={`option-card${previewOptionId === option.id ? ' auditioning' : ''}${
+                    option.raw_take === true ? ' option-card-raw' : ''
+                  }`}
                   data-testid="option-card"
+                  {...(option.raw_take === true ? { 'data-raw-take': 'true' } : {})}
                 >
-                  <strong>{option.label}</strong>
+                  <strong>
+                    {option.label}
+                    {option.raw_take === true ? (
+                      <span className="option-badge">from this app</span>
+                    ) : null}
+                  </strong>
                   <p>{option.why}</p>
                   {detail === null ? null : <p className="mono option-detail">{detail}</p>}
                   <div className="option-actions">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TakeData } from '../../../src/webmcp/tools/shared.ts';
+import { OUTPUT_BUDGET } from '../../../src/webmcp/envelope.ts';
+import { TAKE_NOTE_LIMIT, type TakeData } from '../../../src/webmcp/tools/shared.ts';
 import { createHarness, makeTake } from '../../helpers/harness.ts';
 
 interface TakeEnvelope {
@@ -100,6 +101,57 @@ describe('get_take', () => {
     expect(envelope.summary).toContain('No notes were detected; ask for another take.');
     expect(envelope.summary).not.toContain('propose_options');
     expect(envelope.data.context?.target_bars).toEqual([5, 8]);
+    harness.engine.dispose();
+  });
+
+  it('stays inside the output budget for a full-length take on an arranged song', async () => {
+    const harness = createHarness();
+    const notes = Array.from({ length: TAKE_NOTE_LIMIT + 6 }, (_, index) => ({
+      p: 60 + (index % 10),
+      s: index * 0.3,
+      d: 0.25,
+      v: 0.8,
+      s_raw: index * 0.3,
+      d_raw: 0.25,
+      source: 'take' as const,
+    }));
+    harness.engine.addTake(
+      {
+        ...makeTake('take-long', notes),
+        target_track_id: 'melody',
+        target_bars: [1, 8] as [number, number],
+      },
+      'Kept a long hum.',
+      'human',
+    );
+
+    const envelope = (await harness.invoke('get_take', { take_id: 'take-long' })) as TakeEnvelope;
+
+    expect(envelope.ok).toBe(true);
+    expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(OUTPUT_BUDGET);
+    expect(envelope.data.notes).toHaveLength(TAKE_NOTE_LIMIT);
+    expect(envelope.data.notes_total).toBe(TAKE_NOTE_LIMIT + 6);
+    expect(envelope.data.context?.key).toBe('C major');
+    expect(envelope.data.context?.bounded).toBe(true);
+    harness.engine.dispose();
+  });
+
+  it('leaves a short take context whole and unflagged', async () => {
+    const harness = createHarness();
+    harness.engine.addTake(
+      {
+        ...makeTake('take-short'),
+        target_track_id: 'melody',
+        target_bars: [1, 1] as [number, number],
+      },
+      'Kept a short hum.',
+      'human',
+    );
+
+    const envelope = (await harness.invoke('get_take', { take_id: 'take-short' })) as TakeEnvelope;
+
+    expect(envelope.data.context?.bounded).toBeUndefined();
+    expect(envelope.data.context?.other_tracks).toHaveLength(3);
     harness.engine.dispose();
   });
 

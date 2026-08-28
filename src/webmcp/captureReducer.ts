@@ -9,7 +9,12 @@ import type { Note, SongDocument, Take } from '../song/types.ts';
 import type { Reducer, ReducerResult } from './bus.ts';
 import { ToolError } from './envelope.ts';
 
-/** The take shapes the capture path produces, validated before it enters the document. */
+/**
+ * The take shapes the capture path produces, validated before it enters the document. The
+ * destination fields are checked here as well: persistence rejects an empty track id or an
+ * unordered bar pair, and a take that cannot be saved would silently cost the person every later
+ * edit.
+ */
 export function isTake(value: unknown): value is Take {
   if (typeof value !== 'object' || value === null) return false;
   const take = value as Partial<Take>;
@@ -26,7 +31,27 @@ export function isTake(value: unknown): value is Take {
     typeof take.voiced_ratio === 'number' &&
     typeof take.median_clarity === 'number' &&
     Array.isArray(take.pitch_range) &&
-    (typeof take.tempo_hint === 'number' || take.tempo_hint === null)
+    (typeof take.tempo_hint === 'number' || take.tempo_hint === null) &&
+    isTargetTrackId(take.target_track_id) &&
+    isTargetBars(take.target_bars)
+  );
+}
+
+function isTargetTrackId(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && value.trim().length > 0);
+}
+
+function isTargetBars(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length !== 2) return false;
+  const [from, to] = value as [unknown, unknown];
+  return (
+    typeof from === 'number' &&
+    typeof to === 'number' &&
+    Number.isInteger(from) &&
+    Number.isInteger(to) &&
+    from >= 1 &&
+    to >= from
   );
 }
 

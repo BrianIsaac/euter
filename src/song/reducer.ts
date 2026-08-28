@@ -12,6 +12,7 @@ import { parseSongCommand, type SongCommand } from './commands.ts';
 import {
   cloneSong,
   type Note,
+  type NoteSource,
   type SongDocument,
   type Take,
   type TeachingOption,
@@ -25,6 +26,14 @@ export interface SongReducerOptions {
   /** Deterministic id source; tests and the UI may supply one. */
   idFactory?: (prefix: string) => string;
 }
+
+/**
+ * The escape card the application, not the agent, adds to every take proposal. Keeping the label
+ * here and refusing any option that reads as it is what stops a proposal from shadowing it.
+ */
+export const RAW_TAKE_LABEL = 'None of these — keep what I sang';
+export const RAW_TAKE_WHY =
+  'No correction: this keeps the rough transcription and timing exactly as captured.';
 
 const MIX_DEFAULTS: Record<TrackKind, Pick<Track, 'volume_db' | 'pan'>> = {
   melody: { volume_db: -3, pan: 0 },
@@ -437,13 +446,11 @@ function commitTake(
   if (!take) {
     throw new ToolError('TAKE_NOT_FOUND', `Take "${command.args.take_id}" does not exist.`, true);
   }
-  const committed = commitTakeToTrack(
-    document,
-    take,
-    command.args.track_id,
-    command.args.grid,
-    command.args.quantize_strength,
-  );
+  const committed = commitTakeToTrack(document, take, command.args.track_id, {
+    grid: command.args.grid,
+    strength: command.args.quantize_strength,
+    source: 'take',
+  });
   return finish(
     document,
     command,
@@ -455,13 +462,21 @@ function commitTake(
   );
 }
 
+interface TakeCommitOptions {
+  grid: '8n' | '16n';
+  strength: number;
+  /** Forces one provenance on every committed note; omitted, each note keeps its own. */
+  source?: NoteSource;
+  /** The bars the commit owns; omitted, the committed notes' own span. */
+  bars?: [number, number];
+}
+
 /** Writes either the raw take or a chosen reading through the reversible take-commit path. */
 function commitTakeToTrack(
   document: SongDocument,
   take: Take,
   trackId: string,
-  grid: '8n' | '16n',
-  strength: number,
+  { grid, strength, source, bars }: TakeCommitOptions,
 ): {
   tracks: Track[];
   take_request: SongDocument['take_request'];
@@ -487,13 +502,13 @@ function commitTakeToTrack(
     );
   }
   const notes = quantizeNotes(
-    take.notes.map((note) => ({ ...note, source: 'take' })),
+    take.notes.map((note) => (source === undefined ? note : { ...note, source })),
     grid,
     strength,
     0,
     maximumBeat,
   );
-  const range = noteRange(notes, document.time_sig[0], document.bars);
+  const range = bars ?? noteRange(notes, document.time_sig[0], document.bars);
   const start = (range[0] - 1) * document.time_sig[0];
   const end = range[1] * document.time_sig[0];
   const updated = {
@@ -578,6 +593,13 @@ function proposeOptions(
           true,
         );
       }
+      if (readsAsRawCard(option.label)) {
+        throw new ToolError(
+          'INVALID_ARGUMENT',
+          `"${RAW_TAKE_LABEL}" is the card the app adds; a reading needs its own label.`,
+          true,
+        );
+      }
     }
     if (option.chords) {
       for (const chord of option.chords) {
@@ -606,16 +628,15 @@ function proposeOptions(
         s: beatOffset + s,
         d,
         v: v ?? 0.8,
-        ...(isTake ? { s_raw: beatOffset + s, d_raw: d } : {}),
-        source: isTake ? ('take' as const) : command.source,
+        source: command.source,
       })),
     };
   });
   if (isTake && interpretedTake !== undefined && destinationTrack !== undefined) {
     options.push({
       id: uniqueId(document, 'option', idFactory),
-      label: 'None of these — keep what I sang',
-      why: 'No correction: this keeps the rough transcription and timing exactly as captured.',
+      label: RAW_TAKE_LABEL,
+      why: RAW_TAKE_WHY,
       track_id: destinationTrack.id,
       notes: interpretedTake.notes.map((note) => ({ ...note })),
       raw_take: true,
@@ -659,6 +680,13 @@ function chooseOption(
       true,
     );
   }
+  if (optionSet.chosen_option_id !== null) {
+    throw new ToolError(
+      'INVALID_ARGUMENT',
+      `Option set "${optionSet.id}" was already resolved. Undo that choice before choosing again.`,
+      true,
+    );
+  }
   let chords = document.chords;
   if (option.chords) {
     const bars = new Set(option.chords.map(({ bar }) => bar));
@@ -679,7 +707,12 @@ function chooseOption(
     const chosenTake = option.raw_take
       ? take
       : { ...take, notes: (option.notes ?? []).map((note) => ({ ...note })) };
-    const committed = commitTakeToTrack(document, chosenTake, optionSet.track_id, '16n', 0);
+    const committed = commitTakeToTrack(document, chosenTake, optionSet.track_id, {
+      grid: '16n',
+      strength: 0,
+      ...(option.raw_take === true ? { source: 'take' as const } : {}),
+      bars: [optionSet.bar_from, optionSet.bar_to],
+    });
     tracks = committed.tracks;
     takeRequest = committed.take_request;
   } else if (option.track_id && option.notes) {
@@ -858,6 +891,19 @@ function noteRange(
     Math.floor(Math.max(...notes.map(({ s, d }) => Math.max(s, s + d - 0.000_001))) / beatsPerBar) +
       1,
   ];
+}
+
+/** Case, spacing and dash spelling are not identity: any of them would read as the raw card. */
+function readsAsRawCard(label: string): boolean {
+  return normaliseLabel(label) === normaliseLabel(RAW_TAKE_LABEL);
+}
+
+function normaliseLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[\u2010-\u2015\u2212]/gu, '-')
+    .replace(/\s+/gu, ' ')
+    .trim();
 }
 
 function rangeForTake(take: Take, beatsPerBar: number, fallbackBar: number): [number, number] {

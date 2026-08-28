@@ -4,7 +4,7 @@
  */
 import type { Note, SongDocument, Take } from '../../song/types.ts';
 import type { CommandResult } from '../bus.ts';
-import { ToolError } from '../envelope.ts';
+import { OUTPUT_BUDGET, ToolError } from '../envelope.ts';
 import type { ToolContext } from '../types.ts';
 
 export interface WriteFields {
@@ -14,6 +14,9 @@ export interface WriteFields {
 
 /** Notes returned in one take payload before the rest are summarised away. */
 export const TAKE_NOTE_LIMIT = 24;
+
+/** Notes a bounded take read never drops, however little of the budget the context leaves. */
+export const TAKE_NOTE_FLOOR = 4;
 
 export interface TakeData {
   take_id: string;
@@ -41,6 +44,8 @@ export interface TakeContext {
     notes_total: number;
     pitch_range?: [number, number];
   }[];
+  /** True when the output budget forced evidence out of the lists above. */
+  bounded?: true;
 }
 
 /**
@@ -172,6 +177,68 @@ function takeBarRange(take: Take, beatsPerBar: number, fallbackBar: number): [nu
   const first = Math.min(...take.notes.map(({ s }) => s));
   const last = Math.max(...take.notes.map(({ s, d }) => Math.max(s, s + d - 0.000_001)));
   return [Math.floor(first / beatsPerBar) + 1, Math.floor(last / beatsPerBar) + 1];
+}
+
+/**
+ * The order a take read gives ground in when the whole payload will not fit Chrome's budget: the
+ * musical context is the addition, so it yields before the notes and quality readings that
+ * `get_take` returned before the context existed. `notes_total` keeps every trim visible.
+ */
+const REDUCTIONS: ((data: TakeData) => TakeData | null)[] = [
+  (data) =>
+    shrinkContext(data, (context) =>
+      context.other_tracks.length === 0
+        ? null
+        : { ...context, other_tracks: context.other_tracks.slice(0, -1), bounded: true },
+    ),
+  (data) =>
+    shrinkContext(data, (context) =>
+      context.sections.length === 0
+        ? null
+        : { ...context, sections: context.sections.slice(0, -1), bounded: true },
+    ),
+  (data) =>
+    shrinkContext(data, (context) =>
+      context.chords.length === 0
+        ? null
+        : { ...context, chords: context.chords.slice(0, -1), bounded: true },
+    ),
+  (data) =>
+    data.notes.length <= TAKE_NOTE_FLOOR ? null : { ...data, notes: data.notes.slice(0, -1) },
+];
+
+function shrinkContext(
+  data: TakeData,
+  shrink: (context: TakeContext) => TakeContext | null,
+): TakeData | null {
+  if (data.context === undefined) return null;
+  const context = shrink(data.context);
+  return context === null ? null : { ...data, context };
+}
+
+/**
+ * Trims a take read until the envelope it will sit in fits the output budget.
+ *
+ * @param data - The full payload, context included.
+ * @param measure - Serialised length of the envelope built from a candidate payload.
+ * @param budget - The character limit; defaults to Chrome's 1,500.
+ * @returns The largest payload that fits, or the smallest reachable one.
+ */
+export function boundTakeRead(
+  data: TakeData,
+  measure: (candidate: TakeData) => number,
+  budget = OUTPUT_BUDGET,
+): TakeData {
+  let current = data;
+  for (const reduce of REDUCTIONS) {
+    while (measure(current) > budget) {
+      const next = reduce(current);
+      if (next === null) break;
+      current = next;
+    }
+    if (measure(current) <= budget) return current;
+  }
+  return current;
 }
 
 function noteView(note: Note, offset: number): { p: number; s: number; d: number; v: number } {

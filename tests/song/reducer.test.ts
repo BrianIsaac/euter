@@ -367,13 +367,105 @@ describe('song reducer and command bus', () => {
     expect(document.tracks[0]?.notes.filter(({ s }) => s < 4).map(({ p }) => p)).toEqual([60, 62]);
     expect(document.tracks[0]?.notes.filter(({ s }) => s < 4)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: 'take', s: 0.12, s_raw: 0.12, d_raw: 0.8 }),
+        expect.objectContaining({ source: 'agent', s: 0.12, s_raw: 0.12, d_raw: 0.8 }),
       ]),
     );
     expect(document.takes[0]).toEqual(rawTake);
     expect(document.notes_log.at(-1)?.why).toBe(
       'The short middle segment sounds like drift between two held notes.',
     );
+  });
+
+  it('replaces the whole advertised range even when the chosen reading is narrower', () => {
+    const rawTake = {
+      id: 'take-two-bars',
+      source: 'mic' as const,
+      target_track_id: 'melody',
+      target_bars: [1, 2] as [number, number],
+      notes: [
+        { p: 60, s: 0, d: 1, v: 0.8, s_raw: 0, d_raw: 1, source: 'take' as const },
+        { p: 62, s: 5, d: 1, v: 0.8, s_raw: 5, d_raw: 1, source: 'take' as const },
+      ],
+      pitch_track: [],
+      duration_s: 3,
+      voiced_ratio: 0.9,
+      median_clarity: 0.9,
+      pitch_range: [60, 62] as [number, number],
+      tempo_hint: 92,
+    };
+    const songStore = store({ ...loadExampleSong(), takes: [rawTake] });
+    songStore.dispatch(
+      agent('propose_options', {
+        kind: 'take',
+        take_id: rawTake.id,
+        track_id: 'melody',
+        bar_from: 1,
+        bar_to: 2,
+        options: [
+          {
+            label: 'One held note',
+            why: 'The second segment sounds like breath, not a note.',
+            notes: [{ p: 60, s: 0, d: 1 }],
+          },
+          {
+            label: 'Both notes',
+            why: 'Both segments are deliberate.',
+            notes: [
+              { p: 60, s: 0, d: 1 },
+              { p: 62, s: 5, d: 1 },
+            ],
+          },
+        ],
+      }),
+    );
+    const narrow = songStore.getDocument().option_sets[0]?.options[0]?.id;
+    songStore.dispatch(agent('choose_option', { option_id: narrow }, 'The first reading.'));
+
+    expect(songStore.getDocument().tracks[0]?.notes.filter(({ s }) => s < 8)).toEqual([
+      expect.objectContaining({ p: 60, s: 0, source: 'agent' }),
+    ]);
+  });
+
+  it('refuses to resolve an option set a second time', () => {
+    const rawTake = {
+      id: 'take-once',
+      source: 'mic' as const,
+      target_track_id: 'melody',
+      target_bars: [1, 1] as [number, number],
+      notes: [{ p: 60, s: 0, d: 1, v: 0.8, s_raw: 0, d_raw: 1, source: 'take' as const }],
+      pitch_track: [],
+      duration_s: 2,
+      voiced_ratio: 0.9,
+      median_clarity: 0.9,
+      pitch_range: [60, 60] as [number, number],
+      tempo_hint: 92,
+    };
+    const songStore = store({ ...loadExampleSong(), takes: [rawTake] });
+    songStore.dispatch(
+      agent('propose_options', {
+        kind: 'take',
+        take_id: rawTake.id,
+        track_id: 'melody',
+        bar_from: 1,
+        bar_to: 1,
+        options: [
+          { label: 'Up', why: 'It climbs.', notes: [{ p: 64, s: 0, d: 1 }] },
+          { label: 'Down', why: 'It falls.', notes: [{ p: 57, s: 0, d: 1 }] },
+        ],
+      }),
+    );
+    const set = songStore.getDocument().option_sets[0];
+    songStore.dispatch(agent('choose_option', { option_id: set?.options[0]?.id }, 'The climb.'));
+    const revision = songStore.getDocument().revision;
+    const raw = set?.options.find(({ raw_take }) => raw_take)?.id;
+
+    expect(() => songStore.dispatch(agent('choose_option', { option_id: raw }, 'Raw.'))).toThrow(
+      ToolError,
+    );
+    expect(songStore.getDocument().revision).toBe(revision);
+    expect(songStore.getDocument().tracks[0]?.notes.filter(({ s }) => s < 4)).toEqual([
+      expect.objectContaining({ p: 64, source: 'agent' }),
+    ]);
   });
 
   it('commits the untouched raw take when none of the readings is right', () => {
@@ -422,5 +514,11 @@ describe('song reducer and command bus', () => {
       expect.objectContaining({ p: 63, s: 1.21, d: 0.74, s_raw: 1.21, d_raw: 0.74 }),
     ]);
     expect(rawOption?.label).toBe('None of these — keep what I sang');
+    expect(
+      songStore
+        .getDocument()
+        .tracks[0]?.notes.filter(({ s }) => s < 4)
+        .every(({ source }) => source === 'take'),
+    ).toBe(true);
   });
 });

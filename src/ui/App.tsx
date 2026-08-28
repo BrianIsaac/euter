@@ -195,7 +195,10 @@ export function App({ runtime }: AppProps) {
       .importFile(file)
       .then((imported) => {
         engine.addTake(
-          { ...imported.take, target_track_id: selectedTrackId },
+          {
+            ...imported.take,
+            ...(selectedTrackId === '' ? {} : { target_track_id: selectedTrackId }),
+          },
           `Imported ${imported.fileName} as a take.`,
           'human',
         );
