@@ -195,10 +195,18 @@ describe('engine', () => {
     });
     await settle();
     expect(transport.calls.play).toEqual([]);
+    expect(engine.getSnapshot().takeBacking).toBeNull();
 
     complete?.();
     const result = await counting;
     expect(transport.calls.play).toEqual([{ from_bar: 1 }]);
+    expect(engine.getSnapshot().takeBacking).toEqual({
+      startBar: 1,
+      trackId: 'bass',
+      mute: true,
+      solo: false,
+      silent: true,
+    });
     result.finish?.();
     engine.dispose();
   });

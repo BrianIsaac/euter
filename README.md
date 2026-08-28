@@ -223,9 +223,10 @@ pnpm e2e --headless                         # supported by Chrome 152; headed re
 pnpm e2e --help                             # every flag
 ```
 
-The four scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
+The five scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
 MIDI file), `errors` (every error code provoked once), `stale-revision` (a person edits between two
-agent calls) and `recording-lock` (one track closed to edits while it is being sung). Together they
+agent calls), `recording-lock` (one track closed to edits while it is being sung) and
+`take-backing` (the actual bar and mute state used behind a bar-one requested take). Together they
 invoke all 28 tools. The unit test rejects missing or assertion-free scenario entries, and a full
 run independently compares the registered surface with tools that actually passed a behavioural
 assertion. `--driver mcp` is strict: it fails if chrome-devtools-mcp cannot start, so a green default

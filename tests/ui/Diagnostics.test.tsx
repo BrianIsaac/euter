@@ -4,6 +4,7 @@ import { Diagnostics } from '../../src/ui/Diagnostics.tsx';
 import { tools } from '../../src/webmcp/tools/index.ts';
 import { createRuntime } from '../../src/webmcp/runtime.ts';
 import { createFakeContext } from '../helpers/fakeContext.ts';
+import { createHarness } from '../helpers/harness.ts';
 
 class FakeAudioContext {
   state = 'suspended';
@@ -110,6 +111,28 @@ describe('Diagnostics', () => {
     expect(screen.getByTestId('midi-result')).toHaveTextContent('NotSupportedError');
     expect(screen.getByText('No tool calls yet.')).toBeInTheDocument();
     expect(screen.getByTestId('registry-status')).toHaveTextContent('initialising');
+  });
+
+  it('shows the last requested-take backing start and effective track mute', async () => {
+    const harness = createHarness();
+    const countIn = await harness.engine.transportPort.countIn({
+      bars: 1,
+      metronome: true,
+      targetBar: 1,
+      mutedTrackId: 'melody',
+    });
+
+    render(<Diagnostics runtime={harness.runtime} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('heading', { name: 'Requested-take backing' })).toBeInTheDocument();
+    expect(screen.getByTestId('take-backing-start')).toHaveTextContent('bar 1');
+    expect(screen.getByTestId('take-backing-track')).toHaveTextContent('Melody (melody)');
+    expect(screen.getByTestId('take-backing-state')).toHaveTextContent(
+      'silent (mute on, solo off)',
+    );
+
+    countIn.finish?.();
+    harness.engine.dispose();
   });
 
   it('shows an open microphone with a stop button and stops it', async () => {

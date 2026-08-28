@@ -158,7 +158,7 @@ export async function startSelectedDriver(kind, starters) {
  * @returns {string[]} Absolute paths, in the plan's order.
  */
 export function scenarioPaths(names) {
-  const order = ['demo', 'errors', 'stale-revision', 'recording-lock'];
+  const order = ['demo', 'errors', 'stale-revision', 'recording-lock', 'take-backing'];
   const present = readdirSync(scenarioDir)
     .filter((file) => file.endsWith('.json'))
     .map((file) => basename(file, '.json'));
