@@ -66,7 +66,7 @@ came back.
 
 ## Measured in the ChatGPT desktop app
 
-Generated from [`docs/research/day-one-checks.md`](docs/research/day-one-checks.md), which the
+Generated from [`src/content/day-one-checks.md`](src/content/day-one-checks.md), which the
 operator filled by hand on 27 Aug 2026 and which the in-app About panel renders verbatim.
 
 | Field                                              | Value                                                                                                                      |
@@ -159,8 +159,7 @@ or listening. The desktop bridges (**ableton-mcp**, **reaper-mcp**, **WigAI** fo
 Studio's first-party **Gopher**) all need an installed DAW and a local socket. None of them hears
 the person in a browser tab, arranges that hum into sections on a timeline the person can hear,
 or attaches the reason to the edit - and none is driven by the person's own agent through the
-browser's own standard. The research behind this paragraph is in
-[`docs/research/market-and-prior-art.md`](docs/research/market-and-prior-art.md).
+browser's own standard.
 
 ## Sounds and licences
 
@@ -221,9 +220,8 @@ invoke all 28 tools, which a unit test pins. Both drivers run all four; `--drive
 (`WebMCP.enable`, `invokeTool`, `toolResponded`) for an environment where
 `chrome-devtools-mcp` cannot be started.
 
-Research and plans live under [`docs/`](docs). Hosting steps are in
-[`docs/research/hosting-setup.md`](docs/research/hosting-setup.md); the day-one measurements are in
-[`docs/research/day-one-checks.md`](docs/research/day-one-checks.md) and are read into the About
+The day-one measurements are in
+[`src/content/day-one-checks.md`](src/content/day-one-checks.md) and are read into the About
 panel at build time.
 
 ## Licence

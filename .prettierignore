@@ -3,6 +3,9 @@ dist
 coverage
 pnpm-lock.yaml
 docs
+
+# operator-authored measurements, rendered verbatim by the About panel
+src/content
 .lavish
 .claude
 .playwright-mcp

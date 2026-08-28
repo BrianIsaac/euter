@@ -1,5 +1,5 @@
 /**
- * Parses `docs/research/day-one-checks.md` (the operator's measurements) into blocks the About
+ * Parses `src/content/day-one-checks.md` (the operator's measurements) into blocks the About
  * panel renders: headings, paragraphs, list items and pipe tables.
  */
 

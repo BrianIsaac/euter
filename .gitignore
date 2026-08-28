@@ -28,3 +28,6 @@ samples-dist/
 .claude/
 CLAUDE.md
 AGENTS.md
+
+# knowledge: plans, research and progress reports stay local
+docs/

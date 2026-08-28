@@ -1,7 +1,7 @@
 /**
  * The About panel (plan Demo and submission, README structure item 10): the licence, the pinned
  * versions, the "Measured in the ChatGPT desktop app" section read from
- * `docs/research/day-one-checks.md` at build time, and the sample sources with their licences
+ * `src/content/day-one-checks.md` at build time, and the sample sources with their licences
  * read from `SAMPLES.md`, beside what this session knows about the remote sample origin.
  */
 import licence from '../../LICENSE?raw';
@@ -72,7 +72,7 @@ export function sampleLicenceBlocks(): MeasuredBlock[] {
   return parseMeasured(head).blocks.filter((block) => block.kind !== 'heading');
 }
 
-const measuredFiles = import.meta.glob('../../docs/research/day-one-checks.md', {
+const measuredFiles = import.meta.glob('../content/day-one-checks.md', {
   query: '?raw',
   import: 'default',
   eager: true,
