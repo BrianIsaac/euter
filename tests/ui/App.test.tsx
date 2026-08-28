@@ -209,6 +209,64 @@ describe('App', () => {
     expect(screen.queryByText('None of these — keep what I sang')).not.toBeInTheDocument();
   });
 
+  it('keeps the take panel when a refused commit never reaches the track', () => {
+    const harness = renderApp();
+    act(() => {
+      harness.engine.addTake(makeTake('take-empty', []), 'Kept the silent capture.', 'human');
+      harness.engine.setPendingTake('take-empty');
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Commit take' }));
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('no detected notes');
+    expect(harness.engine.pendingTake()?.id).toBe('take-empty');
+  });
+
+  it('keeps the take panel when a refused choice never reaches the track', async () => {
+    const harness = renderApp();
+    const take = {
+      ...makeTake('take-1'),
+      target_track_id: 'melody',
+      target_bars: [1, 1] as [number, number],
+    };
+    act(() => {
+      harness.engine.addTake(take, 'Kept the rough take.', 'human');
+      harness.engine.setPendingTake(take.id);
+      harness.engine.store.dispatch({
+        type: 'propose_options',
+        args: {
+          kind: 'take',
+          take_id: take.id,
+          track_id: 'melody',
+          bar_from: 1,
+          bar_to: 1,
+          options: [
+            { label: 'Up', why: 'It climbs.', notes: [{ p: 64, s: 0, d: 1 }] },
+            { label: 'Down', why: 'It falls.', notes: [{ p: 57, s: 0, d: 1 }] },
+          ],
+        },
+        source: 'agent',
+        why: 'Two readings of the rough note boundaries.',
+      });
+    });
+    await act(async () => {
+      await harness.recorder.start({ trackId: 'melody', countInBars: 1, metronome: true });
+    });
+    const raw = screen
+      .getByText('None of these — keep what I sang')
+      .closest('[data-testid="option-card"]');
+
+    act(() => {
+      fireEvent.click(within(raw as HTMLElement).getByRole('button', { name: 'Choose' }));
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('being recorded');
+    expect(harness.engine.pendingTake()?.id).toBe('take-1');
+    expect(screen.getByText('None of these — keep what I sang')).toBeInTheDocument();
+  });
+
   it('shows the request_take banner on the bars the agent named', () => {
     const harness = renderApp();
     act(() => {

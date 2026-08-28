@@ -116,13 +116,16 @@ export function App({ runtime }: AppProps) {
   const takeRequest = engine.takeRequest();
   const pendingTake = engine.pendingTake();
 
+  /** Reports whether the command landed, so a refused write never tears down the take panel. */
   const dispatch = useCallback(
-    (command: Command): void => {
+    (command: Command): boolean => {
       try {
         bus.dispatch(command);
         setError(null);
+        return true;
       } catch (thrown) {
         setError(message(thrown));
+        return false;
       }
     },
     [bus],
@@ -181,13 +184,13 @@ export function App({ runtime }: AppProps) {
 
   const onCommit = ({ takeId, grid, strength }: TakeCommitOptions): void => {
     const trackId = takeRequest?.trackId ?? selectedTrackId;
-    dispatch({
+    const committed = dispatch({
       type: 'commit_take',
       args: { take_id: takeId, track_id: trackId, quantize_strength: strength, grid },
       source: 'human',
       why: `Committed the take onto ${trackId}.`,
     });
-    engine.setPendingTake(null);
+    if (committed) engine.setPendingTake(null);
   };
 
   const onImportFile = (file: File): void => {
@@ -215,13 +218,13 @@ export function App({ runtime }: AppProps) {
 
   const onChoose = (set: TeachingOptionSet, option: TeachingOption): void => {
     engine.clearPreview();
-    dispatch({
+    const chosen = dispatch({
       type: 'choose_option',
       args: { option_id: option.id },
       source: 'human',
       why: option.why,
     });
-    if (set.kind === 'take') engine.setPendingTake(null);
+    if (chosen && set.kind === 'take') engine.setPendingTake(null);
   };
 
   const toggle = (next: Panel): void => {
