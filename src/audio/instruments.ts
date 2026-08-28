@@ -27,6 +27,9 @@ export interface InstrumentLoadResult {
   reason?: string | undefined;
 }
 
+export type SampleProbeOutcome = 'present' | 'absent' | 'unavailable' | 'network-error';
+export type SampleProbe = (url: string) => Promise<SampleProbeOutcome>;
+
 export interface InstrumentLoadRequest {
   context: BaseAudioContext;
   destination: unknown;
@@ -35,8 +38,8 @@ export interface InstrumentLoadRequest {
   factories?: InstrumentFactories | undefined;
   /** Explicit Tone context for offline synth construction; live callers use Tone's active context. */
   toneContext?: BaseContext | undefined;
-  /** Answers whether the sample origin serves a URL; the default is a `HEAD` request. */
-  probeRemote?: ((url: string) => Promise<boolean>) | undefined;
+  /** Classifies a sample URL; the default is a retrying, session-cached `HEAD` request. */
+  probeRemote?: SampleProbe | undefined;
 }
 
 export interface InstrumentBackend {
@@ -257,6 +260,10 @@ export const INSTRUMENT_CATALOGUE: readonly InstrumentCatalogueEntry[] = DEFINIT
   }),
 );
 
+const PROBE_RETRY_DELAYS_MS = [250, 1_000, 2_500] as const;
+const probeCaches = new WeakMap<SampleProbe, Map<string, Promise<SampleProbeOutcome>>>();
+let probeQueue: Promise<void> = Promise.resolve();
+
 /** True when a reducer/UI instrument name resolves to a real catalogue loader. */
 export function isKnownInstrument(id: string): boolean {
   return INSTRUMENT_CATALOGUE.some((entry) => entry.id === id);
@@ -309,15 +316,67 @@ export function createOfflineScheduler(): SmplrScheduler {
  * `HEAD` costs one Class B operation and no response-body bytes.
  *
  * @param url - The sample URL.
- * @returns Whether the origin answered with a success status.
+ * Only 404 and 410 establish that an object is absent. Refusals and server failures say
+ * nothing about the object, while a network failure remains distinct from an HTTP response.
+ *
+ * @returns The status-aware outcome of the request.
  */
-async function headProbe(url: string): Promise<boolean> {
+async function headProbe(url: string): Promise<SampleProbeOutcome> {
   try {
     const response = await fetch(url, { method: 'HEAD' });
-    return response.ok;
+    if (response.ok) return 'present';
+    if (response.status === 404 || response.status === 410) return 'absent';
+    return 'unavailable';
   } catch {
-    return false;
+    return 'network-error';
   }
+}
+
+function isRetryableProbeOutcome(outcome: SampleProbeOutcome): boolean {
+  return outcome === 'unavailable' || outcome === 'network-error';
+}
+
+async function probeWithBackoff(url: string, probe: SampleProbe): Promise<SampleProbeOutcome> {
+  let outcome: SampleProbeOutcome = 'network-error';
+  for (let attempt = 0; attempt <= PROBE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      outcome = await probe(url);
+    } catch {
+      // An injected probe can throw just as fetch can. It still proves no fact about presence.
+      outcome = 'network-error';
+    }
+    if (!isRetryableProbeOutcome(outcome)) return outcome;
+    const delay = PROBE_RETRY_DELAYS_MS[attempt];
+    if (delay !== undefined) await wait(delay);
+  }
+  return outcome;
+}
+
+function cachedProbe(url: string, probe: SampleProbe): Promise<SampleProbeOutcome> {
+  let cache = probeCaches.get(probe);
+  if (!cache) {
+    cache = new Map();
+    probeCaches.set(probe, cache);
+  }
+  const cached = cache.get(url);
+  if (cached) return cached;
+
+  // Offline rendering loads tracks concurrently. One module-wide queue prevents those callers
+  // from recreating the per-instrument fan-out against the same rate-limited origin.
+  const pending = probeQueue.then(
+    () => probeWithBackoff(url, probe),
+    () => probeWithBackoff(url, probe),
+  );
+  probeQueue = pending.then(
+    () => undefined,
+    () => undefined,
+  );
+  cache.set(url, pending);
+  return pending;
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 /** Loads an instrument, falling back audibly to the bundled subset when R2 is not configured. */
@@ -362,13 +421,21 @@ export async function loadInstrument(
     // before the loader sees the pack; otherwise an absent or partial upload leaves a silent range
     // with no notice. Measured on 28 Aug against the deployed site while the remote half of the
     // pack was still not uploaded.
-    const probeUrls = sampleUrls(entry, baseUrl);
+    const urls = sampleUrls(entry, baseUrl);
     const probe = request.probeRemote ?? headProbe;
-    const served = await Promise.all(probeUrls.map((url) => probe(url)));
-    if (served.some((present) => !present)) {
-      const reason = served.every((present) => !present)
-        ? `${entry.name} is not on the sample origin`
-        : `${entry.name}'s sample origin is incomplete`;
+    const outcomes: SampleProbeOutcome[] = [];
+    for (const url of urls) {
+      const outcome = await cachedProbe(url, probe);
+      outcomes.push(outcome);
+      if (isRetryableProbeOutcome(outcome)) break;
+    }
+
+    const absent = outcomes.filter((outcome) => outcome === 'absent').length;
+    if (absent > 0) {
+      const reason =
+        absent === urls.length
+          ? `${entry.name} is not on the sample origin`
+          : `${entry.name}'s sample origin is incomplete`;
       return substitute(reason);
     }
   }
