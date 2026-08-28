@@ -11,6 +11,7 @@ import {
   sampleUrls,
   type InstrumentBackend,
   type InstrumentFactories,
+  type SampleProbeOutcome,
 } from '../../src/audio/instruments.ts';
 
 function factories() {
@@ -27,7 +28,10 @@ function factories() {
 const context = { destination: {} } as BaseAudioContext;
 
 describe('instrument catalogue', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('gives every entry a loader, licence row and honest byte size', () => {
     expect(INSTRUMENT_CATALOGUE.length).toBeGreaterThanOrEqual(10);
@@ -101,7 +105,7 @@ describe('instrument catalogue', () => {
       destination: {},
       factories: fake.value,
       samplesBaseUrl: 'https://samples.example/',
-      probeRemote: async () => true,
+      probeRemote: async () => 'present',
       onProgress: progress,
     });
     expect(result.loaded).toBe(true);
@@ -143,7 +147,7 @@ describe('instrument catalogue', () => {
     // smplr logs a failed buffer and resolves anyway, so a 404 origin would otherwise be silent
     // with nothing said about it (measured against the deployed site on 28 Aug 2026).
     const fake = factories();
-    const probeRemote = vi.fn(async () => false);
+    const probeRemote = vi.fn(async (): Promise<SampleProbeOutcome> => 'absent');
     const result = await loadInstrument('electric-piano', {
       context,
       destination: {},
@@ -165,7 +169,9 @@ describe('instrument catalogue', () => {
 
   it('substitutes when any expected object is absent from a partially uploaded instrument', async () => {
     const fake = factories();
-    const probeRemote = vi.fn(async (url: string) => !url.endsWith('/c5.ogg'));
+    const probeRemote = vi.fn(async (url: string): Promise<SampleProbeOutcome> =>
+      url.endsWith('/c5.ogg') ? 'absent' : 'present',
+    );
     const result = await loadInstrument('electric-piano', {
       context,
       destination: {},
@@ -185,7 +191,7 @@ describe('instrument catalogue', () => {
 
   it('does not probe the origin for a bundled instrument', async () => {
     const fake = factories();
-    const probeRemote = vi.fn(async () => false);
+    const probeRemote = vi.fn(async (): Promise<SampleProbeOutcome> => 'absent');
     const result = await loadInstrument('grand-piano', {
       context,
       destination: {},
@@ -208,7 +214,7 @@ describe('instrument catalogue', () => {
       destination: {},
       factories: fake.value,
       samplesBaseUrl: 'https://samples.example',
-      probeRemote: async () => true,
+      probeRemote: async () => 'present',
     });
 
     expect(result.loaded).toBe(false);
@@ -218,6 +224,169 @@ describe('instrument catalogue', () => {
     expect(vi.mocked(fake.value.sampler).mock.calls[1]?.[2].samples.baseUrl).toBe(
       '/samples/piano/grand/',
     );
+  });
+
+  it.each([403, 429, 503])(
+    'retries an HTTP %s probe and does not report the sample as absent',
+    async (status) => {
+      vi.useFakeTimers();
+      const fake = factories();
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response(null, { status }))
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const loading = loadInstrument('electric-piano', {
+        context,
+        destination: {},
+        factories: fake.value,
+        samplesBaseUrl: `https://samples-${status}.example`,
+      });
+      await vi.runAllTimersAsync();
+      const result = await loading;
+
+      expect(result.loaded).toBe(true);
+      expect(result.reason).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
+        `https://samples-${status}.example/electric-piano/`,
+      );
+    },
+  );
+
+  it('lets loading proceed when a throttled origin remains unavailable after backoff', async () => {
+    vi.useFakeTimers();
+    const fake = factories();
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(null, { status: 429 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const loading = loadInstrument('electric-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples-exhausted.example',
+    });
+    await vi.runAllTimersAsync();
+    const result = await loading;
+
+    expect(result.loaded).toBe(true);
+    expect(result.reason).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
+      'https://samples-exhausted.example/electric-piano/',
+    );
+  });
+
+  it('treats a network error as retryable uncertainty rather than evidence of absence', async () => {
+    vi.useFakeTimers();
+    const fake = factories();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const loading = loadInstrument('electric-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples-network.example',
+    });
+    await vi.runAllTimersAsync();
+    const result = await loading;
+
+    expect(result.loaded).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([404, 410])(
+    'substitutes without retry when every probe returns HTTP %s',
+    async (status) => {
+      const fake = factories();
+      const fetchMock = vi.fn<typeof fetch>(async () => new Response(null, { status }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await loadInstrument('electric-piano', {
+        context,
+        destination: {},
+        factories: fake.value,
+        samplesBaseUrl: `https://samples-absent-${status}.example`,
+      });
+
+      expect(result.loaded).toBe(false);
+      expect(result.reason).toBe(
+        'Electric piano is not on the sample origin; playing Grand piano instead.',
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    },
+  );
+
+  it('keeps the incomplete notice when one real object returns 404', async () => {
+    const fake = factories();
+    const fetchMock = vi.fn<typeof fetch>(
+      async (input) =>
+        new Response(null, { status: String(input).endsWith('/c5.ogg') ? 404 : 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await loadInstrument('electric-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples-partial.example',
+    });
+
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe(
+      "Electric piano's sample origin is incomplete; playing Grand piano instead.",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('caches probe outcomes across repeated loads in the same session', async () => {
+    const fake = factories();
+    const probeRemote = vi.fn(async (): Promise<SampleProbeOutcome> => 'present');
+    const request = {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples-cache.example',
+      probeRemote,
+    };
+
+    await loadInstrument('electric-piano', request);
+    await loadInstrument('electric-piano', request);
+
+    expect(probeRemote).toHaveBeenCalledTimes(4);
+  });
+
+  it('serialises probes across concurrently loading instruments', async () => {
+    const fake = factories();
+    let active = 0;
+    let maximumActive = 0;
+    const probeRemote = vi.fn(async (): Promise<SampleProbeOutcome> => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await Promise.resolve();
+      active -= 1;
+      return 'present';
+    });
+    const request = {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples-concurrency.example',
+      probeRemote,
+    };
+
+    await Promise.all([
+      loadInstrument('electric-piano', request),
+      loadInstrument('pocket-kit', request),
+    ]);
+
+    expect(probeRemote).toHaveBeenCalledTimes(8);
+    expect(maximumActive).toBe(1);
   });
 
   it('resolves drum machines and the two deliberate Tone synth exceptions', async () => {
