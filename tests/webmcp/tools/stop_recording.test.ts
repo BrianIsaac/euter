@@ -38,12 +38,13 @@ describe('stop_recording', () => {
       duration_s: 4,
       median_clarity: 0.82,
       placed_on_track: 'melody',
-      next: 'Next: set_key, then suggest_chords or set_chords.',
+      next: 'Next: get_take for context, then propose_options with kind take. commit_take keeps the raw take.',
     });
     expect(envelope.data.notes.map(({ p }) => p)).toEqual([60, 62, 64, 65]);
 
     const song = harness.engine.store.getDocument();
     expect(song.takes.map(({ id }) => id)).toEqual(['take-1']);
+    expect(song.takes[0]).toMatchObject({ target_track_id: 'melody' });
     expect(song.notes_log.at(-1)).toMatchObject({
       revision: 1,
       why: 'Keeping the four bars you just hummed.',

@@ -22,7 +22,7 @@ export const descriptions = {
   get_chords:
     'Reads each chord as a symbol and Roman numeral in the current key. Bars without a chord are omitted.',
   get_take:
-    'Reads a recorded, imported or played take: bounded transcribed notes, duration, voiced ratio, median clarity, pitch range, tempo hint and any refinement job id. A clarity below 0.6 denotes a noisy take. Take ids are reported by get_song_state and stop_recording.',
+    'Reads a rough recorded, imported or played take with bounded notes and quality readings, plus its bar range, key, sections, chords and summaries of the other tracks sounding there. A clarity below 0.6 denotes a noisy take. Take ids are reported by get_song_state and stop_recording.',
   suggest_chords:
     'Proposes one diatonic chord per bar from the melody, current key and named style, with a fit score for each bar, over at most 16 bars at a time. The song remains unchanged; the returned chords have the same shape accepted by set_chords.',
   get_job:
@@ -32,13 +32,13 @@ export const descriptions = {
   stop_recording:
     'Stops the recorder and transcribes the take to notes. The result contains the bounded take data and placed_on_track; the piano roll already contains its notes and raw pitch curve.',
   commit_take:
-    'Commits a take to a track, quantised to a grid with strength 0-1. Zero keeps the performed timing and one snaps fully. Notes in the covered bars are replaced while raw timing remains available to set_quantize.',
+    'Commits a raw take to a track, quantised to a grid with strength 0-1. Zero keeps the performed timing and one snaps fully. Notes in the covered bars are replaced while raw timing remains available to set_quantize. A chosen take reading uses the same commit path.',
   set_notes:
     'Writes notes to a track from bar_from and replaces the covered bars. p is MIDI pitch 24-96, s is a beat offset from bar_from, d is duration in beats and v is velocity 0-1. Each invocation covers at most 8 bars and rejects notes outside the range.',
   set_chords:
     'Sets chord symbols such as C, Am7, F/A or G on one or more bars. Unrecognised symbols return INVALID_ARGUMENT. The result includes each chord’s Roman numeral; generate_part derives parts from the stored chords.',
   propose_options:
-    'Registers two or three labelled alternatives over a bar range. The app shows Play and Choose cards and audition_option previews one without committing it. The song changes only when a card is chosen.',
+    'Registers two or three labelled alternatives over a bar range. Take alternatives bind a recorded take and destination track, and receive a raw-take card. The app shows Play and Choose cards and audition_option previews one without committing it. The song changes only when a card is chosen.',
   audition_option:
     'Plays one registered option over its bars without committing an edit. AUDIO_LOCKED is returned until a person gesture has activated audio.',
   request_take:

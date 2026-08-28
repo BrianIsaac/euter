@@ -118,7 +118,9 @@ export const setChordsInput = z.strictObject({
 });
 
 export const proposeOptionsInput = z.strictObject({
-  kind: z.enum(['chords', 'feel', 'part']).describe('What the alternatives are about'),
+  kind: z.enum(['chords', 'feel', 'part', 'take']).describe('Subject of the alternatives'),
+  take_id: takeIdField.optional().describe('Recorded take interpreted when kind is take'),
+  track_id: trackIdField.optional().describe('Destination track when kind is take'),
   options: z
     .array(
       z.strictObject({

@@ -68,6 +68,7 @@ describe('validateScenario', () => {
     expect(files.sort()).toEqual([
       'demo.json',
       'errors.json',
+      'hum-intent.json',
       'recording-lock.json',
       'sample-fallback.json',
       'stale-revision.json',
@@ -83,7 +84,7 @@ describe('validateScenario', () => {
     }
   });
 
-  it('invokes every registered tool somewhere across the six scenarios', () => {
+  it('invokes every registered tool somewhere across the seven scenarios', () => {
     const invoked = new Set<string>();
     for (const file of readdirSync(scenarioDir).filter((name) => name.endsWith('.json'))) {
       for (const step of loadScenario(join(scenarioDir, file)).steps) {

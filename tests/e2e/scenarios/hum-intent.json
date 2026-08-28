@@ -1,0 +1,239 @@
+{
+  "name": "hum-intent",
+  "title": "A rough real hum becomes auditionable readings with an untouched raw escape",
+  "reset": true,
+  "steps": [
+    {
+      "action": "eval",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody"
+      },
+      "expect": {
+        "data_defined": ["melody"]
+      }
+    },
+    {
+      "action": "upload",
+      "note": "This is the measured human low-register take: six detected segments for four sung notes, including the isolated MIDI 40.",
+      "target": {
+        "role": "button",
+        "name": "Import audio file"
+      },
+      "file": "tests/fixtures/takes/take-03-low-register.wav"
+    },
+    {
+      "action": "wait_for",
+      "text": ["Voiced"],
+      "timeout_ms": 20000
+    },
+    {
+      "action": "tool",
+      "tool": "get_song_state",
+      "input": {},
+      "capture": {
+        "take_id": "data.takes.0.id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": ">=1",
+        "changed_exactly": [],
+        "data_defined": ["data.takes.0.id"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The rough transcription and the local musical evidence arrive in one bounded read.",
+      "tool": "get_take",
+      "input": {
+        "take_id": "{{take_id}}"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "summary_includes": "propose_options with kind take",
+        "data": {
+          "data.notes_total": 6,
+          "data.notes.3.p": 40,
+          "data.context.key": "C major",
+          "data.context.target_bars": [1, 2],
+          "data.context.target_track_id": "{{melody_id}}",
+          "data.context.chords.0.symbol": "C",
+          "data.context.sections.0.name": "Verse"
+        },
+        "data_defined": ["data.context.other_tracks.0.track_id"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Registering readings changes only the teaching cards; the melody remains untouched.",
+      "tool": "propose_options",
+      "input": {
+        "kind": "take",
+        "take_id": "{{take_id}}",
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 2,
+        "options": [
+          {
+            "label": "Four-note climb",
+            "why": "The 40 is isolated between climbing notes, so this hears four steady steps.",
+            "notes": [
+              { "p": 48, "s": 0, "d": 1.5 },
+              { "p": 52, "s": 2, "d": 1.5 },
+              { "p": 55, "s": 4, "d": 1.5 },
+              { "p": 60, "s": 6, "d": 1.5 }
+            ]
+          },
+          {
+            "label": "Keep the turn",
+            "why": "This keeps the small turn before the last note while folding the isolated low blip.",
+            "notes": [
+              { "p": 48, "s": 0, "d": 1 },
+              { "p": 50, "s": 1.5, "d": 1 },
+              { "p": 52, "s": 3, "d": 1 },
+              { "p": 51, "s": 4.5, "d": 1 },
+              { "p": 57, "s": 6, "d": 1 }
+            ]
+          }
+        ],
+        "why": "Two plausible readings of a six-segment hum; neither claims to recover missing truth."
+      },
+      "capture": {
+        "reading_option": "data.options.0.option_id",
+        "raw_option": "data.raw_option_id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed_exactly": ["option_sets", "notes_log"],
+        "summary_includes": ["2 take readings", "raw take"],
+        "data": {
+          "data.options.2.label": "None of these — keep what I sang",
+          "data.options.2.raw_take": true
+        },
+        "data_defined": ["data.raw_option_id"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "No correction has landed merely because the proposal exists.",
+      "tool": "get_track_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": {
+          "data.notes_total": 7,
+          "data.bars.0.notes.0.p": 64
+        }
+      }
+    },
+    {
+      "action": "click",
+      "note": "A person gesture unlocks audio before tool-driven audition.",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      },
+      "nth": 1
+    },
+    {
+      "action": "tool",
+      "tool": "audition_option",
+      "input": {
+        "option_id": "{{reading_option}}"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "summary_includes": ["Four-note climb", "Nothing is committed"],
+        "data": {
+          "data.committed": false
+        }
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person selects the interpretation after hearing it.",
+      "target": {
+        "role": "button",
+        "name": "Choose"
+      },
+      "nth": 1
+    },
+    {
+      "action": "wait_for",
+      "text": ["Chose Four-note climb and committed"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "tool",
+      "tool": "get_track_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.notes_total": 4,
+          "data.bars.0.notes.0.p": 48,
+          "data.bars.1.notes.0.p": 55
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Undo reopens the same proposal so the raw path can be exercised independently.",
+      "tool": "undo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": "Undid"
+      }
+    },
+    {
+      "action": "click",
+      "note": "None of the readings is accepted; the automatic raw card remains a real choice.",
+      "target": {
+        "role": "button",
+        "name": "Choose"
+      },
+      "nth": 3
+    },
+    {
+      "action": "wait_for",
+      "text": ["Chose None of these — keep what I sang and committed"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "tool",
+      "note": "The raw detected six-note take, including the anomalous 40, is what landed.",
+      "tool": "get_track_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.notes_total": 6,
+          "data.bars.0.notes.0.p": 47,
+          "data.bars.1.notes.0.p": 40
+        }
+      }
+    }
+  ]
+}

@@ -52,6 +52,8 @@ export const proposeOptions: ToolDefinition<typeof proposeOptionsInput> = {
       'propose_options',
       {
         kind: args.kind,
+        ...(args.take_id === undefined ? {} : { take_id: args.take_id }),
+        ...(args.track_id === undefined ? {} : { track_id: args.track_id }),
         options: args.options,
         bar_from: args.bar_from,
         bar_to: args.bar_to,
@@ -61,8 +63,17 @@ export const proposeOptions: ToolDefinition<typeof proposeOptionsInput> = {
     const set = context.bus.getDocument().option_sets.at(-1);
     return ok(result.revision, result.changed, result.summary, {
       option_set_id: set?.id ?? null,
-      options: (set?.options ?? []).map(({ id, label }) => ({ option_id: id, label })),
-      next: 'audition_option plays one; the person can also press Play on the card.',
+      options: (set?.options ?? []).map(({ id, label, raw_take }) => ({
+        option_id: id,
+        label,
+        ...(raw_take === true ? { raw_take: true } : {}),
+      })),
+      ...(set?.kind === 'take'
+        ? {
+            raw_option_id: set.options.find(({ raw_take }) => raw_take === true)?.id ?? null,
+            next: 'audition_option plays a reading without committing it; the person chooses a card, including the raw take.',
+          }
+        : { next: 'audition_option plays one; the person can also press Play on the card.' }),
       ...targetBars(result),
     });
   },

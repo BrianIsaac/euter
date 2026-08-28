@@ -9,7 +9,15 @@ import { generateDrums } from '../theory/generate/drums.ts';
 import { detectKey, keyFit, parseKeyName } from '../theory/key.ts';
 import { quantizeNotes } from '../theory/quantise.ts';
 import { parseSongCommand, type SongCommand } from './commands.ts';
-import { cloneSong, type Note, type SongDocument, type Track, type TrackKind } from './types.ts';
+import {
+  cloneSong,
+  type Note,
+  type SongDocument,
+  type Take,
+  type TeachingOption,
+  type Track,
+  type TrackKind,
+} from './types.ts';
 
 export interface SongReducerOptions {
   /** Transient recording lock owned by the capture engine, not persisted in the song. */
@@ -425,11 +433,42 @@ function commitTake(
   document: SongDocument,
   command: Extract<SongCommand, { type: 'commit_take' }>,
 ): ReducerResult<SongDocument> {
-  const track = requireTrack(document, command.args.track_id);
   const take = document.takes.find(({ id }) => id === command.args.take_id);
   if (!take) {
     throw new ToolError('TAKE_NOT_FOUND', `Take "${command.args.take_id}" does not exist.`, true);
   }
+  const committed = commitTakeToTrack(
+    document,
+    take,
+    command.args.track_id,
+    command.args.grid,
+    command.args.quantize_strength,
+  );
+  return finish(
+    document,
+    command,
+    { tracks: committed.tracks, take_request: committed.take_request },
+    ['tracks', `track:${committed.track.id}:notes`, 'take_request'],
+    `Committed ${take.id} to ${committed.track.name}`,
+    committed.range,
+    committed.track.id,
+  );
+}
+
+/** Writes either the raw take or a chosen reading through the reversible take-commit path. */
+function commitTakeToTrack(
+  document: SongDocument,
+  take: Take,
+  trackId: string,
+  grid: '8n' | '16n',
+  strength: number,
+): {
+  tracks: Track[];
+  take_request: SongDocument['take_request'];
+  range: [number, number];
+  track: Track;
+} {
+  const track = requireTrack(document, trackId);
   const maximumBeat = document.bars * document.time_sig[0];
   if (
     take.notes.some((note) => note.s < 0 || note.s >= maximumBeat || note.s + note.d > maximumBeat)
@@ -442,8 +481,8 @@ function commitTake(
   }
   const notes = quantizeNotes(
     take.notes.map((note) => ({ ...note, source: 'take' })),
-    command.args.grid,
-    command.args.quantize_strength,
+    grid,
+    strength,
     0,
     maximumBeat,
   );
@@ -457,18 +496,12 @@ function commitTake(
       noteOrder,
     ),
   };
-  return finish(
-    document,
-    command,
-    {
-      tracks: replaceTrack(document.tracks, updated),
-      take_request: document.take_request?.track_id === track.id ? null : document.take_request,
-    },
-    ['tracks', `track:${track.id}:notes`, 'take_request'],
-    `Committed ${take.id} to ${track.name}`,
+  return {
+    tracks: replaceTrack(document.tracks, updated),
+    take_request: document.take_request?.track_id === track.id ? null : document.take_request,
     range,
-    track.id,
-  );
+    track,
+  };
 }
 
 function proposeOptions(
@@ -477,10 +510,61 @@ function proposeOptions(
   idFactory: (prefix: string) => string,
 ): ReducerResult<SongDocument> {
   validateBarRange(document, command.args.bar_from, command.args.bar_to);
+  const isTake = command.args.kind === 'take';
+  let interpretedTake: Take | undefined;
+  let destinationTrack: Track | undefined;
+  if (isTake) {
+    if (command.args.take_id === undefined || command.args.track_id === undefined) {
+      throw new ToolError('INVALID_ARGUMENT', 'A take proposal needs take_id and track_id.', true);
+    }
+    interpretedTake = document.takes.find(({ id }) => id === command.args.take_id);
+    if (interpretedTake === undefined) {
+      throw new ToolError('TAKE_NOT_FOUND', `Take "${command.args.take_id}" does not exist.`, true);
+    }
+    destinationTrack = requireTrack(document, command.args.track_id);
+    if (
+      interpretedTake.target_track_id !== undefined &&
+      interpretedTake.target_track_id !== destinationTrack.id
+    ) {
+      throw new ToolError(
+        'INVALID_ARGUMENT',
+        `Take "${interpretedTake.id}" was captured for track "${interpretedTake.target_track_id}".`,
+        true,
+      );
+    }
+    const takeRange = rangeForTake(interpretedTake, document.time_sig[0], document.bars);
+    if (command.args.bar_from !== takeRange[0] || command.args.bar_to !== takeRange[1]) {
+      throw new ToolError(
+        'INVALID_ARGUMENT',
+        `Take "${interpretedTake.id}" belongs to bars ${takeRange[0]}-${takeRange[1]}.`,
+        true,
+      );
+    }
+  } else if (command.args.take_id !== undefined || command.args.track_id !== undefined) {
+    throw new ToolError(
+      'INVALID_ARGUMENT',
+      'take_id and track_id at the option-set level belong only to kind take.',
+      true,
+    );
+  }
   const setId = uniqueId(document, 'options', idFactory);
   const beatOffset = (command.args.bar_from - 1) * document.time_sig[0];
   const maximumBeats = (command.args.bar_to - command.args.bar_from + 1) * document.time_sig[0];
-  const options = command.args.options.map((option) => {
+  const options: TeachingOption[] = command.args.options.map((option) => {
+    if (isTake) {
+      if (
+        option.notes === undefined ||
+        option.chords !== undefined ||
+        option.style !== undefined ||
+        option.track_id !== undefined
+      ) {
+        throw new ToolError(
+          'INVALID_ARGUMENT',
+          'Every take reading needs notes and gets its destination from the option set.',
+          true,
+        );
+      }
+    }
     if (option.chords) {
       for (const chord of option.chords) {
         if (!isValidChord(chord.symbol)) {
@@ -502,20 +586,34 @@ function proposeOptions(
     return {
       ...option,
       id: uniqueId(document, 'option', idFactory),
+      ...(isTake && destinationTrack !== undefined ? { track_id: destinationTrack.id } : {}),
       notes: option.notes?.map(({ p, s, d, v }) => ({
         p,
         s: beatOffset + s,
         d,
         v: v ?? 0.8,
-        source: command.source,
+        ...(isTake ? { s_raw: beatOffset + s, d_raw: d } : {}),
+        source: isTake ? ('take' as const) : command.source,
       })),
     };
   });
+  if (isTake && interpretedTake !== undefined && destinationTrack !== undefined) {
+    options.push({
+      id: uniqueId(document, 'option', idFactory),
+      label: 'None of these — keep what I sang',
+      why: 'No correction: this keeps the rough transcription and timing exactly as captured.',
+      track_id: destinationTrack.id,
+      notes: interpretedTake.notes.map((note) => ({ ...note })),
+      raw_take: true,
+    });
+  }
   const optionSet = {
     id: setId,
     kind: command.args.kind,
     bar_from: command.args.bar_from,
     bar_to: command.args.bar_to,
+    ...(interpretedTake === undefined ? {} : { take_id: interpretedTake.id }),
+    ...(destinationTrack === undefined ? {} : { track_id: destinationTrack.id }),
     options,
     chosen_option_id: null,
   };
@@ -524,7 +622,9 @@ function proposeOptions(
     command,
     { option_sets: [...document.option_sets, optionSet] },
     ['option_sets'],
-    `Proposed ${options.length} ${command.args.kind} options for bars ${optionSet.bar_from}-${optionSet.bar_to}`,
+    isTake
+      ? `Proposed ${command.args.options.length} take readings plus the raw take for bars ${optionSet.bar_from}-${optionSet.bar_to}`
+      : `Proposed ${options.length} ${command.args.kind} options for bars ${optionSet.bar_from}-${optionSet.bar_to}`,
     [optionSet.bar_from, optionSet.bar_to],
     null,
   );
@@ -553,7 +653,22 @@ function chooseOption(
     );
   }
   let tracks = document.tracks;
-  if (option.track_id && option.notes) {
+  let takeRequest = document.take_request;
+  if (optionSet.kind === 'take') {
+    if (optionSet.take_id === undefined || optionSet.track_id === undefined) {
+      throw new ToolError('INVALID_ARGUMENT', 'The take option set is incomplete.', true);
+    }
+    const take = document.takes.find(({ id }) => id === optionSet.take_id);
+    if (take === undefined) {
+      throw new ToolError('TAKE_NOT_FOUND', `Take "${optionSet.take_id}" does not exist.`, true);
+    }
+    const chosenTake = option.raw_take
+      ? take
+      : { ...take, notes: (option.notes ?? []).map((note) => ({ ...note })) };
+    const committed = commitTakeToTrack(document, chosenTake, optionSet.track_id, '16n', 0);
+    tracks = committed.tracks;
+    takeRequest = committed.take_request;
+  } else if (option.track_id && option.notes) {
     const track = requireTrack(document, option.track_id);
     const start = (optionSet.bar_from - 1) * document.time_sig[0];
     const end = optionSet.bar_to * document.time_sig[0];
@@ -572,9 +687,16 @@ function chooseOption(
   return finish(
     document,
     command,
-    { option_sets: optionSets, chords, tracks },
-    ['option_sets', ...(option.chords ? ['chords'] : []), ...(option.notes ? ['tracks'] : [])],
-    `Chose ${option.label}`,
+    { option_sets: optionSets, chords, tracks, take_request: takeRequest },
+    [
+      'option_sets',
+      ...(option.chords ? ['chords'] : []),
+      ...(option.notes ? ['tracks'] : []),
+      ...(optionSet.kind === 'take' ? ['take_request'] : []),
+    ],
+    optionSet.kind === 'take'
+      ? `Chose ${option.label} and committed ${optionSet.take_id ?? 'take'} to ${optionSet.track_id ?? 'track'}`
+      : `Chose ${option.label}`,
     [optionSet.bar_from, optionSet.bar_to],
     option.track_id ?? null,
   );
@@ -606,7 +728,7 @@ function updateTrack(
   summary: string,
   changed: string[],
 ): ReducerResult<SongDocument> {
-  const trackId = 'track_id' in command.args ? command.args.track_id : '';
+  const trackId = 'track_id' in command.args ? (command.args.track_id ?? '') : '';
   const track = requireTrack(document, trackId);
   return finish(
     document,
@@ -692,7 +814,7 @@ function trackTouchedBy(
   command: Exclude<SongCommand, { type: 'ping' }>,
   document: SongDocument,
 ): string | null {
-  if ('track_id' in command.args) return command.args.track_id;
+  if ('track_id' in command.args) return command.args.track_id ?? null;
   if (command.type === 'choose_option') {
     return (
       document.option_sets
@@ -722,6 +844,12 @@ function noteRange(
     Math.floor(Math.max(...notes.map(({ s, d }) => Math.max(s, s + d - 0.000_001))) / beatsPerBar) +
       1,
   ];
+}
+
+function rangeForTake(take: Take, beatsPerBar: number, fallbackBar: number): [number, number] {
+  const performed = noteRange(take.notes, beatsPerBar, fallbackBar);
+  if (take.target_bars === undefined) return performed;
+  return [Math.min(take.target_bars[0], performed[0]), Math.max(take.target_bars[1], performed[1])];
 }
 
 function noteOrder(left: Note, right: Note): number {

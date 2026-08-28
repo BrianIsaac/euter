@@ -203,7 +203,9 @@ export const songCommandSchema = z.discriminatedUnion('type', [
       type: z.literal('propose_options'),
       args: z
         .object({
-          kind: z.enum(['chords', 'feel', 'part']),
+          kind: z.enum(['chords', 'feel', 'part', 'take']),
+          take_id: idSchema.optional(),
+          track_id: idSchema.optional(),
           options: z.array(optionSchema).min(2).max(3),
           bar_from: barSchema,
           bar_to: barSchema,

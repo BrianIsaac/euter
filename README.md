@@ -10,6 +10,12 @@ sampled and synthesised instruments driven by notes, the agent reasons about the
 through 28 tools, and every change it makes carries one sentence on why, pinned to the bars it
 changed and undoable with them.
 
+A captured hum is evidence, not an instruction to copy a noisy transcript. `get_take` returns its
+rough notes with the key, chords, section and neighbouring parts; the agent offers two or three
+readings with a musical reason for each; the person auditions and chooses. Nothing reaches the
+track before that choice, and every take proposal gets a card labelled "None of these — keep what
+I sang" that commits the untouched take.
+
 Built for the WebMCP Challenge (OpenAI, Devpost), deadline 4 Sep 2026 04:00 GMT+8. MIT licensed.
 
 ## Try it
@@ -61,7 +67,7 @@ registered tools.
 | 2   | "That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there." | `set_key` → `Set key to C major` (r2), `suggest_chords` → `4 lofi chords for bars 1-4 in C major` (no edit), `set_chords` → `Set 2 chords in bars 3-4` (r5), `generate_part` → `Generated lofi drums in bars 1-8` (r6).                           |
 | 3   | "Give me two ways to harmonise the verse and play the second one."                                        | `propose_options` → two cards (r3); `audition_option` → `Playing "Lift it" over bars 1-4. Nothing is committed until it is chosen.` The song's chords were still C and F while it played; the person's Choose click made them Am7 and Fmaj7 (r4). |
 | 4   | "Ask me to hum the bassline for the chorus."                                                              | `request_take` → `Requested a take for bars 5-8` (r7); the banner "Hum me a bassline for the chorus" appears over those bars and arms them for Record.                                                                                            |
-| 5   | "Commit my take onto the melody and tighten the timing a little."                                         | `commit_take` → `Committed <take-id> to Melody` (r8), `set_quantize` → `Quantised Melody to 16n at 60%` (r9).                                                                                                                                     |
+| 5   | "Help me hear what I meant before we commit the hum."                                                     | `get_take` → the rough notes in musical context; `propose_options {kind: "take"}` → two readings plus the automatic raw card; `audition_option` changes nothing; the person's Choose commits through the take path.                               |
 | 6   | "Make it a verse, then an eight-bar chorus that lifts, and play from the chorus."                         | `arrange` → `Arranged 2 sections across 12 bars` (r10), `generate_part` → `Generated lofi chords in bars 1-8` (r11), `play` → `Playing from bar 5`.                                                                                               |
 | 7   | "The bass is too busy - take that back and pull it down a few dB."                                        | `undo` → `Undid Generated lofi chords in bars 1-8` (r12; undo is itself a step forward), `set_mix` → `Updated the mix for Bass` (r15).                                                                                                            |
 | 8   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polls until `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel.                                                                              |
@@ -223,15 +229,17 @@ pnpm e2e --headless                         # supported by Chrome 152; headed re
 pnpm e2e --help                             # every flag
 ```
 
-The six scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
-MIDI file), `errors` (every error code provoked once), `stale-revision` (a person edits between two
-agent calls), `recording-lock` (one track closed to edits while it is being sung) and
-`take-backing` (the actual bar and mute state used behind a bar-one requested take), plus
-`sample-fallback` (a deliberate sample 404 selects a named bundled substitute). Together they
-invoke all 28 tools. The unit test rejects missing or assertion-free scenario entries, and a full
-run independently compares the registered surface with tools that actually passed a behavioural
-assertion. `--driver mcp` is strict: it fails if chrome-devtools-mcp cannot start, so a green default
-run is evidence for that route. `--driver cdp` explicitly exercises the fallback route
+The seven scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
+MIDI file), `hum-intent` (a measured six-segment/four-note human take goes through context, two
+auditionable readings, a chosen reading and the untouched raw escape), `errors` (every error code
+provoked once), `stale-revision` (a person edits between two agent calls), `recording-lock` (one
+track closed to edits while it is being sung), `take-backing` (the actual bar and mute state used
+behind a bar-one requested take), and `sample-fallback` (a deliberate sample 404 selects a named
+bundled substitute). Together they invoke all 28 tools. The unit test rejects missing or
+assertion-free scenario entries, and a full run independently compares the registered surface with
+tools that actually passed a behavioural assertion. `--driver mcp` is strict: it fails if
+chrome-devtools-mcp cannot start, so a green default run is evidence for that route. `--driver cdp`
+explicitly exercises the fallback route
 (`WebMCP.enable`, `invokeTool`, `toolResponded`). The R2 CORS policy permits the deployed origin,
 not localhost, so only a local-URL run adds `--disable-web-security` to its throwaway Chrome
 profile; a deployed-URL run keeps browser CORS enforcement.

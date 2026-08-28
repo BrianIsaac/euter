@@ -309,4 +309,118 @@ describe('song reducer and command bus', () => {
       prompt: 'Hum me a bassline for the chorus.',
     });
   });
+
+  it('commits a chosen take reading but keeps the original take unchanged', () => {
+    const rawTake = {
+      id: 'take-rough',
+      source: 'mic' as const,
+      target_track_id: 'melody',
+      target_bars: [1, 1] as [number, number],
+      notes: [
+        { p: 60, s: 0.12, d: 0.7, v: 0.8, s_raw: 0.12, d_raw: 0.7, source: 'take' as const },
+        { p: 61, s: 0.88, d: 0.2, v: 0.8, s_raw: 0.88, d_raw: 0.2, source: 'take' as const },
+        { p: 62, s: 1.1, d: 0.8, v: 0.8, s_raw: 1.1, d_raw: 0.8, source: 'take' as const },
+      ],
+      pitch_track: [],
+      duration_s: 2,
+      voiced_ratio: 0.9,
+      median_clarity: 0.9,
+      pitch_range: [60, 62] as [number, number],
+      tempo_hint: 92,
+    };
+    const song = { ...loadExampleSong(), takes: [rawTake] };
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('propose_options', {
+        kind: 'take',
+        take_id: rawTake.id,
+        track_id: 'melody',
+        bar_from: 1,
+        bar_to: 1,
+        options: [
+          {
+            label: 'Two clear notes',
+            why: 'The short middle segment sounds like drift between two held notes.',
+            notes: [
+              { p: 60, s: 0.12, d: 0.8 },
+              { p: 62, s: 1.1, d: 0.8 },
+            ],
+          },
+          {
+            label: 'Three-note turn',
+            why: 'The middle pitch could be a deliberate passing note.',
+            notes: [
+              { p: 60, s: 0.12, d: 0.7 },
+              { p: 61, s: 0.88, d: 0.2 },
+              { p: 62, s: 1.1, d: 0.8 },
+            ],
+          },
+        ],
+      }),
+    );
+    const set = songStore.getDocument().option_sets[0];
+    const readingId = set?.options[0]?.id;
+    songStore.dispatch(agent('choose_option', { option_id: readingId }, set?.options[0]?.why));
+
+    const document = songStore.getDocument();
+    expect(document.option_sets[0]?.chosen_option_id).toBe(readingId);
+    expect(document.tracks[0]?.notes.filter(({ s }) => s < 4).map(({ p }) => p)).toEqual([60, 62]);
+    expect(document.tracks[0]?.notes.filter(({ s }) => s < 4)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'take', s: 0.12, s_raw: 0.12, d_raw: 0.8 }),
+      ]),
+    );
+    expect(document.takes[0]).toEqual(rawTake);
+    expect(document.notes_log.at(-1)?.why).toBe(
+      'The short middle segment sounds like drift between two held notes.',
+    );
+  });
+
+  it('commits the untouched raw take when none of the readings is right', () => {
+    const song: SongDocument = {
+      ...loadExampleSong(),
+      takes: [
+        {
+          id: 'take-raw',
+          source: 'mic',
+          target_track_id: 'melody',
+          target_bars: [1, 1],
+          notes: [
+            { p: 60, s: 0.17, d: 0.63, v: 0.7, s_raw: 0.17, d_raw: 0.63, source: 'take' },
+            { p: 63, s: 1.21, d: 0.74, v: 0.7, s_raw: 1.21, d_raw: 0.74, source: 'take' },
+          ],
+          pitch_track: [],
+          duration_s: 2,
+          voiced_ratio: 0.9,
+          median_clarity: 0.9,
+          pitch_range: [60, 63],
+          tempo_hint: 92,
+        },
+      ],
+    };
+    const songStore = store(song);
+    songStore.dispatch(
+      agent('propose_options', {
+        kind: 'take',
+        take_id: 'take-raw',
+        track_id: 'melody',
+        bar_from: 1,
+        bar_to: 1,
+        options: [
+          { label: 'Major shape', why: 'It fits C major.', notes: [{ p: 60, s: 0, d: 1 }] },
+          { label: 'Minor colour', why: 'It keeps the blue note.', notes: [{ p: 63, s: 0, d: 1 }] },
+        ],
+      }),
+    );
+    const rawOption = songStore
+      .getDocument()
+      .option_sets[0]?.options.find(({ raw_take }) => raw_take);
+    songStore.dispatch(agent('choose_option', { option_id: rawOption?.id }, rawOption?.why));
+
+    expect(songStore.getDocument().tracks[0]?.notes.filter(({ s }) => s < 4)).toEqual([
+      expect.objectContaining({ p: 60, s: 0.17, d: 0.63, s_raw: 0.17, d_raw: 0.63 }),
+      expect.objectContaining({ p: 63, s: 1.21, d: 0.74, s_raw: 1.21, d_raw: 0.74 }),
+    ]);
+    expect(rawOption?.label).toBe('None of these — keep what I sang');
+  });
 });

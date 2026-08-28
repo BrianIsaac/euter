@@ -26,6 +26,21 @@ export interface TakeData {
   pitch_range: [number, number];
   tempo_hint: number | null;
   refining_job_id?: string;
+  context?: TakeContext;
+}
+
+export interface TakeContext {
+  key: string;
+  target_bars: [number, number];
+  target_track_id?: string;
+  sections: { name: string; bar_from: number; bar_to: number }[];
+  chords: { bar: number; symbol: string }[];
+  other_tracks: {
+    track_id: string;
+    kind: SongDocument['tracks'][number]['kind'];
+    notes_total: number;
+    pitch_range?: [number, number];
+  }[];
 }
 
 /**
@@ -108,6 +123,52 @@ export function takeData(take: Take, beatsPerBar = 4): TakeData {
     data.refining_job_id = take.refining_job_id;
   }
   return data;
+}
+
+/** Returns the bounded song evidence around a rough take for musical interpretation. */
+export function takeContext(song: SongDocument, take: Take): TakeContext {
+  const beatsPerBar = song.time_sig[0];
+  const performedBars = takeBarRange(take, beatsPerBar, song.bars);
+  const targetBars: [number, number] =
+    take.target_bars === undefined
+      ? performedBars
+      : [
+          Math.min(take.target_bars[0], performedBars[0]),
+          Math.max(take.target_bars[1], performedBars[1]),
+        ];
+  const start = (targetBars[0] - 1) * beatsPerBar;
+  const end = targetBars[1] * beatsPerBar;
+  const otherTracks = song.tracks
+    .filter(({ id }) => id !== take.target_track_id)
+    .map((track) => {
+      const notes = track.notes.filter((note) => note.s < end && note.s + note.d > start);
+      const pitches = notes.map(({ p }) => p);
+      return {
+        track_id: track.id,
+        kind: track.kind,
+        notes_total: notes.length,
+        ...(track.kind === 'drums' || pitches.length === 0
+          ? {}
+          : { pitch_range: [Math.min(...pitches), Math.max(...pitches)] as [number, number] }),
+      };
+    });
+  return {
+    key: song.key.name,
+    target_bars: targetBars,
+    ...(take.target_track_id === undefined ? {} : { target_track_id: take.target_track_id }),
+    sections: song.sections.filter(
+      (section) => section.bar_from <= targetBars[1] && section.bar_to >= targetBars[0],
+    ),
+    chords: song.chords.filter(({ bar }) => bar >= targetBars[0] && bar <= targetBars[1]),
+    other_tracks: otherTracks,
+  };
+}
+
+function takeBarRange(take: Take, beatsPerBar: number, fallbackBar: number): [number, number] {
+  if (take.notes.length === 0) return [1, fallbackBar];
+  const first = Math.min(...take.notes.map(({ s }) => s));
+  const last = Math.max(...take.notes.map(({ s, d }) => Math.max(s, s + d - 0.000_001)));
+  return [Math.floor(first / beatsPerBar) + 1, Math.floor(last / beatsPerBar) + 1];
 }
 
 function noteView(note: Note, offset: number): { p: number; s: number; d: number; v: number } {

@@ -161,7 +161,22 @@ export function App({ runtime }: AppProps) {
   );
 
   const onTake = (recorded: RecordedTake): void => {
-    engine.addTake(recorded.take, 'Kept the take you just played.', 'human');
+    engine.addTake(
+      {
+        ...recorded.take,
+        ...(recorded.trackId === null ? {} : { target_track_id: recorded.trackId }),
+        ...(recorded.targetBars === null
+          ? {}
+          : {
+              target_bars: [recorded.targetBars.barFrom, recorded.targetBars.barTo] as [
+                number,
+                number,
+              ],
+            }),
+      },
+      'Kept the take you just played.',
+      'human',
+    );
   };
 
   const onCommit = ({ takeId, grid, strength }: TakeCommitOptions): void => {
@@ -179,7 +194,11 @@ export function App({ runtime }: AppProps) {
     void engine
       .importFile(file)
       .then((imported) => {
-        engine.addTake(imported.take, `Imported ${imported.fileName} as a take.`, 'human');
+        engine.addTake(
+          { ...imported.take, target_track_id: selectedTrackId },
+          `Imported ${imported.fileName} as a take.`,
+          'human',
+        );
       })
       .catch((thrown: unknown) => setError(message(thrown)));
   };
@@ -191,7 +210,7 @@ export function App({ runtime }: AppProps) {
       .catch((thrown: unknown) => setError(message(thrown)));
   };
 
-  const onChoose = (_set: TeachingOptionSet, option: TeachingOption): void => {
+  const onChoose = (set: TeachingOptionSet, option: TeachingOption): void => {
     engine.clearPreview();
     dispatch({
       type: 'choose_option',
@@ -199,6 +218,7 @@ export function App({ runtime }: AppProps) {
       source: 'human',
       why: option.why,
     });
+    if (set.kind === 'take') engine.setPendingTake(null);
   };
 
   const toggle = (next: Panel): void => {

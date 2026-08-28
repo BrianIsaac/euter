@@ -11,9 +11,13 @@ interface TakeEnvelope {
 }
 
 describe('get_take', () => {
-  it('returns the notes and the quality readings, and points at commit_take', async () => {
+  it('returns the rough notes with the musical context needed to interpret them', async () => {
     const harness = createHarness();
-    harness.engine.addTake(makeTake('take-1'), 'Kept your hum.', 'agent');
+    harness.engine.addTake(
+      { ...makeTake('take-1'), target_track_id: 'melody', target_bars: [1, 2] },
+      'Kept your hum.',
+      'agent',
+    );
     const envelope = (await harness.invoke('get_take', { take_id: 'take-1' })) as TakeEnvelope;
 
     expect(envelope.ok).toBe(true);
@@ -33,8 +37,24 @@ describe('get_take', () => {
       median_clarity: 0.82,
       pitch_range: [60, 65],
       tempo_hint: 92,
+      context: {
+        key: 'C major',
+        target_bars: [1, 2],
+        target_track_id: 'melody',
+        sections: [{ name: 'Verse', bar_from: 1, bar_to: 4 }],
+        chords: [
+          { bar: 1, symbol: 'C' },
+          { bar: 2, symbol: 'F' },
+        ],
+        other_tracks: [
+          { track_id: 'chords', kind: 'chords', notes_total: 0 },
+          { track_id: 'bass', kind: 'bass', notes_total: 2, pitch_range: [36, 41] },
+          { track_id: 'drums', kind: 'drums', notes_total: 16 },
+        ],
+      },
     });
-    expect(envelope.summary).toBe('Take take-1: 4 notes, 4s, clarity 0.82. Next: commit_take.');
+    expect(envelope.summary).toContain('Next: propose_options with kind take');
+    expect(envelope.summary).toContain('commit_take keeps the raw take');
     harness.engine.dispose();
   });
 
@@ -62,7 +82,7 @@ describe('get_take', () => {
     const envelope = (await harness.invoke('get_take', { take_id: 'take-1' })) as TakeEnvelope;
 
     expect(envelope.data.median_clarity).toBe(0.41);
-    expect(envelope.summary).toContain('The take is noisy; ask for another.');
+    expect(envelope.summary).toContain('The take is noisy; ask for another, or keep the raw take.');
     expect(envelope.summary).not.toContain('commit_take');
     harness.engine.dispose();
   });

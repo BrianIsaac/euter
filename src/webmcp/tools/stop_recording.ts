@@ -22,18 +22,25 @@ export const stopRecording: ToolDefinition<typeof stopRecordingInput> = {
     if (!result.ok) {
       throw new ToolError(recorderCode(result.code), result.message, result.recoverable);
     }
-    const { take, trackId } = result.data;
-    const command = dispatch(context, 'add_take', { take }, args);
-    context.engine.setPendingTake(take.id);
+    const { take, trackId, targetBars } = result.data;
+    const placedTake = {
+      ...take,
+      ...(trackId === null ? {} : { target_track_id: trackId }),
+      ...(targetBars === null
+        ? {}
+        : { target_bars: [targetBars.barFrom, targetBars.barTo] as [number, number] }),
+    };
+    const command = dispatch(context, 'add_take', { take: placedTake }, args);
+    context.engine.setPendingTake(placedTake.id);
     const song = context.bus.getDocument();
-    const data = takeData(take, song.time_sig[0]);
+    const data = takeData(placedTake, song.time_sig[0]);
     return ok(command.revision, command.changed, command.summary, {
       ...data,
       placed_on_track: trackId,
       next:
         data.median_clarity < 0.6
           ? 'The take is noisy; offer another before committing it.'
-          : 'Next: set_key, then suggest_chords or set_chords.',
+          : 'Next: get_take for context, then propose_options with kind take. commit_take keeps the raw take.',
     });
   },
 };

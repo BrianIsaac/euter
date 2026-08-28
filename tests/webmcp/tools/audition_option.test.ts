@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createHarness } from '../../helpers/harness.ts';
+import { createHarness, makeTake } from '../../helpers/harness.ts';
 
 interface AuditionEnvelope {
   ok: true;
@@ -104,6 +104,55 @@ describe('audition_option', () => {
       message: 'Option "option-9" does not exist. Read get_song_state for the option ids.',
     });
     expect(harness.transport.calls.play).toEqual([]);
+    harness.engine.dispose();
+  });
+
+  it('previews a take reading in context without changing the raw take or track', async () => {
+    const harness = createHarness();
+    const take = {
+      ...makeTake('take-1'),
+      target_track_id: 'melody',
+      target_bars: [1, 1] as [number, number],
+    };
+    harness.engine.addTake(take, 'Kept the rough take.', 'human');
+    await harness.invoke('propose_options', {
+      kind: 'take',
+      take_id: take.id,
+      track_id: 'melody',
+      bar_from: 1,
+      bar_to: 1,
+      options: [
+        {
+          label: 'Four even notes',
+          why: 'The repeated segments sound like four even notes.',
+          notes: [60, 60, 60, 60].map((p, s) => ({ p, s, d: 0.8 })),
+        },
+        {
+          label: 'Held opening',
+          why: 'The first two segments may be one held note.',
+          notes: [
+            { p: 60, s: 0, d: 1.8 },
+            { p: 64, s: 2, d: 0.8 },
+          ],
+        },
+      ],
+      why: 'Two readings of the rough note boundaries.',
+    });
+    const songBefore = structuredClone(harness.engine.store.getDocument());
+
+    const envelope = (await harness.invoke('audition_option', {
+      option_id: 'option-2',
+    })) as AuditionEnvelope;
+
+    expect(envelope.data.committed).toBe(false);
+    expect(
+      harness.engine.playback
+        .getPreview()
+        ?.tracks[0]?.notes.filter(({ s }) => s < 4)
+        .map(({ p }) => p),
+    ).toEqual([60, 64]);
+    expect(harness.engine.store.getDocument()).toEqual(songBefore);
+    expect(harness.engine.store.getDocument().takes[0]).toEqual(take);
     harness.engine.dispose();
   });
 });
