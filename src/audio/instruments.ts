@@ -1,5 +1,6 @@
 /** Lazy instrument catalogue, loaders and sample licences (plan Decision 3). */
-import type { SmplrPreset } from 'smplr';
+import type { Scheduler as SmplrScheduler, SmplrOptions, SmplrPreset } from 'smplr';
+import type { BaseContext } from 'tone';
 import { Midi } from 'tonal';
 
 export type InstrumentFamily = 'keys' | 'drums' | 'strings' | 'mallets' | 'brass-winds' | 'synth';
@@ -32,6 +33,8 @@ export interface InstrumentLoadRequest {
   samplesBaseUrl?: string | undefined;
   onProgress?: ((progress: number) => void) | undefined;
   factories?: InstrumentFactories | undefined;
+  /** Explicit Tone context for offline synth construction; live callers use Tone's active context. */
+  toneContext?: BaseContext | undefined;
   /** Answers whether the sample origin serves a URL; the default is a `HEAD` request. */
   probeRemote?: ((url: string) => Promise<boolean>) | undefined;
 }
@@ -47,15 +50,17 @@ export interface InstrumentFactories {
     destination: unknown,
     preset: SmplrPreset,
     onProgress: (progress: number) => void,
+    scheduler?: SmplrScheduler,
   ): Promise<InstrumentBackend>;
   drumMachine(
     context: BaseAudioContext,
     destination: unknown,
     baseUrl: string,
     onProgress: (progress: number) => void,
+    scheduler?: SmplrScheduler,
   ): Promise<InstrumentBackend>;
-  monoSynth(destination: unknown): Promise<InstrumentBackend>;
-  polySynth(destination: unknown): Promise<InstrumentBackend>;
+  monoSynth(destination: unknown, toneContext?: BaseContext): Promise<InstrumentBackend>;
+  polySynth(destination: unknown, toneContext?: BaseContext): Promise<InstrumentBackend>;
 }
 
 interface InstrumentDefinition {
@@ -275,8 +280,26 @@ export function instrumentsByFamily(): Record<InstrumentFamily, string[]> {
  * @returns The URL, or null when the entry names no sample file.
  */
 export function firstSampleUrl(entry: InstrumentCatalogueEntry, baseUrl: string): string | null {
-  const first = entry.sample_map?.[0]?.sample ?? entry.sample_files?.[0];
-  return first === undefined ? null : `${trimSlash(baseUrl)}/${first}.ogg`;
+  return sampleUrls(entry, baseUrl)[0] ?? null;
+}
+
+/** Every sample URL smplr must decode before this instrument can sound across its full range. */
+export function sampleUrls(entry: InstrumentCatalogueEntry, baseUrl: string): string[] {
+  const samples = entry.sample_map?.map(({ sample }) => sample) ?? entry.sample_files ?? [];
+  return samples.map((sample) => `${trimSlash(baseUrl)}/${sample}.ogg`);
+}
+
+/** Lets Web Audio schedule future offline sources before rendering starts. */
+export function createOfflineScheduler(): SmplrScheduler {
+  return {
+    schedule(event, callback) {
+      callback(event);
+      return () => undefined;
+    },
+    stop() {
+      // All events are handed directly to OfflineAudioContext; no polling queue exists.
+    },
+  };
 }
 
 /**
@@ -338,9 +361,10 @@ export async function loadInstrument(
     // smplr's loaders log a failed buffer and resolve anyway, so without this the sample origin
     // answering 404 would give a silent track and no notice. Measured on 28 Aug against the
     // deployed site while the remote half of the pack was still not uploaded.
-    const probeUrl = firstSampleUrl(entry, baseUrl);
+    const probeUrls = sampleUrls(entry, baseUrl);
     const probe = request.probeRemote ?? headProbe;
-    if (probeUrl !== null && !(await probe(probeUrl))) {
+    const available = await Promise.all(probeUrls.map((url) => probe(url)));
+    if (available.some((served) => !served)) {
       return substitute(`${entry.name} is not on the sample origin`);
     }
   }
@@ -362,14 +386,15 @@ async function createBackend(
   baseUrl: string,
 ): Promise<InstrumentBackend> {
   const progress = request.onProgress ?? (() => undefined);
+  const scheduler = request.toneContext === undefined ? undefined : createOfflineScheduler();
   progress(0);
   if (entry.engine === 'tone-monosynth') {
-    const backend = await factories.monoSynth(request.destination);
+    const backend = await factories.monoSynth(request.destination, request.toneContext);
     progress(1);
     return backend;
   }
   if (entry.engine === 'tone-polysynth') {
-    const backend = await factories.polySynth(request.destination);
+    const backend = await factories.polySynth(request.destination, request.toneContext);
     progress(1);
     return backend;
   }
@@ -379,13 +404,20 @@ async function createBackend(
       request.destination,
       baseUrl,
       progress,
+      scheduler,
     );
     progress(1);
     return backend;
   }
   if (!entry.sample_map) throw new Error(`Sample instrument "${entry.id}" has no explicit map.`);
   const preset = samplePreset(baseUrl, entry);
-  const backend = await factories.sampler(request.context, request.destination, preset, progress);
+  const backend = await factories.sampler(
+    request.context,
+    request.destination,
+    preset,
+    progress,
+    scheduler,
+  );
   progress(1);
   return backend;
 }
@@ -429,13 +461,14 @@ function trimSlash(value: string): string {
 }
 
 const DEFAULT_FACTORIES: InstrumentFactories = {
-  async sampler(context, destination, preset, onProgress) {
+  async sampler(context, destination, preset, onProgress, scheduler) {
     const { Sampler } = await import('smplr');
     const instrument = Sampler(context, {
       preset,
       destination: nativeDestination(destination, context),
       onLoadProgress: ({ loaded, total }) => onProgress(total === 0 ? 1 : loaded / total),
-    });
+      ...(scheduler === undefined ? {} : { scheduler }),
+    } as Parameters<typeof Sampler>[1] & Pick<SmplrOptions, 'scheduler'>);
     await instrument.ready;
     return {
       trigger: (pitch, time, duration, velocity) => {
@@ -444,7 +477,7 @@ const DEFAULT_FACTORIES: InstrumentFactories = {
       dispose: () => instrument.dispose(),
     };
   },
-  async drumMachine(context, destination, baseUrl, onProgress) {
+  async drumMachine(context, destination, baseUrl, onProgress, scheduler) {
     const { DrumMachine } = await import('smplr');
     const samples = ['kick', 'snare', 'closed_hat', 'open_hat'];
     const instrument = DrumMachine(context, {
@@ -458,7 +491,8 @@ const DEFAULT_FACTORIES: InstrumentFactories = {
       },
       destination: nativeDestination(destination, context),
       onLoadProgress: ({ loaded, total }) => onProgress(total === 0 ? 1 : loaded / total),
-    });
+      ...(scheduler === undefined ? {} : { scheduler }),
+    } as Parameters<typeof DrumMachine>[1] & Pick<SmplrOptions, 'scheduler'>);
     await instrument.ready;
     const drumName = (pitch: number): string =>
       ({ 36: 'kick', 38: 'snare', 42: 'closed_hat', 46: 'open_hat' })[pitch] ?? 'closed_hat';
@@ -474,9 +508,10 @@ const DEFAULT_FACTORIES: InstrumentFactories = {
       dispose: () => instrument.dispose(),
     };
   },
-  async monoSynth(destination) {
+  async monoSynth(destination, toneContext) {
     const tone = await import('tone');
     const instrument = new tone.MonoSynth({
+      ...(toneContext === undefined ? {} : { context: toneContext }),
       oscillator: { type: 'sine' },
       envelope: { attack: 0.01, decay: 0.18, sustain: 0.55, release: 0.45 },
       filterEnvelope: {
@@ -491,9 +526,10 @@ const DEFAULT_FACTORIES: InstrumentFactories = {
     connectToneInstrument(instrument, destination);
     return toneBackend(instrument, tone);
   },
-  async polySynth(destination) {
+  async polySynth(destination, toneContext) {
     const tone = await import('tone');
     const instrument = new tone.PolySynth(tone.Synth, {
+      ...(toneContext === undefined ? {} : { context: toneContext }),
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.18, decay: 0.4, sustain: 0.58, release: 1.8 },
     });

@@ -146,6 +146,30 @@ export interface Engine {
 
 const KEYBOARD_NOTE_SECONDS = 1.2;
 
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw signal.reason ?? new DOMException('Take stopped.', 'AbortError');
+}
+
+function waitWithSignal(promise: Promise<void>, signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) return promise;
+  throwIfAborted(signal);
+  return new Promise<void>((resolve, reject) => {
+    const abort = (): void =>
+      reject(signal.reason ?? new DOMException('Take stopped.', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(
+      () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
  * Builds the engine.
  *
@@ -196,7 +220,8 @@ export function createEngine(options: EngineOptions = {}): Engine {
     getBpm: () => store.getDocument().bpm,
     getTimeSignature: () => store.getDocument().time_sig,
     getPositionSeconds: () => audio.getContext()?.currentTime ?? 0,
-    async countIn({ bars, metronome: click, targetBar, mutedTrackId }) {
+    async countIn({ bars, metronome: click, targetBar, mutedTrackId, signal }) {
+      throwIfAborted(signal);
       const song = store.getDocument();
       const bpm = song.bpm;
       const beatsPerBar = song.time_sig[0];
@@ -205,49 +230,94 @@ export function createEngine(options: EngineOptions = {}): Engine {
         targetBar === undefined || mutedTrackId === undefined
           ? null
           : createTakeBackingSong(song, mutedTrackId);
-      const startBar = targetBar === undefined ? 1 : countInStartBar(targetBar, bars);
+      const hasFullBackingPreRoll = backing !== null && targetBar !== undefined && targetBar > bars;
+      const captureBar = targetBar ?? 1;
+      const startBar =
+        targetBar === undefined || !hasFullBackingPreRoll ? 1 : countInStartBar(targetBar, bars);
+      const silentPreRoll =
+        backing === null || hasFullBackingPreRoll
+          ? null
+          : {
+              ...backing,
+              tracks: backing.tracks.map((track) => ({ ...track, mute: true, solo: false })),
+            };
       let finished = false;
       const finish = (): void => {
         if (finished) return;
         finished = true;
         metronome.stop();
-        void transport.stop();
-        if (backing !== null && playback.getPreview() === backing) playback.setPreview(null);
+        void transport.stop().catch(() => undefined);
+        const activePreview = playback.getPreview();
+        if (activePreview === backing || activePreview === silentPreRoll) playback.setPreview(null);
         notify();
       };
-      if (!click) {
-        if (backing !== null) {
-          playback.setPreview(backing);
-          await transport.play(backing, { from_bar: startBar });
-        }
-        await delay(durationSeconds * 1000);
-        return { durationSeconds, ...(backing === null ? {} : { finish }) };
-      }
-      let complete: () => void = () => undefined;
-      const completed = new Promise<void>((resolve) => {
-        complete = resolve;
-      });
-      let clickFailed = false;
+      const ensureActive = async (): Promise<void> => {
+        if (!finished) return;
+        metronome.stop();
+        await transport.stop().catch(() => undefined);
+        throw signal?.reason ?? new DOMException('Take stopped.', 'AbortError');
+      };
+      const startBacking = async (document: SongDocument, fromBar: number): Promise<void> => {
+        await transport.play(document, { from_bar: fromBar });
+        await ensureActive();
+      };
+      const abort = (): void => finish();
+      signal?.addEventListener('abort', abort, { once: true });
       try {
-        await metronome.scheduleCountIn({
-          bars,
-          bpm,
-          beatsPerBar,
-          startBar,
-          startTransport: backing === null,
-          continueClick: true,
-          onComplete: complete,
+        if (!click) {
+          if (backing !== null && hasFullBackingPreRoll) {
+            playback.setPreview(backing);
+            await startBacking(backing, startBar);
+          }
+          await waitWithSignal(delay(durationSeconds * 1000), signal);
+          if (backing !== null && !hasFullBackingPreRoll) {
+            playback.setPreview(backing);
+            await startBacking(backing, captureBar);
+          }
+          throwIfAborted(signal);
+          return { durationSeconds, finish };
+        }
+
+        let complete: () => void = () => undefined;
+        const completed = new Promise<void>((resolve) => {
+          complete = resolve;
         });
-      } catch {
-        clickFailed = true;
+        if (silentPreRoll !== null) playback.setPreview(silentPreRoll);
+        let clickFailed = false;
+        try {
+          await metronome.scheduleCountIn({
+            bars,
+            bpm,
+            beatsPerBar,
+            startBar,
+            startTransport: backing === null || !hasFullBackingPreRoll,
+            continueClick: backing === null || hasFullBackingPreRoll,
+            onComplete: complete,
+          });
+          await ensureActive();
+        } catch {
+          metronome.stop();
+          clickFailed = true;
+        }
+        if (backing !== null && hasFullBackingPreRoll) {
+          playback.setPreview(backing);
+          await startBacking(backing, startBar);
+        }
+        if (clickFailed) await waitWithSignal(delay(durationSeconds * 1000), signal);
+        else await waitWithSignal(completed, signal);
+        if (backing !== null && !hasFullBackingPreRoll) {
+          metronome.stop();
+          playback.setPreview(backing);
+          await startBacking(backing, captureBar);
+        }
+        throwIfAborted(signal);
+        return { durationSeconds, finish };
+      } catch (error) {
+        finish();
+        throw error;
+      } finally {
+        signal?.removeEventListener('abort', abort);
       }
-      if (backing !== null) {
-        playback.setPreview(backing);
-        await transport.play(backing, { from_bar: startBar });
-      }
-      if (clickFailed) await delay(durationSeconds * 1000);
-      else await completed;
-      return { durationSeconds, ...(backing === null ? {} : { finish }) };
     },
   };
 

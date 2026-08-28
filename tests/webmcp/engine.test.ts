@@ -6,7 +6,14 @@ import {
 } from '../../src/audio/render.ts';
 import { createEmptySong } from '../../src/song/types.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
-import { createTestEngine, fakeAudio, fakeAudioBuffer, makeTake } from '../helpers/harness.ts';
+import {
+  createTestEngine,
+  fakeAudio,
+  fakeAudioBuffer,
+  fakeMetronome,
+  fakeTransport,
+  makeTake,
+} from '../helpers/harness.ts';
 
 async function settle(): Promise<void> {
   await new Promise((resolve) => {
@@ -135,6 +142,146 @@ describe('engine', () => {
     await settle();
     expect(transport.calls.stop).toBe(1);
     expect(engine.playback.getPreview()).toBeNull();
+    engine.dispose();
+  });
+
+  it('waits out an early-bar count-in before starting backing on the requested bar', async () => {
+    let complete: (() => void) | undefined;
+    const metronome = fakeMetronome();
+    vi.spyOn(metronome, 'scheduleCountIn').mockImplementationOnce((options) => {
+      complete = options.onComplete;
+      return Promise.resolve({ duration_s: 2, cancel: vi.fn() });
+    });
+    const { engine, transport } = createTestEngine({ metronome });
+
+    const counting = engine.transportPort.countIn({
+      bars: 1,
+      metronome: true,
+      targetBar: 1,
+      mutedTrackId: 'bass',
+    });
+    await settle();
+    expect(transport.calls.play).toEqual([]);
+
+    complete?.();
+    const result = await counting;
+    expect(transport.calls.play).toEqual([{ from_bar: 1 }]);
+    result.finish?.();
+    engine.dispose();
+  });
+
+  it('rolls back clicks and the detached preview when backing startup fails', async () => {
+    const audio = fakeAudio();
+    const transport = fakeTransport(audio);
+    vi.spyOn(transport, 'play').mockRejectedValueOnce(new Error('Tone transport failed'));
+    const metronome = fakeMetronome();
+    const stopMetronome = vi.spyOn(metronome, 'stop');
+    const { engine } = createTestEngine({ audio, transport, metronome });
+
+    await expect(
+      engine.transportPort.countIn({
+        bars: 1,
+        metronome: true,
+        targetBar: 5,
+        mutedTrackId: 'bass',
+      }),
+    ).rejects.toThrow('Tone transport failed');
+
+    expect(stopMetronome).toHaveBeenCalledOnce();
+    expect(engine.playback.getPreview()).toBeNull();
+    engine.dispose();
+  });
+
+  it('cancels backing and its wait when the recorder aborts during count-in', async () => {
+    let releaseDelay: (() => void) | undefined;
+    const delay = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDelay = resolve;
+        }),
+    );
+    const { engine, transport } = createTestEngine({ delay });
+    const controller = new AbortController();
+    const counting = engine.transportPort.countIn({
+      bars: 1,
+      metronome: false,
+      targetBar: 5,
+      mutedTrackId: 'bass',
+      signal: controller.signal,
+    });
+    await settle();
+    expect(engine.playback.getPreview()).not.toBeNull();
+
+    controller.abort(new DOMException('Take stopped.', 'AbortError'));
+    releaseDelay?.();
+
+    await expect(counting).rejects.toMatchObject({ name: 'AbortError' });
+    expect(transport.calls.stop).toBe(1);
+    expect(engine.playback.getPreview()).toBeNull();
+    engine.dispose();
+  });
+
+  it('stops a backing start that resolves after the count-in was cancelled', async () => {
+    const audio = fakeAudio();
+    const transport = fakeTransport(audio);
+    const play = transport.play.bind(transport);
+    let releaseStart: (() => void) | undefined;
+    vi.spyOn(transport, 'play').mockImplementation(async (song, options) => {
+      await new Promise<void>((resolve) => {
+        releaseStart = resolve;
+      });
+      return play(song, options);
+    });
+    const { engine } = createTestEngine({ audio, transport });
+    const controller = new AbortController();
+    const counting = engine.transportPort.countIn({
+      bars: 1,
+      metronome: false,
+      targetBar: 5,
+      mutedTrackId: 'bass',
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(transport.play).toHaveBeenCalledOnce());
+
+    controller.abort(new DOMException('Take stopped.', 'AbortError'));
+    releaseStart?.();
+
+    await expect(counting).rejects.toMatchObject({ name: 'AbortError' });
+    expect(transport.getSnapshot().playing).toBe(false);
+    expect(engine.playback.getPreview()).toBeNull();
+    engine.dispose();
+  });
+
+  it('clears metronome work that finishes scheduling after cancellation', async () => {
+    let scheduled = false;
+    let releaseSchedule: (() => void) | undefined;
+    const metronome = fakeMetronome();
+    vi.spyOn(metronome, 'scheduleCountIn').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseSchedule = () => {
+            scheduled = true;
+            resolve({ duration_s: 2, cancel: vi.fn() });
+          };
+        }),
+    );
+    vi.spyOn(metronome, 'stop').mockImplementation(() => {
+      scheduled = false;
+    });
+    const { engine } = createTestEngine({ metronome });
+    const controller = new AbortController();
+    const counting = engine.transportPort.countIn({
+      bars: 1,
+      metronome: true,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(metronome.scheduleCountIn).toHaveBeenCalledOnce());
+
+    controller.abort(new DOMException('Take stopped.', 'AbortError'));
+    releaseSchedule?.();
+
+    await expect(counting).rejects.toMatchObject({ name: 'AbortError' });
+    expect(scheduled).toBe(false);
     engine.dispose();
   });
 
