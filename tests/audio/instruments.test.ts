@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { BaseContext } from 'tone';
 import {
+  createOfflineScheduler,
   firstSampleUrl,
   INSTRUMENT_CATALOGUE,
   instrumentPitchName,
   instrumentsByFamily,
   loadInstrument,
   nativeDestination,
+  sampleUrls,
   type InstrumentBackend,
   type InstrumentFactories,
 } from '../../src/audio/instruments.ts';
@@ -116,7 +119,7 @@ describe('instrument catalogue', () => {
     expect(progress).toHaveBeenLastCalledWith(1);
   });
 
-  it('names the first sample a remote instrument would fetch', () => {
+  it('names every sample a remote instrument must fetch', () => {
     const piano = INSTRUMENT_CATALOGUE.find(({ id }) => id === 'electric-piano');
     const kit = INSTRUMENT_CATALOGUE.find(({ id }) => id === 'pocket-kit');
     const synth = INSTRUMENT_CATALOGUE.find(({ id }) => id === 'sub-bass');
@@ -124,6 +127,12 @@ describe('instrument catalogue', () => {
     expect(firstSampleUrl(piano, 'https://samples.example/electric-piano/')).toBe(
       'https://samples.example/electric-piano/c2.ogg',
     );
+    expect(sampleUrls(piano, 'https://samples.example/electric-piano/')).toEqual([
+      'https://samples.example/electric-piano/c2.ogg',
+      'https://samples.example/electric-piano/c3.ogg',
+      'https://samples.example/electric-piano/c4.ogg',
+      'https://samples.example/electric-piano/c5.ogg',
+    ]);
     expect(firstSampleUrl(kit, 'https://samples.example/pocket-kit')).toBe(
       'https://samples.example/pocket-kit/kick.ogg',
     );
@@ -148,6 +157,25 @@ describe('instrument catalogue', () => {
     expect(result.reason).toBe(
       'Electric piano is not on the sample origin; playing Grand piano instead.',
     );
+    expect(vi.mocked(fake.value.sampler)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
+      '/samples/piano/grand/',
+    );
+  });
+
+  it('substitutes when any file in a remote instrument is missing', async () => {
+    const fake = factories();
+    const probeRemote = vi.fn(async (url: string) => !url.endsWith('/c3.ogg'));
+    const result = await loadInstrument('electric-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      samplesBaseUrl: 'https://samples.example',
+      probeRemote,
+    });
+
+    expect(probeRemote).toHaveBeenCalledTimes(4);
+    expect(result.loaded).toBe(false);
     expect(vi.mocked(fake.value.sampler)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
       '/samples/piano/grand/',
@@ -193,12 +221,49 @@ describe('instrument catalogue', () => {
 
   it('resolves drum machines and the two deliberate Tone synth exceptions', async () => {
     const fake = factories();
+    const destination = {};
+    const toneContext = {} as BaseContext;
     await loadInstrument('studio-kit', { context, destination: {}, factories: fake.value });
-    await loadInstrument('sub-bass', { context, destination: {}, factories: fake.value });
-    await loadInstrument('warm-pad', { context, destination: {}, factories: fake.value });
+    await loadInstrument('sub-bass', {
+      context,
+      destination,
+      factories: fake.value,
+      toneContext,
+    });
+    await loadInstrument('warm-pad', {
+      context,
+      destination,
+      factories: fake.value,
+      toneContext,
+    });
     expect(fake.value.drumMachine).toHaveBeenCalledTimes(1);
-    expect(fake.value.monoSynth).toHaveBeenCalledTimes(1);
-    expect(fake.value.polySynth).toHaveBeenCalledTimes(1);
+    expect(fake.value.monoSynth).toHaveBeenCalledWith(destination, toneContext);
+    expect(fake.value.polySynth).toHaveBeenCalledWith(destination, toneContext);
+  });
+
+  it('dispatches future smplr notes immediately for OfflineAudioContext scheduling', () => {
+    const scheduler = createOfflineScheduler();
+    const callback = vi.fn();
+    const event = { note: 60, time: 12, duration: 1 };
+
+    scheduler.schedule(event, callback);
+
+    expect(callback).toHaveBeenCalledWith(event);
+  });
+
+  it('hands sampled offline instruments the immediate scheduler', async () => {
+    const fake = factories();
+    await loadInstrument('grand-piano', {
+      context,
+      destination: {},
+      factories: fake.value,
+      toneContext: {} as BaseContext,
+    });
+
+    const scheduler = vi.mocked(fake.value.sampler).mock.calls[0]?.[4];
+    const callback = vi.fn();
+    scheduler?.schedule({ note: 72, time: 8 }, callback);
+    expect(callback).toHaveBeenCalledOnce();
   });
 
   it('rejects unknown instruments and names MIDI pitches', async () => {

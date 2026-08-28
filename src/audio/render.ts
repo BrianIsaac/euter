@@ -1,4 +1,6 @@
 import type { Note, SongDocument, Track } from '../song/types.ts';
+import type { BaseContext } from 'tone';
+import type * as ToneModuleNamespace from 'tone';
 import { loadInstrument, type InstrumentLoadResult } from './instruments.ts';
 import {
   DEFAULT_REVERB_SEND,
@@ -61,9 +63,19 @@ export type OfflineGraphFactory = Pick<
 export interface OfflineToneBoundary {
   render(
     request: Pick<OfflineRenderRequest, 'duration_seconds' | 'sample_rate' | 'channels'>,
-    build: (context: BaseAudioContext, graph: OfflineGraphFactory) => Promise<void>,
+    build: (
+      context: BaseAudioContext,
+      graph: OfflineGraphFactory,
+      toneContext?: BaseContext,
+    ) => Promise<void> | void,
+    options?: Pick<OfflineRenderEngineOptions, 'signal'>,
   ): Promise<AudioBuffer>;
 }
+
+export type OfflineToneModule = Pick<
+  typeof ToneModuleNamespace,
+  'OfflineContext' | 'Compressor' | 'Limiter' | 'Reverb' | 'Channel' | 'Gain'
+>;
 
 export interface CatalogueOfflineEngineDependencies {
   boundary?: OfflineToneBoundary | undefined;
@@ -149,39 +161,44 @@ export function createCatalogueOfflineEngine(
       };
 
       const buffer = await abortable(
-        boundary.render(request, async (context, graph) => {
-          throwIfAborted(options.signal);
-          const destination = graph.destination();
-          const compressor = graph.compressor();
-          const limiter = graph.limiter(MASTER_LIMITER_CEILING_DB);
-          const reverb = graph.reverb();
-          compressor.connect(limiter);
-          limiter.connect(destination);
-          reverb.connect(compressor);
+        boundary.render(
+          request,
+          async (context, graph, toneContext) => {
+            throwIfAborted(options.signal);
+            const destination = graph.destination();
+            const compressor = graph.compressor();
+            const limiter = graph.limiter(MASTER_LIMITER_CEILING_DB);
+            const reverb = graph.reverb();
+            compressor.connect(limiter);
+            limiter.connect(destination);
+            reverb.connect(compressor);
 
-          await Promise.all(
-            request.tracks.map(async ({ track, notes }) => {
-              throwIfAborted(options.signal);
-              const channel = graph.channel(track);
-              const send = graph.send(DEFAULT_REVERB_SEND[track.kind], track.id);
-              channel.connect(compressor);
-              channel.connect(send);
-              send.connect(reverb);
-              const result = await instrumentLoader(track.instrument, {
-                context,
-                destination: channel.raw,
-                samplesBaseUrl: request.samples_base_url,
-                onProgress: (value) => reportLoadProgress(track.id, value),
-              });
-              throwIfAborted(options.signal);
-              if (!result.loaded && result.reason)
-                fallbacks.push(`${track.name}: ${result.reason}`);
-              scheduleTrack(result, notes);
-              reportLoadProgress(track.id, 1);
-            }),
-          );
-          progress(85);
-        }),
+            await Promise.all(
+              request.tracks.map(async ({ track, notes }) => {
+                throwIfAborted(options.signal);
+                const channel = graph.channel(track);
+                const send = graph.send(DEFAULT_REVERB_SEND[track.kind], track.id);
+                channel.connect(compressor);
+                channel.connect(send);
+                send.connect(reverb);
+                const result = await instrumentLoader(track.instrument, {
+                  context,
+                  destination: channel.raw,
+                  samplesBaseUrl: request.samples_base_url,
+                  toneContext,
+                  onProgress: (value) => reportLoadProgress(track.id, value),
+                });
+                throwIfAborted(options.signal);
+                if (!result.loaded && result.reason)
+                  fallbacks.push(`${track.name}: ${result.reason}`);
+                scheduleTrack(result, notes);
+                reportLoadProgress(track.id, 1);
+              }),
+            );
+            progress(85);
+          },
+          { signal: options.signal },
+        ),
         options.signal,
       );
       progress(100);
@@ -266,52 +283,87 @@ function abortable<Result>(
   });
 }
 
-const DEFAULT_TONE_BOUNDARY: OfflineToneBoundary = {
-  async render(request, build) {
-    const tone = await import('tone');
-    const result = await tone.Offline(
-      async (context) => {
-        const wrap = (label: string, raw: unknown): GraphNode => ({
-          label,
-          raw,
-          connect(destination) {
-            (raw as { connect(target: unknown): unknown }).connect(destination.raw);
-          },
-          dispose() {
-            (raw as { dispose?: () => void }).dispose?.();
-          },
-        });
-        const graph: OfflineGraphFactory = {
-          destination: () => wrap('destination', tone.getDestination()),
-          compressor: () => wrap('master:compressor', new tone.Compressor(MASTER_COMPRESSOR)),
-          limiter: (ceilingDb) => wrap('master:limiter', new tone.Limiter(ceilingDb)),
-          reverb: () => wrap('master:reverb', new tone.Reverb(MASTER_REVERB)),
-          channel: (track): ChannelNode => {
-            const raw = new tone.Channel({
-              volume: track.volume_db,
-              pan: track.pan,
-              mute: track.mute,
-              solo: track.solo,
-            });
-            return {
-              ...wrap(`channel:${track.id}`, raw),
-              setMix() {
-                // Offline mix is immutable for the duration of one render.
-              },
-            };
-          },
-          send: (gain, trackId) => wrap(`send:${trackId}`, new tone.Gain(gain)),
-        };
-        await build(context.rawContext as BaseAudioContext, graph);
-      },
-      request.duration_seconds,
-      request.channels,
-      request.sample_rate,
-    );
-    const buffer = result.get();
-    if (!buffer) throw new Error('Tone.Offline completed without an AudioBuffer.');
-    return buffer;
-  },
-};
+/**
+ * Builds an explicit Tone OfflineContext so asynchronous sample loads never replace Tone's global
+ * live context. Calls are serialised to keep simultaneous export jobs from multiplying decode and
+ * render pressure, while every Tone node and synth remains bound to the explicit offline context.
+ */
+export function createToneOfflineBoundary(
+  provideTone: () => Promise<OfflineToneModule> = () => import('tone'),
+): OfflineToneBoundary {
+  let tail: Promise<void> = Promise.resolve();
+  return {
+    render(request, build, options = {}) {
+      const run = async (): Promise<AudioBuffer> => {
+        throwIfAborted(options.signal);
+        const tone = await provideTone();
+        throwIfAborted(options.signal);
+        const context = new tone.OfflineContext(
+          request.channels,
+          request.duration_seconds,
+          request.sample_rate,
+        );
+        try {
+          const reverbReady: Promise<unknown>[] = [];
+          const wrap = (label: string, raw: unknown): GraphNode => ({
+            label,
+            raw,
+            connect(destination) {
+              (raw as { connect(target: unknown): unknown }).connect(destination.raw);
+            },
+            dispose() {
+              (raw as { dispose?: () => void }).dispose?.();
+            },
+          });
+          const graph: OfflineGraphFactory = {
+            destination: () => wrap('destination', context.destination),
+            compressor: () =>
+              wrap('master:compressor', new tone.Compressor({ ...MASTER_COMPRESSOR, context })),
+            limiter: (ceilingDb) =>
+              wrap('master:limiter', new tone.Limiter({ threshold: ceilingDb, context })),
+            reverb: () => {
+              const raw = new tone.Reverb({ ...MASTER_REVERB, context });
+              reverbReady.push(raw.ready);
+              return wrap('master:reverb', raw);
+            },
+            channel: (track): ChannelNode => {
+              const raw = new tone.Channel({
+                context,
+                volume: track.volume_db,
+                pan: track.pan,
+                mute: track.mute,
+                solo: track.solo,
+              });
+              return {
+                ...wrap(`channel:${track.id}`, raw),
+                setMix() {
+                  // Offline mix is immutable for the duration of one render.
+                },
+              };
+            },
+            send: (gain, trackId) => wrap(`send:${trackId}`, new tone.Gain({ gain, context })),
+          };
+          await build(context.rawContext as BaseAudioContext, graph, context);
+          await Promise.all(reverbReady);
+          throwIfAborted(options.signal);
+          const result = await context.render();
+          const buffer = result.get();
+          if (!buffer) throw new Error('Tone.Offline completed without an AudioBuffer.');
+          return buffer;
+        } finally {
+          context.dispose();
+        }
+      };
+      const rendering = tail.then(run, run);
+      tail = rendering.then(
+        () => undefined,
+        () => undefined,
+      );
+      return abortable(rendering, options.signal);
+    },
+  };
+}
+
+const DEFAULT_TONE_BOUNDARY = createToneOfflineBoundary();
 
 const DEFAULT_OFFLINE_ENGINE = createCatalogueOfflineEngine();

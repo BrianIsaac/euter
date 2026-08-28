@@ -150,6 +150,7 @@ describe('RecorderController', () => {
       metronome: true,
       targetBar: 3,
       mutedTrackId: 'bass',
+      signal: expect.any(AbortSignal),
     });
     expect(test.addModule).toHaveBeenCalledTimes(1);
     expect(test.disconnect).toHaveBeenCalledOnce();
@@ -174,6 +175,64 @@ describe('RecorderController', () => {
     await recorder.stop();
 
     expect(finish).toHaveBeenCalledOnce();
+  });
+
+  it('stops backing before waiting for the worklet to finish a take', async () => {
+    const test = harness();
+    const finish = vi.fn();
+    test.countIn.mockResolvedValueOnce({ durationSeconds: 0.5, finish });
+    vi.mocked(test.port.postMessage).mockImplementation(() => undefined);
+    const recorder = new RecorderController(test.transport, test.dependencies);
+    await recorder.start({
+      trackId: 'bass',
+      targetBars: { barFrom: 5, barTo: 8 },
+      countInBars: 1,
+      metronome: true,
+    });
+
+    const stopping = recorder.stop();
+
+    expect(finish).toHaveBeenCalledOnce();
+    await expect(stopping).resolves.toMatchObject({ ok: false, code: 'CAPTURE_FAILED' });
+    expect(finish).toHaveBeenCalledOnce();
+  });
+
+  it('aborts the arranged count-in immediately when disposed before recording begins', async () => {
+    const test = harness();
+    const finish = vi.fn();
+    let observedSignal: AbortSignal | undefined;
+    let release: ((value: { durationSeconds: number; finish: () => void }) => void) | undefined;
+    test.countIn.mockImplementationOnce(
+      (options) =>
+        new Promise((resolve, reject) => {
+          observedSignal = options.signal;
+          release = resolve;
+          options.signal?.addEventListener(
+            'abort',
+            () => {
+              finish();
+              reject(options.signal?.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const recorder = new RecorderController(test.transport, test.dependencies);
+    const starting = recorder.start({
+      trackId: 'bass',
+      targetBars: { barFrom: 5, barTo: 8 },
+      countInBars: 1,
+      metronome: true,
+    });
+    await vi.waitFor(() => expect(test.countIn).toHaveBeenCalledOnce());
+
+    recorder.dispose();
+    release?.({ durationSeconds: 0.5, finish });
+    await starting;
+
+    expect(observedSignal?.aborted).toBe(true);
+    expect(finish).toHaveBeenCalledOnce();
+    expect(recorder.getSnapshot().status).toBe('idle');
   });
 
   it('refuses overlapping and absent recording operations', async () => {

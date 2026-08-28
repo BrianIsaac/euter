@@ -13,6 +13,8 @@ export interface CountInOptions {
   metronome: boolean;
   targetBar?: number;
   mutedTrackId?: string;
+  /** Cancels scheduled clicks and backing when the capture is stopped before count-in completes. */
+  signal?: AbortSignal;
 }
 
 export interface CountInResult {

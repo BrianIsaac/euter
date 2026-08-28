@@ -80,6 +80,7 @@ interface ActiveCapture {
   pcm: Promise<WorkletTakeMessage>;
   options: StartRecordingOptions;
   countInSeconds: number;
+  countInController: AbortController;
   finishBacking: (() => void) | null;
 }
 
@@ -232,6 +233,7 @@ export class RecorderController {
       return denied;
     }
 
+    let capture: ActiveCapture | null = null;
     try {
       await context.audioWorklet.addModule(pitchWorkletUrl);
       const graph = this.#connectWorklet(context, stream);
@@ -247,12 +249,13 @@ export class RecorderController {
         }
       };
       graph.port.postMessage({ type: 'start' });
-      const capture: ActiveCapture = {
+      capture = {
         stream,
         graph,
         pcm,
         options,
         countInSeconds: 0,
+        countInController: new AbortController(),
         finishBacking: null,
       };
       this.#active = capture;
@@ -262,9 +265,11 @@ export class RecorderController {
         metronome: options.metronome,
         ...(options.targetBars === undefined ? {} : { targetBar: options.targetBars.barFrom }),
         ...(options.trackId === undefined ? {} : { mutedTrackId: options.trackId }),
+        signal: capture.countInController.signal,
       };
       const countIn = await this.transport.countIn(countInOptions);
       if (this.#active !== capture) {
+        countIn.finish?.();
         return failure('CAPTURE_FAILED', 'The take ended during the count-in.');
       }
       capture.countInSeconds = countIn.durationSeconds;
@@ -272,10 +277,14 @@ export class RecorderController {
       this.#publish({ ...this.#snapshot, status: 'recording' });
       return { ok: true, data: this.#snapshot };
     } catch {
-      if (this.#active !== null && this.#active.stream === stream) {
-        this.#cleanup(this.#active);
-      } else {
+      const interrupted = capture !== null && this.#active !== capture;
+      if (capture !== null && this.#active === capture) {
+        this.#cleanup(capture);
+      } else if (capture === null) {
         stopStream(stream);
+      }
+      if (interrupted) {
+        return failure('CAPTURE_FAILED', 'The take ended during the count-in.');
       }
       const failed = failure('CAPTURE_FAILED', 'The microphone capture graph could not start.');
       this.#publishFailure(failed);
@@ -287,6 +296,7 @@ export class RecorderController {
     const active = this.#active;
     if (active === null) return failure('NOT_RECORDING', 'No take is currently recording.');
     this.#publish({ ...this.#snapshot, status: 'transcribing' });
+    this.#finishCountIn(active);
     active.graph.port.postMessage({ type: 'stop' });
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -343,9 +353,16 @@ export class RecorderController {
 
   #cleanup(active: ActiveCapture): void {
     if (this.#active !== active) return;
+    this.#finishCountIn(active);
     active.graph.disconnect();
     stopStream(active.stream);
-    active.finishBacking?.();
     this.#active = null;
+  }
+
+  #finishCountIn(active: ActiveCapture): void {
+    active.countInController.abort(new DOMException('Take stopped.', 'AbortError'));
+    const finish = active.finishBacking;
+    active.finishBacking = null;
+    finish?.();
   }
 }

@@ -3,10 +3,12 @@ import type { AudioInstrument, InstrumentLoadResult } from '../../src/audio/inst
 import type { ChannelNode, GraphNode } from '../../src/audio/reconciler.ts';
 import {
   createCatalogueOfflineEngine,
+  createToneOfflineBoundary,
   getRenderFallbacks,
   renderSong,
   type OfflineGraphFactory,
   type OfflineRenderEngine,
+  type OfflineToneModule,
   type OfflineToneBoundary,
 } from '../../src/audio/render.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
@@ -172,6 +174,55 @@ describe('offline rendering', () => {
       'Chords: Electric piano needs R2; playing Grand piano instead.',
     ]);
   });
+
+  it('serialises explicit Tone offline contexts without replacing the live context', async () => {
+    const fake = fakeToneModule();
+    const boundary = createToneOfflineBoundary(async () => fake.module);
+    let releaseFirst: (() => void) | undefined;
+    const first = boundary.render(renderRequest(), async () => {
+      fake.events.push('build:first');
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+    });
+    const second = boundary.render(renderRequest(), () => {
+      fake.events.push('build:second');
+    });
+    await vi.waitFor(() => expect(fake.events).toContain('build:first'));
+
+    expect(fake.events).not.toContain('build:second');
+    expect(fake.currentContext()).toBe(fake.liveContext);
+    releaseFirst?.();
+    await Promise.all([first, second]);
+    expect(fake.events.filter((event) => event.startsWith('build:'))).toEqual([
+      'build:first',
+      'build:second',
+    ]);
+  });
+
+  it('waits for the Tone reverb and leaves the live context intact when setup fails', async () => {
+    const fake = fakeToneModule();
+    const boundary = createToneOfflineBoundary(async () => fake.module);
+    let releaseReverb: (() => void) | undefined;
+    fake.reverbReady = new Promise<void>((resolve) => {
+      releaseReverb = resolve;
+    });
+    const rendering = boundary.render(renderRequest(), (_context, graph) => {
+      graph.reverb();
+    });
+    await vi.waitFor(() => expect(fake.events).toContain('reverb:created'));
+
+    expect(fake.events).not.toContain('offline:render');
+    releaseReverb?.();
+    await rendering;
+    expect(fake.events).toContain('offline:render');
+    expect(fake.currentContext()).toBe(fake.liveContext);
+
+    await expect(
+      boundary.render(renderRequest(), () => Promise.reject(new Error('sample decode failed'))),
+    ).rejects.toThrow('sample decode failed');
+    expect(fake.currentContext()).toBe(fake.liveContext);
+  });
 });
 
 function instrument(id: string): AudioInstrument {
@@ -234,6 +285,70 @@ function graphFactory(): {
         return { ...node(`channel:${track.id}`), setMix: vi.fn() };
       },
       send: (gain, trackId) => node(`send:${trackId}:${gain}`),
+    },
+  };
+}
+
+function renderRequest() {
+  return { duration_seconds: 1, sample_rate: 48_000, channels: 2 };
+}
+
+function fakeToneModule(): {
+  module: OfflineToneModule;
+  events: string[];
+  liveContext: object;
+  currentContext(): object;
+  reverbReady: Promise<void>;
+} {
+  const events: string[] = [];
+  const liveContext = { name: 'live' };
+  const output = audioBuffer();
+  const state = {
+    reverbReady: Promise.resolve(),
+  };
+  class Node {
+    connect(): void {}
+    dispose(): void {}
+  }
+  class ReverbNode extends Node {
+    readonly ready = state.reverbReady;
+    constructor() {
+      super();
+      events.push('reverb:created');
+    }
+  }
+  class OfflineContext {
+    readonly destination = new Node();
+    readonly rawContext = { destination: {} } as BaseAudioContext;
+    constructor() {
+      events.push('offline:start');
+    }
+    async render() {
+      events.push('offline:render');
+      return { get: () => output };
+    }
+    dispose(): void {
+      events.push('offline:dispose');
+    }
+  }
+  const module = {
+    OfflineContext,
+    Compressor: Node,
+    Limiter: Node,
+    Reverb: ReverbNode,
+    Channel: Node,
+    Gain: Node,
+  } as unknown as OfflineToneModule;
+  return {
+    module,
+    events,
+    liveContext,
+    currentContext: () => liveContext,
+    get reverbReady() {
+      return state.reverbReady;
+    },
+    set reverbReady(value) {
+      state.reverbReady = value;
     },
   };
 }
