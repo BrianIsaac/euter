@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TakeData } from '../../../src/webmcp/tools/shared.ts';
+import { OUTPUT_BUDGET } from '../../../src/webmcp/envelope.ts';
+import { TAKE_NOTE_LIMIT, type TakeData } from '../../../src/webmcp/tools/shared.ts';
 import { createHarness, makeTake } from '../../helpers/harness.ts';
 
 interface TakeEnvelope {
@@ -11,9 +12,13 @@ interface TakeEnvelope {
 }
 
 describe('get_take', () => {
-  it('returns the notes and the quality readings, and points at commit_take', async () => {
+  it('returns the rough notes with the musical context needed to interpret them', async () => {
     const harness = createHarness();
-    harness.engine.addTake(makeTake('take-1'), 'Kept your hum.', 'agent');
+    harness.engine.addTake(
+      { ...makeTake('take-1'), target_track_id: 'melody', target_bars: [1, 2] },
+      'Kept your hum.',
+      'agent',
+    );
     const envelope = (await harness.invoke('get_take', { take_id: 'take-1' })) as TakeEnvelope;
 
     expect(envelope.ok).toBe(true);
@@ -33,8 +38,24 @@ describe('get_take', () => {
       median_clarity: 0.82,
       pitch_range: [60, 65],
       tempo_hint: 92,
+      context: {
+        key: 'C major',
+        target_bars: [1, 2],
+        target_track_id: 'melody',
+        sections: [{ name: 'Verse', bar_from: 1, bar_to: 4 }],
+        chords: [
+          { bar: 1, symbol: 'C' },
+          { bar: 2, symbol: 'F' },
+        ],
+        other_tracks: [
+          { track_id: 'chords', kind: 'chords', notes_total: 0 },
+          { track_id: 'bass', kind: 'bass', notes_total: 2, pitch_range: [36, 41] },
+          { track_id: 'drums', kind: 'drums', notes_total: 16 },
+        ],
+      },
     });
-    expect(envelope.summary).toBe('Take take-1: 4 notes, 4s, clarity 0.82. Next: commit_take.');
+    expect(envelope.summary).toContain('Next: propose_options with kind take');
+    expect(envelope.summary).toContain('commit_take keeps the raw take');
     harness.engine.dispose();
   });
 
@@ -62,8 +83,75 @@ describe('get_take', () => {
     const envelope = (await harness.invoke('get_take', { take_id: 'take-1' })) as TakeEnvelope;
 
     expect(envelope.data.median_clarity).toBe(0.41);
-    expect(envelope.summary).toContain('The take is noisy; ask for another.');
+    expect(envelope.summary).toContain('The take is noisy; ask for another, or keep the raw take.');
     expect(envelope.summary).not.toContain('commit_take');
+    harness.engine.dispose();
+  });
+
+  it('asks for another take when no notes were detected, regardless of clarity', async () => {
+    const harness = createHarness();
+    harness.engine.addTake(
+      { ...makeTake('take-empty', []), median_clarity: 0.95, target_bars: [5, 8] },
+      'Kept the silent capture.',
+      'human',
+    );
+    const envelope = (await harness.invoke('get_take', { take_id: 'take-empty' })) as TakeEnvelope;
+
+    expect(envelope.data.notes_total).toBe(0);
+    expect(envelope.summary).toContain('No notes were detected; ask for another take.');
+    expect(envelope.summary).not.toContain('propose_options');
+    expect(envelope.data.context?.target_bars).toEqual([5, 8]);
+    harness.engine.dispose();
+  });
+
+  it('stays inside the output budget for a full-length take on an arranged song', async () => {
+    const harness = createHarness();
+    const notes = Array.from({ length: TAKE_NOTE_LIMIT + 6 }, (_, index) => ({
+      p: 60 + (index % 10),
+      s: index * 0.3,
+      d: 0.25,
+      v: 0.8,
+      s_raw: index * 0.3,
+      d_raw: 0.25,
+      source: 'take' as const,
+    }));
+    harness.engine.addTake(
+      {
+        ...makeTake('take-long', notes),
+        target_track_id: 'melody',
+        target_bars: [1, 8] as [number, number],
+      },
+      'Kept a long hum.',
+      'human',
+    );
+
+    const envelope = (await harness.invoke('get_take', { take_id: 'take-long' })) as TakeEnvelope;
+
+    expect(envelope.ok).toBe(true);
+    expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(OUTPUT_BUDGET);
+    expect(envelope.data.notes).toHaveLength(TAKE_NOTE_LIMIT);
+    expect(envelope.data.notes_total).toBe(TAKE_NOTE_LIMIT + 6);
+    expect(envelope.data.context?.key).toBe('C major');
+    expect(envelope.data.context?.bounded).toBe(true);
+    harness.engine.dispose();
+  });
+
+  it('leaves a short take context whole and unflagged', async () => {
+    const harness = createHarness();
+    harness.engine.addTake(
+      {
+        ...makeTake('take-short'),
+        target_track_id: 'melody',
+        target_bars: [1, 1] as [number, number],
+      },
+      'Kept a short hum.',
+      'human',
+    );
+
+    const envelope = (await harness.invoke('get_take', { take_id: 'take-short' })) as TakeEnvelope;
+
+    expect(envelope.data.context?.bounded).toBeUndefined();
+    expect(envelope.data.context?.other_tracks).toHaveLength(3);
     harness.engine.dispose();
   });
 

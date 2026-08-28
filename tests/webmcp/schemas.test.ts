@@ -8,6 +8,7 @@ import {
   getSongStateInput,
   NAME_PATTERN,
   parseInput,
+  proposeOptionsInput,
   setKeyInput,
   toInputSchema,
   whyField,
@@ -73,6 +74,14 @@ describe('schemas', () => {
     for (const entry of found) {
       expect(entry.description.length).toBeLessThanOrEqual(BUDGETS.parameterDescription);
     }
+  });
+
+  it('carries the take-reading honesty limit where the agent actually reads it', () => {
+    const found = collectParameterDescriptions(toInputSchema(proposeOptionsInput));
+    const why = found.find(({ path }) => path === 'options[].why');
+
+    expect(why?.description).toMatch(/infers rather than detects/u);
+    expect(why?.description.length ?? 0).toBeLessThanOrEqual(BUDGETS.parameterDescription);
   });
 
   it('pins the name pattern and budgets from the plan', () => {

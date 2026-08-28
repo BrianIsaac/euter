@@ -53,6 +53,10 @@ export interface PitchFrame {
 export interface Take {
   id: string;
   source: TakeSource;
+  /** Destination captured with the take, when recording was armed on a track. */
+  target_track_id?: string | undefined;
+  /** Requested or inferred bars the performance belongs to. */
+  target_bars?: [number, number] | undefined;
   notes: Note[];
   pitch_track: PitchFrame[];
   duration_s: number;
@@ -93,7 +97,7 @@ export interface NotesLogEntry {
   source: CommandSource;
 }
 
-export type TeachingOptionKind = 'chords' | 'feel' | 'part';
+export type TeachingOptionKind = 'chords' | 'feel' | 'part' | 'take';
 
 export interface TeachingOption {
   id: string;
@@ -103,6 +107,8 @@ export interface TeachingOption {
   style?: StyleName | undefined;
   track_id?: string | undefined;
   notes?: Note[] | undefined;
+  /** True only for the raw escape card added by a take proposal. */
+  raw_take?: boolean | undefined;
 }
 
 export interface TeachingOptionSet {
@@ -110,6 +116,8 @@ export interface TeachingOptionSet {
   kind: TeachingOptionKind;
   bar_from: number;
   bar_to: number;
+  take_id?: string | undefined;
+  track_id?: string | undefined;
   options: TeachingOption[];
   chosen_option_id: string | null;
 }

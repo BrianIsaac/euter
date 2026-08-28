@@ -118,12 +118,20 @@ export const setChordsInput = z.strictObject({
 });
 
 export const proposeOptionsInput = z.strictObject({
-  kind: z.enum(['chords', 'feel', 'part']).describe('What the alternatives are about'),
+  kind: z.enum(['chords', 'feel', 'part', 'take']).describe('Subject of the alternatives'),
+  take_id: takeIdField.optional().describe('Recorded take interpreted when kind is take'),
+  track_id: trackIdField.optional().describe('Destination track when kind is take'),
   options: z
     .array(
       z.strictObject({
         label: z.string().min(1).max(80).describe('Two or three words shown to the person'),
-        why: z.string().min(1).max(200).describe('One sentence on why this one is worth hearing'),
+        why: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe(
+            'One sentence on why this one is worth hearing; a take reading names any note it infers rather than detects',
+          ),
         chords: z.array(chordField).min(1).optional().describe('Chords this option would set'),
         style: styleField.optional(),
         track_id: trackIdField.optional().describe('Track the notes belong to, for a part option'),

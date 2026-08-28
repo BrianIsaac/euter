@@ -74,6 +74,10 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
         .object({
           id: z.string().trim().min(1).max(64),
           source: z.enum(['mic', 'import', 'keyboard', 'midi']),
+          target_track_id: z.string().trim().min(1).max(64).optional(),
+          target_bars: z
+            .tuple([z.number().int().positive(), z.number().int().positive()])
+            .optional(),
           notes: z.array(noteSchema),
           pitch_track: z.array(
             z
@@ -108,9 +112,11 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
       z
         .object({
           id: z.string().trim().min(1).max(64),
-          kind: z.enum(['chords', 'feel', 'part']),
+          kind: z.enum(['chords', 'feel', 'part', 'take']),
           bar_from: z.number().int().positive(),
           bar_to: z.number().int().positive(),
+          take_id: z.string().trim().min(1).max(64).optional(),
+          track_id: z.string().trim().min(1).max(64).optional(),
           options: z.array(
             z
               .object({
@@ -121,6 +127,7 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
                 style: z.enum(['pop', 'soul', 'lofi']).optional(),
                 track_id: z.string().trim().min(1).max(64).optional(),
                 notes: z.array(noteSchema).optional(),
+                raw_take: z.boolean().optional(),
               })
               .strict(),
           ),

@@ -71,4 +71,28 @@ describe('capture reducer', () => {
     expect(isTake({ ...makeTake(), source: 'radio' })).toBe(false);
     expect(isTake({ ...makeTake(), tempo_hint: null })).toBe(true);
   });
+
+  it('rejects destination fields the persisted song could not hold', () => {
+    expect(isTake({ ...makeTake(), target_track_id: 'melody' })).toBe(true);
+    expect(isTake({ ...makeTake(), target_track_id: '' })).toBe(false);
+    expect(isTake({ ...makeTake(), target_track_id: '   ' })).toBe(false);
+    expect(isTake({ ...makeTake(), target_bars: [1, 4] })).toBe(true);
+    expect(isTake({ ...makeTake(), target_bars: [0, 4] })).toBe(false);
+    expect(isTake({ ...makeTake(), target_bars: [4, 1] })).toBe(false);
+    expect(isTake({ ...makeTake(), target_bars: [1.5, 4] })).toBe(false);
+    expect(isTake({ ...makeTake(), target_bars: [1] })).toBe(false);
+  });
+
+  it('refuses a take whose destination fields would silently break persistence', () => {
+    const song = loadExampleSong();
+    expect(() =>
+      reducer(song, {
+        type: 'add_take',
+        args: { take: { ...makeTake('take-bad'), target_track_id: '' } },
+        source: 'human',
+        why: 'Imported with no track selected.',
+      }),
+    ).toThrow(ToolError);
+    expect(song.takes).toEqual([]);
+  });
 });

@@ -30,9 +30,32 @@ describe('take benchmark', () => {
     const log = console.log;
     console.log = () => undefined;
     try {
-      expect(runTakeBench(resolve('tests/fixtures'))).toHaveLength(3);
+      expect(runTakeBench(resolve('tests/fixtures'))).toHaveLength(13);
     } finally {
       console.log = log;
     }
+  });
+
+  it('reproduces the six note-count failures measured on the ten real hummed takes', () => {
+    const names = [
+      'take-01-ascending',
+      'take-02-descending',
+      'take-03-low-register',
+      'take-04-octave-leap',
+      'take-05-repeated-note',
+      'take-06-held-notes',
+      'take-07-scale',
+      'take-08-phrase',
+      'take-09-quiet',
+      'take-10-wide',
+    ];
+    const results = names.map((name) => benchmarkTake(fixture(`takes/${name}.wav`)));
+
+    expect(results.map(({ notes }) => notes)).toEqual([4, 4, 6, 5, 3, 3, 6, 4, 3, 7]);
+    expect(results.map(({ expectedNotes }) => expectedNotes)).toEqual([
+      4, 4, 4, 3, 4, 2, 5, 4, 3, 4,
+    ]);
+    expect(results.filter(({ notes, expectedNotes }) => notes !== expectedNotes)).toHaveLength(6);
+    expect(results[2]?.pitches).toEqual([47, 50, 52, 40, 51, 57]);
   });
 });

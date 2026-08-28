@@ -116,13 +116,16 @@ export function App({ runtime }: AppProps) {
   const takeRequest = engine.takeRequest();
   const pendingTake = engine.pendingTake();
 
+  /** Reports whether the command landed, so a refused write never tears down the take panel. */
   const dispatch = useCallback(
-    (command: Command): void => {
+    (command: Command): boolean => {
       try {
         bus.dispatch(command);
         setError(null);
+        return true;
       } catch (thrown) {
         setError(message(thrown));
+        return false;
       }
     },
     [bus],
@@ -161,25 +164,47 @@ export function App({ runtime }: AppProps) {
   );
 
   const onTake = (recorded: RecordedTake): void => {
-    engine.addTake(recorded.take, 'Kept the take you just played.', 'human');
+    engine.addTake(
+      {
+        ...recorded.take,
+        ...(recorded.trackId === null ? {} : { target_track_id: recorded.trackId }),
+        ...(recorded.targetBars === null
+          ? {}
+          : {
+              target_bars: [recorded.targetBars.barFrom, recorded.targetBars.barTo] as [
+                number,
+                number,
+              ],
+            }),
+      },
+      'Kept the take you just played.',
+      'human',
+    );
   };
 
   const onCommit = ({ takeId, grid, strength }: TakeCommitOptions): void => {
     const trackId = takeRequest?.trackId ?? selectedTrackId;
-    dispatch({
+    const committed = dispatch({
       type: 'commit_take',
       args: { take_id: takeId, track_id: trackId, quantize_strength: strength, grid },
       source: 'human',
       why: `Committed the take onto ${trackId}.`,
     });
-    engine.setPendingTake(null);
+    if (committed) engine.setPendingTake(null);
   };
 
   const onImportFile = (file: File): void => {
     void engine
       .importFile(file)
       .then((imported) => {
-        engine.addTake(imported.take, `Imported ${imported.fileName} as a take.`, 'human');
+        engine.addTake(
+          {
+            ...imported.take,
+            ...(selectedTrackId === '' ? {} : { target_track_id: selectedTrackId }),
+          },
+          `Imported ${imported.fileName} as a take.`,
+          'human',
+        );
       })
       .catch((thrown: unknown) => setError(message(thrown)));
   };
@@ -191,14 +216,15 @@ export function App({ runtime }: AppProps) {
       .catch((thrown: unknown) => setError(message(thrown)));
   };
 
-  const onChoose = (_set: TeachingOptionSet, option: TeachingOption): void => {
+  const onChoose = (set: TeachingOptionSet, option: TeachingOption): void => {
     engine.clearPreview();
-    dispatch({
+    const chosen = dispatch({
       type: 'choose_option',
       args: { option_id: option.id },
       source: 'human',
       why: option.why,
     });
+    if (chosen && set.kind === 'take') engine.setPendingTake(null);
   };
 
   const toggle = (next: Panel): void => {

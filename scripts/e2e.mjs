@@ -161,6 +161,7 @@ export async function startSelectedDriver(kind, starters) {
 export function scenarioPaths(names) {
   const order = [
     'demo',
+    'hum-intent',
     'errors',
     'stale-revision',
     'recording-lock',

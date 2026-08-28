@@ -3,11 +3,15 @@ import type { Note, SongDocument, Take } from '../../../src/song/types.ts';
 import type { Command, CommandBus } from '../../../src/webmcp/bus.ts';
 import { ToolError } from '../../../src/webmcp/envelope.ts';
 import {
+  boundTakeRead,
   dispatch,
   requireTake,
+  takeContext,
   takeData,
   targetBars,
+  TAKE_NOTE_FLOOR,
   TAKE_NOTE_LIMIT,
+  type TakeData,
 } from '../../../src/webmcp/tools/shared.ts';
 import type { ToolContext } from '../../../src/webmcp/types.ts';
 import { createHarness, makeTake, type Harness } from '../../helpers/harness.ts';
@@ -160,5 +164,69 @@ describe('shared tool helpers', () => {
     });
     expect(Object.hasOwn(data, 'refining_job_id')).toBe(false);
     expect(takeData({ ...take, refining_job_id: 'job-3' }).refining_job_id).toBe('job-3');
+  });
+
+  it('gives the added context ground before the notes get_take always returned', () => {
+    const harness = createHarness();
+    const take = {
+      ...makeTake(
+        'take-long',
+        Array.from({ length: TAKE_NOTE_LIMIT }, (_, index) => ({
+          p: 60,
+          s: index * 0.25,
+          d: 0.2,
+          v: 0.8,
+          source: 'take' as const,
+        })),
+      ),
+      target_track_id: 'melody',
+      target_bars: [1, 8] as [number, number],
+    };
+    const song = harness.engine.store.getDocument();
+    const full: TakeData = { ...takeData(take, 4), context: takeContext(song, take) };
+    const measure = (candidate: TakeData): number => JSON.stringify(candidate).length;
+
+    const bounded = boundTakeRead(full, measure, measure(full) - 1);
+
+    expect(bounded.notes).toHaveLength(TAKE_NOTE_LIMIT);
+    expect(bounded.context?.other_tracks.length).toBeLessThan(3);
+    expect(bounded.context?.bounded).toBe(true);
+    harness.engine.dispose();
+  });
+
+  it('never trims a take read below the note floor', () => {
+    const harness = createHarness();
+    const take = { ...makeTake('take-1'), target_track_id: 'melody' };
+    const song = harness.engine.store.getDocument();
+    const full: TakeData = { ...takeData(take, 4), context: takeContext(song, take) };
+
+    const bounded = boundTakeRead(full, () => Number.MAX_SAFE_INTEGER, 10);
+
+    expect(bounded.notes.length).toBe(Math.min(TAKE_NOTE_FLOOR, full.notes.length));
+    expect(bounded.notes_total).toBe(full.notes_total);
+    expect(bounded.context).toMatchObject({ sections: [], chords: [], other_tracks: [] });
+    harness.engine.dispose();
+  });
+
+  it('keeps a silent requested take in the bars the person was asked to perform', () => {
+    const harness = createHarness();
+    const take = {
+      ...makeTake('take-silent', []),
+      target_track_id: 'melody',
+      target_bars: [5, 8] as [number, number],
+    };
+
+    expect(takeContext(harness.engine.store.getDocument(), take)).toMatchObject({
+      target_bars: [5, 8],
+      target_track_id: 'melody',
+      sections: [{ name: 'Chorus', bar_from: 5, bar_to: 8 }],
+      chords: [
+        { bar: 5, symbol: 'C' },
+        { bar: 6, symbol: 'F' },
+        { bar: 7, symbol: 'Dm' },
+        { bar: 8, symbol: 'G' },
+      ],
+    });
+    harness.engine.dispose();
   });
 });

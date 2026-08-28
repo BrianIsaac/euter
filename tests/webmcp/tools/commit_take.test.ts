@@ -90,4 +90,26 @@ describe('commit_take', () => {
     expect(harness.engine.store.getDocument().revision).toBe(1);
     harness.engine.dispose();
   });
+
+  it('refuses an empty take instead of erasing the covered track', async () => {
+    const harness = createHarness();
+    harness.engine.addTake(makeTake('take-empty', []), 'Kept the silent capture.', 'human');
+    const melodyBefore = structuredClone(
+      harness.engine.store.getDocument().tracks.find(({ id }) => id === 'melody')?.notes,
+    );
+
+    await expect(
+      harness.invoke('commit_take', { ...commit, take_id: 'take-empty' }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'INVALID_ARGUMENT',
+      message: 'Take "take-empty" has no detected notes. Record or import another take.',
+      recoverable: true,
+    });
+    expect(
+      harness.engine.store.getDocument().tracks.find(({ id }) => id === 'melody')?.notes,
+    ).toEqual(melodyBefore);
+    expect(harness.engine.store.getDocument().revision).toBe(1);
+    harness.engine.dispose();
+  });
 });
