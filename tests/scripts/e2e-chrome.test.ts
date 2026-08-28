@@ -8,6 +8,7 @@ import {
   chromeArguments,
   createCdpDriver,
   findChrome,
+  interceptHttp404Once,
   removeProfile,
   waitForCdp,
   WEBMCP_SWITCH,
@@ -108,5 +109,49 @@ describe('createCdpDriver', () => {
     };
     await expect(driver.waitForText(['Sounds and licences'], 20)).resolves.toBeUndefined();
     expect(listeners.has('WebMCP.toolsAdded')).toBe(true);
+  });
+});
+
+describe('interceptHttp404Once', () => {
+  it('fulfils one matching page request with a CORS-readable HTTP 404', async () => {
+    let paused: ((params: Record<string, unknown>) => void) | undefined;
+    const calls: { method: string; params?: unknown }[] = [];
+    const page = {
+      on(event: string, listener: (params: Record<string, unknown>) => void) {
+        if (event === 'Fetch.requestPaused') paused = listener;
+        return () => {
+          paused = undefined;
+        };
+      },
+      async send(method: string, params?: unknown) {
+        calls.push({ method, params });
+        return {};
+      },
+    };
+
+    const interception = await interceptHttp404Once(page, '*/vcsl-saxello/d3.ogg');
+    paused?.({
+      requestId: 'request-1',
+      request: {
+        url: 'https://samples.example/vcsl-saxello/d3.ogg',
+        method: 'HEAD',
+      },
+    });
+
+    await expect(interception.hit).resolves.toEqual({
+      url: 'https://samples.example/vcsl-saxello/d3.ogg',
+      method: 'HEAD',
+    });
+    expect(calls).toContainEqual({
+      method: 'Fetch.enable',
+      params: {
+        patterns: [{ urlPattern: '*/vcsl-saxello/d3.ogg', requestStage: 'Request' }],
+      },
+    });
+    expect(calls).toContainEqual({
+      method: 'Fetch.fulfillRequest',
+      params: expect.objectContaining({ requestId: 'request-1', responseCode: 404 }),
+    });
+    expect(calls.at(-1)?.method).toBe('Fetch.disable');
   });
 });

@@ -1,0 +1,117 @@
+{
+  "name": "take-backing",
+  "title": "A bar-one requested take reports where backing actually started and which track was silent",
+  "reset": true,
+  "steps": [
+    {
+      "action": "eval",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody"
+      },
+      "expect": {
+        "data_defined": ["melody"]
+      }
+    },
+    {
+      "action": "permission",
+      "permission": "microphone",
+      "state": "granted"
+    },
+    {
+      "action": "click",
+      "note": "The person's Play gesture unlocks the real audio and microphone path.",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Bar one has no full preceding backing window, so its one-bar count-in must be detached and silent.",
+      "tool": "request_take",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 4,
+        "prompt": "Hum the melody once through",
+        "why": "The opening phrase should be yours."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 1,
+        "changed": ["take_request"],
+        "data": {
+          "data.track_id": "{{melody_id}}"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "start_recording",
+      "input": {
+        "count_in_bars": 1,
+        "metronome": true
+      },
+      "expect": {
+        "ok": true,
+        "revision": 1,
+        "summary_includes": "Recording",
+        "data": {
+          "data.track_id": "{{melody_id}}",
+          "data.target_bars": [1, 4]
+        }
+      }
+    },
+    {
+      "action": "click",
+      "note": "The execution evidence is a diagnostics-only surface, not extra WebMCP result payload.",
+      "target": {
+        "role": "button",
+        "name": "Diagnostics"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["Requested-take backing", "bar 1", "silent (mute on, solo off)"]
+    },
+    {
+      "action": "eval",
+      "note": "This is recorded only after the internal backing transport successfully starts, so it is execution evidence rather than requested intent.",
+      "function": "() => ({ backing: window.euter.engine.getSnapshot().takeBacking, diagnostics: document.querySelector('[aria-label=\"Diagnostics\"]')?.textContent ?? '' })",
+      "expect": {
+        "data": {
+          "backing.startBar": 1,
+          "backing.trackId": "{{melody_id}}",
+          "backing.mute": true,
+          "backing.solo": false,
+          "backing.silent": true
+        },
+        "data_includes": {
+          "diagnostics": "silent (mute on, solo off)"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Close diagnostics"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "stop_recording",
+      "input": {
+        "why": "Keeping the observed take."
+      },
+      "expect": {
+        "ok": true,
+        "data": {
+          "data.placed_on_track": "{{melody_id}}"
+        },
+        "data_defined": ["data.take_id"]
+      }
+    }
+  ]
+}

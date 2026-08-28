@@ -75,10 +75,19 @@ export interface AuditionResult {
   option: TeachingOption;
 }
 
+export interface TakeBackingDiagnostics {
+  startBar: number;
+  trackId: string;
+  mute: boolean;
+  solo: boolean;
+  silent: boolean;
+}
+
 export interface EngineSnapshot {
   audio: { state: string; running: boolean };
   playing: boolean;
   recording: RecorderSnapshot;
+  takeBacking: TakeBackingDiagnostics | null;
   jobs: readonly ExportJob[];
   preview: { option_id: string; label: string } | null;
   loading: Record<string, number>;
@@ -214,6 +223,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
     createCaptureReducer(createSongReducer({ recordingTrackId, idFactory: makeId })),
   );
   const playback = createPlaybackView(store);
+  let takeBacking: TakeBackingDiagnostics | null = null;
 
   const transportPort: TransportPort = {
     getAudioContext: () => audio.getContext() as RecorderAudioContext | null,
@@ -222,6 +232,10 @@ export function createEngine(options: EngineOptions = {}): Engine {
     getPositionSeconds: () => audio.getContext()?.currentTime ?? 0,
     async countIn({ bars, metronome: click, targetBar, mutedTrackId, signal }) {
       throwIfAborted(signal);
+      if (targetBar !== undefined && mutedTrackId !== undefined) {
+        takeBacking = null;
+        notify();
+      }
       const song = store.getDocument();
       const bpm = song.bpm;
       const beatsPerBar = song.time_sig[0];
@@ -259,6 +273,20 @@ export function createEngine(options: EngineOptions = {}): Engine {
       };
       const startBacking = async (document: SongDocument, fromBar: number): Promise<void> => {
         await transport.play(document, { from_bar: fromBar });
+        const target = document.tracks.find(({ id }) => id === mutedTrackId);
+        if (target !== undefined) {
+          const anotherTrackIsSoloed = document.tracks.some(
+            (track) => track.id !== target.id && track.solo,
+          );
+          takeBacking = {
+            startBar: fromBar,
+            trackId: target.id,
+            mute: target.mute,
+            solo: target.solo,
+            silent: target.mute || (anotherTrackIsSoloed && !target.solo),
+          };
+          notify();
+        }
         await ensureActive();
       };
       const abort = (): void => finish();
@@ -612,6 +640,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
         },
         playing: transport.getSnapshot().playing,
         recording: recorder.getSnapshot(),
+        takeBacking,
         jobs: jobs.list(),
         preview,
         loading: reconciler?.getSnapshot().loading ?? {},

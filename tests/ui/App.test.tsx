@@ -82,6 +82,35 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: /^Undo Undid/u })).not.toBeInTheDocument();
   });
 
+  it('offers linear Undo and Redo controls beside the transport', () => {
+    const harness = renderApp();
+    const undo = screen.getByRole('button', { name: 'Undo' });
+    const redo = screen.getByRole('button', { name: 'Redo' });
+    expect(undo).toBeDisabled();
+    expect(redo).toBeDisabled();
+
+    act(() => {
+      harness.engine.store.dispatch({
+        type: 'set_tempo',
+        args: { bpm: 110 },
+        source: 'human',
+        why: 'Testing the transport history controls.',
+      });
+    });
+    expect(undo).toBeEnabled();
+    expect(redo).toBeDisabled();
+
+    fireEvent.click(undo);
+    expect(harness.engine.store.getDocument().bpm).toBe(92);
+    expect(undo).toBeDisabled();
+    expect(redo).toBeEnabled();
+
+    fireEvent.click(redo);
+    expect(harness.engine.store.getDocument().bpm).toBe(110);
+    expect(undo).toBeEnabled();
+    expect(redo).toBeDisabled();
+  });
+
   it('renders the agent options as cards and applies the one the person chooses', async () => {
     const harness = renderApp();
     act(() => {

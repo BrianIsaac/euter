@@ -56,12 +56,14 @@ describe('parseArguments', () => {
 });
 
 describe('scenarioPaths', () => {
-  it('runs the four scenarios in the plan’s order by default', () => {
+  it('runs the six scenarios in the plan’s order by default', () => {
     expect(scenarioPaths([]).map((path) => basename(path, '.json'))).toEqual([
       'demo',
       'errors',
       'stale-revision',
       'recording-lock',
+      'take-backing',
+      'sample-fallback',
     ]);
   });
 

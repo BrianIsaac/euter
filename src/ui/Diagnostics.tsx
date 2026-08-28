@@ -52,10 +52,12 @@ function formatArgs(args: unknown): string {
  * @returns The panel.
  */
 export function Diagnostics({ runtime, onClose }: DiagnosticsProps) {
-  const { registry, environment } = runtime;
+  const { registry, environment, engine, bus } = runtime;
   const status = useSyncExternalStore(registry.subscribe, registry.getStatus);
   const calls = useSyncExternalStore(registry.subscribe, registry.getCalls);
   const env = useSyncExternalStore(environment.subscribe, environment.get);
+  const engineState = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
+  const song = useSyncExternalStore(bus.subscribe, bus.getDocument);
   const contextRef = useRef<AudioContext | null>(null);
   const [tonePlayed, setTonePlayed] = useState(false);
   const [microphone, setMicrophone] = useState<MicrophoneResult | null>(null);
@@ -216,6 +218,30 @@ export function Diagnostics({ runtime, onClose }: DiagnosticsProps) {
         <button type="button" onClick={() => void onPlayTone()}>
           {tonePlayed ? 'Play test tone again' : 'Play test tone'}
         </button>
+      </section>
+
+      <section className="diag-section">
+        <h3>Requested-take backing</h3>
+        <dl>
+          <dt>Actual start bar</dt>
+          <dd data-testid="take-backing-start">
+            {engineState.takeBacking === null
+              ? 'not started yet'
+              : `bar ${engineState.takeBacking.startBar}`}
+          </dd>
+          <dt>Requested track</dt>
+          <dd data-testid="take-backing-track">
+            {engineState.takeBacking === null
+              ? 'n/a'
+              : `${song.tracks.find(({ id }) => id === engineState.takeBacking?.trackId)?.name ?? 'Unknown track'} (${engineState.takeBacking.trackId})`}
+          </dd>
+          <dt>Effective state</dt>
+          <dd data-testid="take-backing-state">
+            {engineState.takeBacking === null
+              ? 'n/a'
+              : `${engineState.takeBacking.silent ? 'silent' : 'audible'} (mute ${engineState.takeBacking.mute ? 'on' : 'off'}, solo ${engineState.takeBacking.solo ? 'on' : 'off'})`}
+          </dd>
+        </dl>
       </section>
 
       <section className="diag-section">
