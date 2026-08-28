@@ -94,6 +94,26 @@
     },
     {
       "action": "tool",
+      "note": "Prompt 1 continues with the bounded note detail behind the song summary.",
+      "tool": "get_track_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "data": {
+          "data.track_id": "{{melody_id}}",
+          "data.notes_total": 7
+        },
+        "data_defined": ["data.bars.0.notes.0.p"]
+      }
+    },
+    {
+      "action": "tool",
       "note": "Prompt 2: \"That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there.\"",
       "tool": "set_key",
       "input": {
@@ -511,7 +531,8 @@
         "revision": "+1",
         "data": {
           "data.instrument": "electric-piano",
-          "data.track_id": "{{pad_id}}"
+          "data.track_id": "{{pad_id}}",
+          "data.loaded": false
         }
       }
     },
@@ -520,6 +541,16 @@
       "note": "The substitution is visible in the transport, not silent: the remote pack is configured but does not serve the electric piano yet.",
       "text": ["playing Grand piano instead"],
       "timeout_ms": 20000
+    },
+    {
+      "action": "eval",
+      "note": "The notice belongs to the newly added Pad, rather than passing on the example Chords track's earlier fallback.",
+      "function": "async () => { const key = \"{{pad_id}}:electric-piano\"; const deadline = Date.now() + 20000; while (Date.now() < deadline) { const notice = window.euter.engine.getSnapshot().fallbacks[key]; if (notice) return notice; await new Promise((resolve) => setTimeout(resolve, 100)); } return null; }",
+      "expect": {
+        "data_includes": {
+          "": "playing Grand piano instead"
+        }
+      }
     },
     {
       "action": "tool",

@@ -8,11 +8,13 @@ import {
   checkEnvelope,
   checkPaths,
   checkTools,
+  hasBehaviouralExpectation,
   loadScenario,
   matchRevision,
   OUTPUT_BUDGET,
   readPath,
   resolve,
+  resolveFunction,
   stepLabel,
   untilSatisfied,
   validateScenario,
@@ -50,6 +52,7 @@ describe('resolve', () => {
 
   it('interpolates a reference inside a longer string', () => {
     expect(resolve('job {{id}} done', { id: 'job-9' })).toBe('job job-9 done');
+    expect(resolveFunction('() => "{{id}}"', { id: 'track-9' })).toBe('() => "track-9"');
   });
 
   it('refuses a reference that has not been captured', () => {
@@ -80,7 +83,11 @@ describe('validateScenario', () => {
     const invoked = new Set<string>();
     for (const file of readdirSync(scenarioDir).filter((name) => name.endsWith('.json'))) {
       for (const step of loadScenario(join(scenarioDir, file)).steps) {
-        if ((step.action === 'tool' || step.action === 'poll') && typeof step.tool === 'string') {
+        if (
+          (step.action === 'tool' || step.action === 'poll') &&
+          typeof step.tool === 'string' &&
+          hasBehaviouralExpectation(step.expect)
+        ) {
           invoked.add(step.tool);
         }
       }
@@ -104,6 +111,29 @@ describe('validateScenario', () => {
         'f.json',
       ),
     ).toThrow(/"inputs" is not a key of a tool step/);
+  });
+
+  it('rejects assertions the runner would ignore and tool steps with no behavioural check', () => {
+    expect(() =>
+      validateScenario(
+        {
+          name: 'x',
+          title: 'y',
+          steps: [{ action: 'tool', tool: 'render', expect: { codee: 'OUT_OF_RANGE' } }],
+        },
+        'f.json',
+      ),
+    ).toThrow(/"codee" is not a recognised tool expectation/);
+    expect(() =>
+      validateScenario(
+        {
+          name: 'x',
+          title: 'y',
+          steps: [{ action: 'tool', tool: 'render', expect: { ok: true } }],
+        },
+        'f.json',
+      ),
+    ).toThrow(/behavioural expectation/);
   });
 });
 

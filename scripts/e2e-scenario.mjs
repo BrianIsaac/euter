@@ -62,6 +62,97 @@ const ALLOWED_KEYS = {
 
 const COMMON_KEYS = ['action', 'note'];
 
+/** Assertion keys each runner branch actually reads. */
+const EXPECT_KEYS = {
+  tools: ['count', 'read_only', 'untrusted', 'names_include', 'max_description_chars'],
+  tool: [
+    'ok',
+    'code',
+    'recoverable',
+    'revision',
+    'changed',
+    'changed_exactly',
+    'summary_includes',
+    'message_includes',
+    'data',
+    'data_defined',
+    'data_includes',
+    'equals',
+    'max_chars',
+  ],
+  poll: [
+    'ok',
+    'code',
+    'recoverable',
+    'revision',
+    'changed',
+    'changed_exactly',
+    'summary_includes',
+    'message_includes',
+    'data',
+    'data_defined',
+    'data_includes',
+    'equals',
+    'max_chars',
+  ],
+  eval: ['equals', 'data', 'data_defined', 'data_includes'],
+  console: ['clean', 'excludes'],
+};
+
+const BEHAVIOURAL_EXPECT_KEYS = [
+  'code',
+  'revision',
+  'changed',
+  'changed_exactly',
+  'summary_includes',
+  'message_includes',
+  'data',
+  'data_defined',
+  'data_includes',
+  'equals',
+];
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasNonEmptyAssertion(value) {
+  if (typeof value === 'string') return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isRecord(value)) return Object.keys(value).length > 0;
+  return value !== undefined;
+}
+
+/**
+ * True when a tool step checks observable behaviour beyond generic envelope shape and size.
+ *
+ * @param {unknown} expect - The step's expectation block.
+ * @returns {boolean} Whether it can count as end-to-end coverage.
+ */
+export function hasBehaviouralExpectation(expect) {
+  if (!isRecord(expect)) return false;
+  return BEHAVIOURAL_EXPECT_KEYS.some(
+    (key) =>
+      key in expect && hasNonEmptyAssertion(/** @type {Record<string, unknown>} */ (expect)[key]),
+  );
+}
+
+function validateExpectation(action, expect, where) {
+  const recognised = EXPECT_KEYS[action];
+  if (recognised === undefined) return;
+  if (!isRecord(expect)) {
+    throw new Error(`${where}: "expect" must be an object`);
+  }
+  for (const key of Object.keys(expect)) {
+    if (!recognised.includes(key)) {
+      throw new Error(`${where}: "${key}" is not a recognised ${action} expectation`);
+    }
+  }
+  if ((action === 'tool' || action === 'poll') && !hasBehaviouralExpectation(expect)) {
+    throw new Error(`${where}: a ${action} step needs a behavioural expectation`);
+  }
+}
+
 /**
  * Reads a value from an object by a dotted path; numeric segments index arrays.
  *
@@ -132,6 +223,15 @@ export function resolve(value, vars) {
   return value;
 }
 
+/** Resolves captured variables inside an eval step's function declaration. */
+export function resolveFunction(source, vars) {
+  const resolved = resolve(source, vars);
+  if (typeof resolved !== 'string' || resolved === '') {
+    throw new Error('An eval function must resolve to a non-empty string');
+  }
+  return resolved;
+}
+
 /**
  * Validates one scenario, throwing on anything the runner would silently ignore.
  *
@@ -174,6 +274,13 @@ export function validateScenario(scenario, source) {
       if (!(key in step)) {
         throw new Error(`${where}: a ${action} step needs "${key}"`);
       }
+    }
+    const stepRecord = /** @type {Record<string, unknown>} */ (step);
+    if (EXPECT_KEYS[action] !== undefined) {
+      if (!('expect' in stepRecord)) {
+        throw new Error(`${where}: a ${action} step needs "expect"`);
+      }
+      validateExpectation(action, stepRecord.expect, where);
     }
   });
   return {

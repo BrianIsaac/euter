@@ -279,7 +279,8 @@
         "why": "Keeping what was captured."
       },
       "expect": {
-        "ok": true
+        "ok": true,
+        "summary_includes": "Captured"
       }
     },
     {

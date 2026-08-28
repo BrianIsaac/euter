@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The end-to-end harness (plan Testing, "End-to-end"; Phases, 30 Aug lane C). Not in the commit
- * gate: it needs a headed Chrome with WebMCP enabled.
+ * gate: it needs a compatible Chrome with WebMCP enabled and performs real audio exports.
  *
  * It launches Chrome 150+ with the switch `chrome://flags/#enable-webmcp-testing` sets, on a
  * throwaway profile pre-armed with the same flag, connects an MCP stdio client to
@@ -35,8 +35,10 @@ import {
   checkEnvelope,
   checkPaths,
   checkTools,
+  hasBehaviouralExpectation,
   loadScenario,
   resolve as substitute,
+  resolveFunction,
   stepLabel,
   untilSatisfied,
 } from './e2e-scenario.mjs';
@@ -321,7 +323,7 @@ async function waitForTools(driver, expected, timeoutMs = 30_000) {
  * Runs one scenario.
  *
  * @param {{ scenario: ReturnType<typeof loadScenario>, driver: import('./e2e-chrome.mjs').Driver, browser: Awaited<ReturnType<typeof connectCdp>>, url: string, report: (line: string) => void, continueOnFailure?: boolean }} run - The run.
- * @returns {Promise<{ name: string, steps: Record<string, unknown>[], failures: string[] }>} The result.
+ * @returns {Promise<{ name: string, steps: Record<string, unknown>[], failures: string[], coveredTools: string[] }>} The result.
  */
 async function runScenario(run) {
   const { scenario, driver, browser, url, report } = run;
@@ -331,6 +333,7 @@ async function runScenario(run) {
   const steps = [];
   /** @type {string[]} */
   const failures = [];
+  const coveredTools = new Set();
   /** @type {number|null} */
   let lastRevision = null;
 
@@ -451,7 +454,7 @@ async function runScenario(run) {
           break;
         }
         case 'eval': {
-          const value = await driver.evaluate(String(step.function));
+          const value = await driver.evaluate(resolveFunction(step.function, vars));
           stepFailures = checkPaths(
             value,
             /** @type {Record<string, unknown>} */ (substitute(step.expect ?? {}, vars)),
@@ -509,6 +512,14 @@ async function runScenario(run) {
       stepFailures = [error instanceof Error ? error.message : String(error)];
     }
     const passed = stepFailures.length === 0;
+    if (
+      passed &&
+      (step.action === 'tool' || step.action === 'poll') &&
+      typeof step.tool === 'string' &&
+      hasBehaviouralExpectation(step.expect)
+    ) {
+      coveredTools.add(step.tool);
+    }
     report(`  ${passed ? 'ok' : 'XX'}  ${label.padEnd(28)} ${detail}`);
     for (const line of extra) {
       report(`        ${line}`);
@@ -524,7 +535,7 @@ async function runScenario(run) {
       break;
     }
   }
-  return { name: scenario.name, steps, failures };
+  return { name: scenario.name, steps, failures, coveredTools: [...coveredTools] };
 }
 
 /**
@@ -594,11 +605,14 @@ async function main() {
       refreshPage = started.refreshPage;
       driverNote = `chrome-devtools-mcp ${JSON.stringify(started.serverInfo)}`;
     } catch (error) {
-      report(
-        `  !!  chrome-devtools-mcp could not be used (${error instanceof Error ? error.message : String(error)}); falling back to the CDP WebMCP domain.`,
+      page.close();
+      browser.close();
+      await chrome.close();
+      if (preview) await preview.close();
+      throw new Error(
+        `chrome-devtools-mcp could not be used (${error instanceof Error ? error.message : String(error)}). Run again with --driver cdp to exercise the fallback route explicitly.`,
+        { cause: error },
       );
-      driver = await createCdpDriver(page);
-      driverNote = 'CDP WebMCP domain (fallback)';
     }
   } else {
     driver = await createCdpDriver(page);
@@ -638,8 +652,10 @@ async function main() {
     });
   }
 
-  /** @type {{ name: string, steps: Record<string, unknown>[], failures: string[] }[]} */
+  /** @type {{ name: string, steps: Record<string, unknown>[], failures: string[], coveredTools: string[] }[]} */
   const results = [];
+  /** @type {string[]} */
+  const harnessFailures = [];
   let failed = false;
   try {
     for (const scenario of scenarios) {
@@ -662,12 +678,35 @@ async function main() {
         }
       }
     }
+    if (options.scenarios.length === 0) {
+      const registered = (await driver.listTools()).map(({ name }) => name);
+      const covered = new Set(results.flatMap(({ coveredTools }) => coveredTools));
+      const missing = registered.filter((name) => !covered.has(name));
+      const unknown = [...covered].filter((name) => !registered.includes(name));
+      if (missing.length > 0) {
+        harnessFailures.push(
+          `registered tools not covered by a passing scenario: ${missing.join(', ')}`,
+        );
+      }
+      if (unknown.length > 0) {
+        harnessFailures.push(
+          `passing scenarios invoked tools not on the registered surface: ${unknown.join(', ')}`,
+        );
+      }
+      const passed = harnessFailures.length === 0;
+      report(
+        `  ${passed ? 'ok' : 'XX'}  runtime coverage             ${covered.size}/${registered.length} registered tools passed a behavioural assertion`,
+      );
+      for (const failure of harnessFailures) report(`      ! ${failure}`);
+      if (!passed) failed = true;
+    }
   } finally {
     await cleanup();
   }
 
   const totalSteps = results.reduce((sum, result) => sum + result.steps.length, 0);
-  const totalFailures = results.reduce((sum, result) => sum + result.failures.length, 0);
+  const totalFailures =
+    results.reduce((sum, result) => sum + result.failures.length, 0) + harnessFailures.length;
   report('');
   report(
     failed
@@ -690,6 +729,11 @@ async function main() {
           driver: driver.kind,
           chrome: chrome.version.Browser,
           scenarios: results,
+          runtimeCoverage: {
+            checked: options.scenarios.length === 0,
+            passed: options.scenarios.length === 0 ? harnessFailures.length === 0 : null,
+            failures: harnessFailures,
+          },
           passed: !failed,
           log: lines,
         },

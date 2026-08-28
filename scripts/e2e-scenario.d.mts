@@ -17,8 +17,10 @@ export const OUTPUT_BUDGET: number;
 export const ACTIONS: string[];
 export function readPath(source: unknown, path: string): unknown;
 export function resolve(value: unknown, vars: Record<string, unknown>): unknown;
+export function resolveFunction(source: unknown, vars: Record<string, unknown>): string;
 export function validateScenario(scenario: unknown, source: string): Scenario;
 export function loadScenario(path: string): Scenario;
+export function hasBehaviouralExpectation(expect: unknown): boolean;
 export function matchRevision(
   actual: unknown,
   spec: number | string,
