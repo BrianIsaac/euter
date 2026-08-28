@@ -1,0 +1,344 @@
+{
+  "name": "errors",
+  "title": "Every error code in the envelope contract, provoked once",
+  "reset": true,
+  "steps": [
+    {
+      "action": "eval",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody",
+        "drums_id": "drums"
+      },
+      "expect": {
+        "data_defined": ["melody", "drums"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "AUDIO_LOCKED: an agent tool call is not a user gesture (Decision 24).",
+      "tool": "play",
+      "input": {
+        "from_bar": 1
+      },
+      "expect": {
+        "ok": false,
+        "code": "AUDIO_LOCKED",
+        "recoverable": true,
+        "message_includes": "Play"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "OUT_OF_RANGE: an eight-bar song has no bar 99. play checks the audio state first, so the range is provoked through render, which needs no audio.",
+      "tool": "render",
+      "input": {
+        "format": "wav",
+        "bar_from": 1,
+        "bar_to": 99
+      },
+      "expect": {
+        "ok": false,
+        "code": "OUT_OF_RANGE",
+        "recoverable": true,
+        "message_includes": "8 bars"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "INVALID_ARGUMENT: a chord symbol tonal cannot parse.",
+      "tool": "set_chords",
+      "input": {
+        "chords": [
+          {
+            "bar": 1,
+            "symbol": "Zzz9"
+          }
+        ],
+        "why": "Not a chord."
+      },
+      "expect": {
+        "ok": false,
+        "code": "INVALID_ARGUMENT",
+        "recoverable": true,
+        "message_includes": "Zzz9"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "One real write, so the next call can be stale.",
+      "tool": "set_tempo",
+      "input": {
+        "bpm": 96,
+        "why": "A touch faster under the hum."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 1,
+        "changed": ["bpm"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "STALE_REVISION carries what has happened since (plan Decision 12).",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 64,
+            "s": 0,
+            "d": 1,
+            "v": 0.8
+          }
+        ],
+        "expected_revision": 0,
+        "replace": true,
+        "why": "Writing from a revision that has moved on."
+      },
+      "expect": {
+        "ok": false,
+        "code": "STALE_REVISION",
+        "recoverable": true,
+        "message_includes": ["revision 1", "Set tempo"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "TRACK_NOT_FOUND.",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "no-such-track",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 64,
+            "s": 0,
+            "d": 1,
+            "v": 0.8
+          }
+        ],
+        "replace": true,
+        "why": "There is no such track."
+      },
+      "expect": {
+        "ok": false,
+        "code": "TRACK_NOT_FOUND",
+        "recoverable": true
+      }
+    },
+    {
+      "action": "tool",
+      "note": "TAKE_NOT_FOUND.",
+      "tool": "commit_take",
+      "input": {
+        "take_id": "take-does-not-exist",
+        "track_id": "{{melody_id}}",
+        "quantize_strength": 0.5,
+        "grid": "16n",
+        "why": "There is no such take."
+      },
+      "expect": {
+        "ok": false,
+        "code": "TAKE_NOT_FOUND",
+        "recoverable": true
+      }
+    },
+    {
+      "action": "tool",
+      "note": "JOB_NOT_FOUND.",
+      "tool": "get_job",
+      "input": {
+        "job_id": "job-does-not-exist"
+      },
+      "expect": {
+        "ok": false,
+        "code": "JOB_NOT_FOUND",
+        "recoverable": true
+      }
+    },
+    {
+      "action": "tool",
+      "note": "cancel_job answers the same way, so a cancel after a finished job is readable.",
+      "tool": "cancel_job",
+      "input": {
+        "job_id": "job-does-not-exist"
+      },
+      "expect": {
+        "ok": false,
+        "code": "JOB_NOT_FOUND",
+        "recoverable": true
+      }
+    },
+    {
+      "action": "tool",
+      "note": "A sixteen-bar song, so a read can legally ask for more bars than a page holds.",
+      "tool": "arrange",
+      "input": {
+        "sections": [
+          {
+            "name": "Verse",
+            "bar_from": 1,
+            "bar_to": 8,
+            "repeat": true
+          }
+        ],
+        "why": "Two passes of the verse so the song runs to sixteen bars."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 2,
+        "data": {
+          "data.bars": 16
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "RESULT_TOO_LARGE: get_track_notes reads at most eight bars at a time.",
+      "tool": "get_track_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 16
+      },
+      "expect": {
+        "ok": false,
+        "code": "RESULT_TOO_LARGE",
+        "recoverable": true,
+        "message_includes": "8"
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person unlocks audio, so the recorder can get past AUDIO_LOCKED.",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      }
+    },
+    {
+      "action": "permission",
+      "note": "MIC_DENIED is provoked by the real permission state, not by a stub.",
+      "permission": "microphone",
+      "state": "denied"
+    },
+    {
+      "action": "tool",
+      "tool": "start_recording",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "count_in_bars": 1,
+        "metronome": true
+      },
+      "expect": {
+        "ok": false,
+        "code": "MIC_DENIED",
+        "recoverable": true,
+        "message_includes": "Import"
+      }
+    },
+    {
+      "action": "permission",
+      "permission": "microphone",
+      "state": "granted"
+    },
+    {
+      "action": "tool",
+      "tool": "start_recording",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "count_in_bars": 1,
+        "metronome": true
+      },
+      "expect": {
+        "ok": true,
+        "summary_includes": "Recording"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "RECORDING_IN_PROGRESS from the recorder: one take at a time.",
+      "tool": "start_recording",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "count_in_bars": 1,
+        "metronome": true
+      },
+      "expect": {
+        "ok": false,
+        "code": "RECORDING_IN_PROGRESS",
+        "recoverable": true
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "stop_recording",
+      "input": {
+        "why": "Keeping what was captured."
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "action": "eval",
+      "note": "CANCELLED: the same abort path Chrome uses when an agent call is cancelled (R-05).",
+      "function": "async () => window.euter.registry.invoke('get_song_state', {}, AbortSignal.abort())",
+      "expect": {
+        "data": {
+          "ok": false,
+          "code": "CANCELLED",
+          "recoverable": true
+        }
+      }
+    },
+    {
+      "action": "eval",
+      "note": "INTERNAL: an unexpected throw inside a tool still returns a bounded envelope, never a thrown UnknownError (spec 4.2). The engine seam is restored immediately.",
+      "function": "async () => { const engine = window.euter.engine; const real = engine.startExport; engine.startExport = () => { throw new Error('injected export failure'); }; try { return await window.euter.registry.invoke('render', { format: 'wav' }); } finally { engine.startExport = real; } }",
+      "expect": {
+        "data": {
+          "ok": false,
+          "code": "INTERNAL",
+          "recoverable": false
+        },
+        "data_includes": {
+          "message": "injected export failure"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The seam is back: a real render still starts.",
+      "tool": "render",
+      "input": {
+        "format": "wav",
+        "bar_from": 1,
+        "bar_to": 4
+      },
+      "capture": {
+        "wav_job": "data.job_id"
+      },
+      "expect": {
+        "ok": true,
+        "data": {
+          "data.format": "wav",
+          "data.state": "running"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "cancel_job",
+      "input": {
+        "job_id": "{{wav_job}}"
+      },
+      "expect": {
+        "ok": true,
+        "data_defined": ["data.state"]
+      }
+    }
+  ]
+}

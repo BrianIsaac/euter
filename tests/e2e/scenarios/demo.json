@@ -1,0 +1,696 @@
+{
+  "name": "demo",
+  "title": "The demo call order, from an imported hum to an MP3 and a MIDI file",
+  "reset": true,
+  "steps": [
+    {
+      "action": "tools",
+      "note": "The whole surface as the browser publishes it (plan Acceptance).",
+      "expect": {
+        "count": 28,
+        "read_only": 6,
+        "untrusted": 16,
+        "max_description_chars": 500,
+        "names_include": [
+          "get_song_state",
+          "get_track_notes",
+          "get_chords",
+          "get_take",
+          "suggest_chords",
+          "get_job",
+          "start_recording",
+          "stop_recording",
+          "commit_take",
+          "set_notes",
+          "set_chords",
+          "propose_options",
+          "audition_option",
+          "request_take",
+          "set_key",
+          "set_tempo",
+          "set_quantize",
+          "add_track",
+          "set_instrument",
+          "set_mix",
+          "generate_part",
+          "arrange",
+          "play",
+          "stop",
+          "undo",
+          "redo",
+          "render",
+          "cancel_job"
+        ]
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The example song's track ids, read from the same runtime the README documents.",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody",
+        "chords_id": "chords",
+        "bass_id": "bass",
+        "drums_id": "drums"
+      },
+      "expect": {
+        "data_defined": ["melody", "chords", "bass", "drums"]
+      }
+    },
+    {
+      "action": "upload",
+      "note": "The hum arrives as an import: the same Take object the recorder produces (Decision 10).",
+      "target": {
+        "role": "button",
+        "name": "Import audio file"
+      },
+      "file": "tests/fixtures/original-hum-scale.wav"
+    },
+    {
+      "action": "wait_for",
+      "text": ["Voiced"],
+      "timeout_ms": 20000
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 1: \"Read the song and tell me what I have so far.\"",
+      "tool": "get_song_state",
+      "input": {},
+      "capture": {
+        "take_id": "data.takes.0.id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": ">=1",
+        "changed_exactly": [],
+        "summary_includes": "First Light",
+        "data": {
+          "data.bpm": 92,
+          "data.time_sig": [4, 4],
+          "data.bars": 8
+        },
+        "data_defined": ["data.takes.0.id", "data.key.name", "data.audio.state"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 2: \"That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there.\"",
+      "tool": "set_key",
+      "input": {
+        "key": "C major",
+        "why": "Your hum sits on C and ends there, so C major is home."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["key", "notes_log"],
+        "summary_includes": "C major"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "suggest_chords",
+      "input": {
+        "bar_from": 1,
+        "bar_to": 4,
+        "style": "lofi"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "data_defined": ["data.chords.0.symbol", "data.chords.0.fit", "data.weakest_fit"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 3: \"Give me two ways to harmonise the verse and play the second one.\"",
+      "tool": "propose_options",
+      "input": {
+        "kind": "chords",
+        "bar_from": 1,
+        "bar_to": 4,
+        "options": [
+          {
+            "label": "Stay home",
+            "why": "It keeps the calm of your hum.",
+            "chords": [
+              {
+                "bar": 1,
+                "symbol": "C"
+              },
+              {
+                "bar": 2,
+                "symbol": "F"
+              }
+            ]
+          },
+          {
+            "label": "Lift it",
+            "why": "The minor turn opens into the chorus.",
+            "chords": [
+              {
+                "bar": 1,
+                "symbol": "Am7"
+              },
+              {
+                "bar": 2,
+                "symbol": "Fmaj7"
+              }
+            ]
+          }
+        ],
+        "why": "Two ways to harmonise the verse; hear both before we commit."
+      },
+      "capture": {
+        "option_two": "data.options.1.option_id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.options.1.label": "Lift it"
+        },
+        "data_defined": ["data.option_set_id", "data.next"]
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person presses Play on the first card. That gesture creates the audio context, so the agent's own audition can sound (Decision 24).",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      },
+      "nth": 2
+    },
+    {
+      "action": "tool",
+      "tool": "audition_option",
+      "input": {
+        "option_id": "{{option_two}}"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "summary_includes": "Lift it",
+        "data": {
+          "data.committed": false
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The song is unchanged while an option is only being heard.",
+      "tool": "get_chords",
+      "input": {
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": {
+          "data.chords.0.symbol": "C",
+          "data.chords.1.symbol": "F"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "note": "The person chooses the second card; the agent proposed, the person committed.",
+      "target": {
+        "role": "button",
+        "name": "Choose"
+      },
+      "nth": 2
+    },
+    {
+      "action": "tool",
+      "tool": "get_chords",
+      "input": {
+        "bar_from": 1,
+        "bar_to": 2
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.chords.0.symbol": "Am7",
+          "data.chords.1.symbol": "Fmaj7"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "set_chords",
+      "input": {
+        "chords": [
+          {
+            "bar": 3,
+            "symbol": "G7"
+          },
+          {
+            "bar": 4,
+            "symbol": "Cmaj7"
+          }
+        ],
+        "why": "A dominant into the tonic so bar 4 lands."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["chords", "notes_log"],
+        "data": {
+          "data.chords.0.symbol": "G7",
+          "data.chords.1.symbol": "Cmaj7"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "generate_part",
+      "input": {
+        "track_id": "{{drums_id}}",
+        "role": "drums",
+        "style": "lofi",
+        "bar_from": 1,
+        "bar_to": 8,
+        "why": "A laid-back kit so the hum has something to lean on."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["notes_log"],
+        "summary_includes": ["lofi", "drums"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 4: \"Ask me to hum the bassline for the chorus.\"",
+      "tool": "request_take",
+      "input": {
+        "track_id": "{{bass_id}}",
+        "bar_from": 5,
+        "bar_to": 8,
+        "prompt": "Hum me a bassline for the chorus",
+        "why": "You know how the low line should move better than I do."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["take_request", "notes_log"],
+        "summary_includes": "bars 5-8"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["Hum me a bassline for the chorus"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 5: \"Commit my take onto the melody and tighten the timing a little.\"",
+      "tool": "commit_take",
+      "input": {
+        "take_id": "{{take_id}}",
+        "track_id": "{{melody_id}}",
+        "quantize_strength": 0.75,
+        "grid": "16n",
+        "why": "Tightening the hum onto the grid without losing its feel."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["notes_log"],
+        "summary_includes": "Committed"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "set_quantize",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "grid": "16n",
+        "strength": 0.6,
+        "why": "Leaving a little of the sway you sang."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["notes_log"]
+      }
+    },
+    {
+      "action": "click",
+      "note": "The transport's own Play, the control the README tells a person to press first. Its label reads \"Play again\" once the card audition has started, so the match is by prefix.",
+      "target": {
+        "role": "button",
+        "name_includes": "Play"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "play",
+      "input": {
+        "from_bar": 1
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "changed_exactly": [],
+        "summary_includes": "Playing from bar 1",
+        "data": {
+          "data.playing": true
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "stop",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": {
+          "data.playing": false
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 6: \"Make it a verse, then an eight-bar chorus that lifts, and play from the chorus.\"",
+      "tool": "arrange",
+      "input": {
+        "sections": [
+          {
+            "name": "Verse",
+            "bar_from": 1,
+            "bar_to": 4
+          },
+          {
+            "name": "Chorus",
+            "bar_from": 5,
+            "bar_to": 8,
+            "repeat": true
+          }
+        ],
+        "why": "A verse, then a chorus that comes round twice."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["sections", "notes_log"],
+        "data": {
+          "data.bars": 12
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "generate_part",
+      "input": {
+        "track_id": "{{chords_id}}",
+        "role": "chords",
+        "style": "lofi",
+        "bar_from": 1,
+        "bar_to": 8,
+        "why": "Voicing the progression under the verse and the chorus."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": ["lofi", "chords"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 7: \"The bass is too busy - take that back and pull it down a few dB.\" Undo is itself a step forward: the revision rises.",
+      "tool": "undo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.undone": true,
+          "data.edits": 1
+        },
+        "summary_includes": "Undid"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "redo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": "Redid"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "undo",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "summary_includes": "Undid"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "set_mix",
+      "input": {
+        "track_id": "{{bass_id}}",
+        "volume_db": -9,
+        "why": "Taking the bass back so the hum leads."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.track_id": "{{bass_id}}"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "A fifth track, so add_track and set_instrument are exercised on the built bundle.",
+      "tool": "add_track",
+      "input": {
+        "kind": "chords",
+        "instrument": "grand-piano",
+        "name": "Pad",
+        "why": "Somewhere to hang a softer chord voice."
+      },
+      "capture": {
+        "pad_id": "data.track_id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.kind": "chords",
+          "data.instrument": "grand-piano"
+        },
+        "data_defined": ["data.track_id"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The electric piano lives in the remote pack; without it the bundled grand piano sounds instead and the app says so.",
+      "tool": "set_instrument",
+      "input": {
+        "track_id": "{{pad_id}}",
+        "instrument": "electric-piano",
+        "why": "An electric piano sits softer under the melody."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "data": {
+          "data.instrument": "electric-piano",
+          "data.track_id": "{{pad_id}}"
+        }
+      }
+    },
+    {
+      "action": "wait_for",
+      "note": "The substitution is visible in the transport, not silent: the remote pack is configured but does not serve the electric piano yet.",
+      "text": ["playing Grand piano instead"],
+      "timeout_ms": 20000
+    },
+    {
+      "action": "tool",
+      "tool": "play",
+      "input": {
+        "from_bar": 5
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "summary_includes": "Playing from bar 5"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "Prompt 8: \"Export it as an MP3.\"",
+      "tool": "render",
+      "input": {
+        "format": "mp3"
+      },
+      "capture": {
+        "mp3_job": "data.job_id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "summary_includes": "Poll get_job",
+        "data": {
+          "data.format": "mp3",
+          "data.state": "running",
+          "data.bar_from": 1,
+          "data.bar_to": 12
+        }
+      }
+    },
+    {
+      "action": "poll",
+      "tool": "get_job",
+      "input": {
+        "job_id": "{{mp3_job}}"
+      },
+      "until": {
+        "data.state": "done"
+      },
+      "timeout_ms": 180000,
+      "interval_ms": 500,
+      "expect": {
+        "ok": true,
+        "data": {
+          "data.state": "done",
+          "data.kind": "mp3",
+          "data.progress_pct": 100
+        },
+        "data_defined": ["data.download_url", "data.filename", "data.duration_s", "data.peak_dbfs"],
+        "data_includes": {
+          "data.filename": ".mp3"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "render",
+      "input": {
+        "format": "midi",
+        "bar_from": 5,
+        "bar_to": 8
+      },
+      "capture": {
+        "midi_job": "data.job_id"
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+0",
+        "data": {
+          "data.format": "midi",
+          "data.bar_from": 5,
+          "data.bar_to": 8
+        }
+      }
+    },
+    {
+      "action": "poll",
+      "tool": "get_job",
+      "input": {
+        "job_id": "{{midi_job}}"
+      },
+      "until": {
+        "data.state": "done"
+      },
+      "timeout_ms": 120000,
+      "interval_ms": 400,
+      "expect": {
+        "ok": true,
+        "data": {
+          "data.state": "done",
+          "data.kind": "midi"
+        },
+        "data_defined": ["data.download_url", "data.filename"],
+        "data_includes": {
+          "data.filename": ".mid"
+        }
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The person sees what the agent did: one activity per command, each with its reason.",
+      "function": "() => ({ activities: window.euter.bus.getActivities().length, notes: window.euter.bus.getDocument().notes_log.length, revision: window.euter.bus.getDocument().revision, tracks: window.euter.bus.getDocument().tracks.length })",
+      "expect": {
+        "data": {
+          "tracks": 5
+        },
+        "data_defined": ["activities", "notes", "revision"]
+      }
+    },
+    {
+      "action": "click",
+      "note": "The two panels the operator reads on the built bundle: Diagnostics for the checks, About for the licence, versions, measurements, sample sources and the remote-pack state.",
+      "target": {
+        "role": "button",
+        "name": "Diagnostics"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["Response headers from fetch(\"/\")"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Close diagnostics"
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "About"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["Sounds and licences"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "wait_for",
+      "note": "About reports the remote pack honestly: it is configured, and a bundled sound stood in.",
+      "text": ["bundled subset instead"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Close about"
+      }
+    },
+    {
+      "action": "console",
+      "note": "No uncaught page error. The R2 sample 404s are the documented fallback while the remote half of the pack is not uploaded; the app names the substitution in the transport and the About panel.",
+      "expect": {
+        "excludes": [
+          "Uncaught",
+          "Unhandled",
+          "TypeError",
+          "is not a function",
+          "modelContext is not"
+        ]
+      }
+    }
+  ]
+}

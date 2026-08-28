@@ -1,0 +1,185 @@
+{
+  "name": "recording-lock",
+  "title": "While a track records, that track alone is closed to edits",
+  "reset": true,
+  "steps": [
+    {
+      "action": "eval",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody",
+        "bass_id": "bass"
+      },
+      "expect": {
+        "data_defined": ["melody", "bass"]
+      }
+    },
+    {
+      "action": "permission",
+      "permission": "microphone",
+      "state": "granted"
+    },
+    {
+      "action": "click",
+      "note": "The person unlocks audio; only a gesture may create the context.",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "request_take",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 4,
+        "prompt": "Hum the tune once through",
+        "why": "The tune is yours to sing."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 1,
+        "changed": ["take_request"]
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "start_recording",
+      "input": {
+        "count_in_bars": 1,
+        "metronome": true
+      },
+      "expect": {
+        "ok": true,
+        "summary_includes": "Recording",
+        "data": {
+          "data.track_id": "{{melody_id}}"
+        }
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The engine reports which track is locked; the reducer reads the same value.",
+      "function": "() => ({ locked: window.euter.engine.recordingTrackId() })",
+      "expect": {
+        "data": {
+          "locked": "{{melody_id}}"
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "RECORDING_IN_PROGRESS: the agent may not write over what is being sung.",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 64,
+            "s": 0,
+            "d": 1,
+            "v": 0.8
+          }
+        ],
+        "replace": true,
+        "why": "Writing onto the track being recorded."
+      },
+      "expect": {
+        "ok": false,
+        "code": "RECORDING_IN_PROGRESS",
+        "recoverable": true,
+        "message_includes": "Stop the recording"
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The lock is one track, not the song: another track still takes edits.",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "{{bass_id}}",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 40,
+            "s": 0,
+            "d": 2,
+            "v": 0.7
+          }
+        ],
+        "replace": true,
+        "why": "Laying the root under the first bar while you sing."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 2,
+        "changed": ["notes_log"]
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "stop_recording",
+      "input": {
+        "why": "Keeping what you sang."
+      },
+      "capture": {
+        "take_id": "data.take_id"
+      },
+      "expect": {
+        "ok": true,
+        "data": {
+          "data.placed_on_track": "{{melody_id}}"
+        },
+        "data_defined": ["data.take_id", "data.next"]
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The lock is released with the take.",
+      "function": "() => ({ locked: window.euter.engine.recordingTrackId() })",
+      "expect": {
+        "data": {
+          "locked": null
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The same write now lands.",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 64,
+            "s": 0,
+            "d": 1,
+            "v": 0.8
+          }
+        ],
+        "replace": true,
+        "why": "Writing onto the melody now the take is in."
+      },
+      "expect": {
+        "ok": true,
+        "changed": ["notes_log"]
+      }
+    },
+    {
+      "action": "tool",
+      "tool": "get_take",
+      "input": {
+        "take_id": "{{take_id}}"
+      },
+      "expect": {
+        "ok": true,
+        "data": {
+          "data.take_id": "{{take_id}}"
+        },
+        "data_defined": ["data.duration_s", "data.voiced_ratio", "data.median_clarity"]
+      }
+    }
+  ]
+}

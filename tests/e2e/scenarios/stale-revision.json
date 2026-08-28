@@ -1,0 +1,139 @@
+{
+  "name": "stale-revision",
+  "title": "A person edits between two agent calls; the second call is refused with what changed",
+  "reset": true,
+  "steps": [
+    {
+      "action": "eval",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody"
+      },
+      "expect": {
+        "data_defined": ["melody"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The agent reads the song and remembers the revision it read.",
+      "tool": "get_song_state",
+      "input": {},
+      "capture": {
+        "read_revision": "revision"
+      },
+      "expect": {
+        "ok": true,
+        "revision": 0,
+        "changed_exactly": []
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The person drags a note on the roll while the agent is thinking: the same human command the piano roll dispatches (R-22).",
+      "function": "() => window.euter.bus.dispatch({ type: 'set_notes', args: { track_id: window.euter.bus.getDocument().tracks[0].id, bar_from: 1, notes: [{ p: 67, s: 0, d: 1, v: 0.8 }], replace: true }, source: 'human', why: 'Moving the first note up a fourth.' })",
+      "capture": {
+        "human_revision": "revision"
+      },
+      "expect": {
+        "data": {
+          "revision": 1
+        },
+        "data_defined": ["summary", "changed"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The agent writes from the revision it read: refused, with what has happened since.",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 64,
+            "s": 0,
+            "d": 1,
+            "v": 0.8
+          },
+          {
+            "p": 67,
+            "s": 1,
+            "d": 1,
+            "v": 0.8
+          }
+        ],
+        "expected_revision": "{{read_revision}}",
+        "replace": true,
+        "why": "Answering your phrase a third higher."
+      },
+      "expect": {
+        "ok": false,
+        "code": "STALE_REVISION",
+        "recoverable": true,
+        "message_includes": ["revision 1", "Since then"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The person's edit is intact; nothing was clobbered.",
+      "tool": "get_track_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "bar_to": 1
+      },
+      "capture": {
+        "fresh_revision": "revision"
+      },
+      "expect": {
+        "ok": true,
+        "revision": 1,
+        "data": {
+          "data.bars.0.notes.0.p": 67
+        }
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The agent re-reads and writes again; the same call now lands.",
+      "tool": "set_notes",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "bar_from": 1,
+        "notes": [
+          {
+            "p": 64,
+            "s": 0,
+            "d": 1,
+            "v": 0.8
+          },
+          {
+            "p": 67,
+            "s": 1,
+            "d": 1,
+            "v": 0.8
+          }
+        ],
+        "expected_revision": "{{fresh_revision}}",
+        "replace": true,
+        "why": "Answering your phrase a third higher."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 2,
+        "changed": ["notes_log"],
+        "data": {
+          "data.notes": 2
+        }
+      }
+    },
+    {
+      "action": "eval",
+      "note": "Both edits are in one history, the person's first.",
+      "function": "() => window.euter.bus.getActivities().map((entry) => entry.source)",
+      "expect": {
+        "equals": ["human", "agent"]
+      }
+    }
+  ]
+}

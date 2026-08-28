@@ -1,6 +1,9 @@
 /**
  * Tool descriptions as registered (plan Tool surface). The text is the product's contract with the
- * model: what the tool does, what it refuses, and what to call next. The registry appends the write
+ * model, and it states capability, precondition and result only: no sentence directs the agent,
+ * because a description that can steer policy is a metadata-poisoning surface (review R-01;
+ * landscape §1.7). A next step belongs in the result - `data.next` or the summary - where it
+ * describes the state the person and the agent are now in. The registry appends the write
  * sentence, and the contract test counts the whole thing against Chrome's 500-character budget
  * (plan Decision 18; landscape §1.8).
  */
@@ -21,11 +24,11 @@ export const descriptions = {
   get_take:
     'Reads a recorded, imported or played take: bounded transcribed notes, duration, voiced ratio, median clarity, pitch range, tempo hint and any refinement job id. A clarity below 0.6 denotes a noisy take. Take ids are reported by get_song_state and stop_recording.',
   suggest_chords:
-    'Proposes one diatonic chord per bar from the melody, current key and named style, with a fit score for each bar. The song remains unchanged; the returned chords have the same shape accepted by set_chords.',
+    'Proposes one diatonic chord per bar from the melody, current key and named style, with a fit score for each bar, over at most 16 bars at a time. The song remains unchanged; the returned chords have the same shape accepted by set_chords.',
   get_job:
-    'Reads a job state, progress percentage, and on completion its download URL, duration and peak dBFS, or its failure message.',
+    'Reads a job state, progress percentage, and on completion its download URL, duration and peak dBFS, or its failure message. A completed render also names any instrument that fell back to a bundled sound.',
   start_recording:
-    'Arms the selected microphone, keyboard or MIDI input on a track with a count-in and optional continuing click. A prior person gesture and microphone permission are required for microphone capture. The recorded track is locked against edits until stop_recording.',
+    'Arms the selected microphone, keyboard or MIDI input on a track with a count-in and optional continuing click. A prior person gesture and microphone permission are required for microphone capture. The recorded track is locked against edits until stop_recording, and arming a second take while one is live returns RECORDING_IN_PROGRESS.',
   stop_recording:
     'Stops the recorder and transcribes the take to notes. The result contains the bounded take data and placed_on_track; the piano roll already contains its notes and raw pitch curve.',
   commit_take:
@@ -39,7 +42,7 @@ export const descriptions = {
   audition_option:
     'Plays one registered option over its bars without committing an edit. AUDIO_LOCKED is returned until a person gesture has activated audio.',
   request_take:
-    'Shows a prompt over a bar range and arms that track for a person-performed take with a count-in. The request returns immediately; a completed take later appears in get_song_state.',
+    'Shows a prompt over a bar range and arms that track for a person-performed take with a count-in. start_recording without a track_id then records onto the requested track and bars. The request returns immediately; a completed take later appears in get_song_state.',
   set_key:
     'Sets a tonal song key such as "C major" or "A minor". The result contains the melody fit score and ranked detected alternatives; get_song_state contains the current estimate.',
   set_tempo: 'Sets the tempo in BPM. Notes keep their beat positions.',
@@ -48,19 +51,20 @@ export const descriptions = {
   add_track:
     'Adds a melody, chords, bass or drums track with a listed instrument and optional display name. The result contains the new track and id; instrument names are reported by get_song_state.',
   set_instrument:
-    'Changes a track’s instrument to a name reported by get_song_state. Samples load lazily; loaded:false means the sound is still loading.',
+    'Changes a track’s instrument to a name reported by get_song_state. Samples load lazily: loaded:false means the sound is not playing yet, and a note field names the bundled instrument sounding in its place when the requested samples are unavailable.',
   set_mix: 'Sets a track’s volume_db, pan, mute or solo. Only the supplied fields change.',
   generate_part:
     'Writes a deterministic bass, chords or drums part from the stored chords, key and pop, soul or lofi style over a bar range. Bass follows roots and fifths, chords have smooth voice leading and drums follow the style pattern. Notes in those bars are replaced.',
   arrange:
     'Sets ordered section ranges such as intro, verse, chorus and bridge. A repeat copies a section’s notes and chords into appended bars. The song extends to the final covered bar and uncovered bars remain empty.',
-  play: 'Starts playback from a bar with an optional loop range. Playback is not an edit and leaves revision unchanged. AUDIO_LOCKED is returned until a person gesture has activated audio.',
+  play: 'Starts playback from a bar with an optional loop range. Playback is not an edit and leaves revision unchanged. AUDIO_LOCKED is returned until a person gesture has activated audio, and a bar beyond the song returns OUT_OF_RANGE.',
   stop: 'Stops playback without changing revision.',
-  undo: 'Undoes the last person or agent edit and returns the new revision and edit count.',
-  redo: 'Redoes the last undone edit and returns the new revision and edit count.',
+  undo: 'Undoes the last person or agent edit. The undo is itself a step forward: the revision increases rather than returning to the earlier number, and the result reports how many edits were taken back.',
+  redo: 'Redoes the last undone edit. As with undo the revision increases rather than returning to an earlier number, and the result reports how many edits came back.',
   render:
-    'Starts rendering the song or a bar range to WAV, MP3 or MIDI. The result immediately contains a job id; get_job reports progress and the person-facing download link.',
-  cancel_job: 'Cancels a running render job.',
+    'Starts rendering the song or a bar range to WAV, MP3 or MIDI. A bar range is clipped to those bars and begins at time zero in the file. The result immediately contains a job id; get_job reports progress and the person-facing download link.',
+  cancel_job:
+    'Cancels a running render job. A job that has already finished is reported with cancelled:false and its final state.',
 } as const;
 
 export type ToolName = keyof typeof descriptions;

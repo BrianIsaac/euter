@@ -32,6 +32,8 @@ export interface InstrumentLoadRequest {
   samplesBaseUrl?: string | undefined;
   onProgress?: ((progress: number) => void) | undefined;
   factories?: InstrumentFactories | undefined;
+  /** Answers whether the sample origin serves a URL; the default is a `HEAD` request. */
+  probeRemote?: ((url: string) => Promise<boolean>) | undefined;
 }
 
 export interface InstrumentBackend {
@@ -265,6 +267,36 @@ export function instrumentsByFamily(): Record<InstrumentFamily, string[]> {
   ) as Record<InstrumentFamily, string[]>;
 }
 
+/**
+ * The first sample file a remote instrument fetches, for the reachability probe.
+ *
+ * @param entry - The catalogue entry.
+ * @param baseUrl - The instrument's remote base, already including its id.
+ * @returns The URL, or null when the entry names no sample file.
+ */
+export function firstSampleUrl(entry: InstrumentCatalogueEntry, baseUrl: string): string | null {
+  const first = entry.sample_map?.[0]?.sample ?? entry.sample_files?.[0];
+  return first === undefined ? null : `${trimSlash(baseUrl)}/${first}.ogg`;
+}
+
+/**
+ * Asks the sample origin for one file's headers.
+ *
+ * The R2 CORS policy allows `GET` and `HEAD` from this origin (hosting setup, step 3), so a
+ * `HEAD` costs one Class B operation and no bytes.
+ *
+ * @param url - The sample URL.
+ * @returns Whether the origin answered with a success status.
+ */
+async function headProbe(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Loads an instrument, falling back audibly to the bundled subset when R2 is not configured. */
 export async function loadInstrument(
   id: string,
@@ -275,7 +307,13 @@ export async function loadInstrument(
   const factories = request.factories ?? DEFAULT_FACTORIES;
   const configuredBase = request.samplesBaseUrl ?? import.meta.env.VITE_SAMPLES_BASE_URL;
 
-  if (!entry.bundled && !configuredBase) {
+  /**
+   * Loads the bundled substitute and says which instrument is sounding in whose place.
+   *
+   * @param reason - Half a sentence naming why the requested instrument is unavailable.
+   * @returns The fallback load result.
+   */
+  const substitute = async (reason: string): Promise<InstrumentLoadResult> => {
     const fallback = INSTRUMENT_CATALOGUE.find(
       ({ id: candidate }) => candidate === entry.fallback_id,
     );
@@ -284,29 +322,36 @@ export async function loadInstrument(
     return {
       instrument: wrapInstrument(id, backend),
       loaded: false,
-      reason: `${entry.name} needs VITE_SAMPLES_BASE_URL; playing ${fallback.name} instead.`,
+      reason: `${reason}; playing ${fallback.name} instead.`,
     };
+  };
+
+  if (!entry.bundled && !configuredBase) {
+    return substitute(`${entry.name} needs VITE_SAMPLES_BASE_URL`);
   }
 
   const baseUrl = entry.bundled
     ? bundledBase(entry)
     : `${trimSlash(configuredBase ?? '')}/${entry.id}`;
+
+  if (!entry.bundled) {
+    // smplr's loaders log a failed buffer and resolve anyway, so without this the sample origin
+    // answering 404 would give a silent track and no notice. Measured on 28 Aug against the
+    // deployed site while the remote half of the pack was still not uploaded.
+    const probeUrl = firstSampleUrl(entry, baseUrl);
+    const probe = request.probeRemote ?? headProbe;
+    if (probeUrl !== null && !(await probe(probeUrl))) {
+      return substitute(`${entry.name} is not on the sample origin`);
+    }
+  }
+
   try {
     const backend = await createBackend(entry, request, factories, baseUrl);
     return { instrument: wrapInstrument(id, backend), loaded: true };
   } catch (error) {
     if (entry.bundled) throw error;
-    const fallback = INSTRUMENT_CATALOGUE.find(
-      ({ id: candidate }) => candidate === entry.fallback_id,
-    );
-    if (!fallback) throw error;
-    const backend = await createBackend(fallback, request, factories, bundledBase(fallback));
     const detail = error instanceof Error ? error.message : String(error);
-    return {
-      instrument: wrapInstrument(id, backend),
-      loaded: false,
-      reason: `Failed to load ${entry.name}: ${detail}; playing ${fallback.name} instead.`,
-    };
+    return substitute(`Failed to load ${entry.name}: ${detail}`);
   }
 }
 
