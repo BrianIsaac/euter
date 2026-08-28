@@ -274,6 +274,43 @@ describe('audio graph reconciler', () => {
     reconciler.dispose();
   });
 
+  it('marks a replacement as loading before its loader reports progress', async () => {
+    const graph = graphFactory();
+    let finishReplacement: ((result: InstrumentLoadResult) => void) | undefined;
+    const instrumentLoader = vi.fn((id: string): Promise<InstrumentLoadResult> => {
+      if (id === 'vcsl-recorder') {
+        return new Promise((resolve) => {
+          finishReplacement = resolve;
+        });
+      }
+      return Promise.resolve({
+        instrument: { id, trigger: vi.fn(), dispose: vi.fn() },
+        loaded: true,
+      });
+    });
+    const store = createSongStore(loadExampleSong(), createSongReducer());
+    const reconciler = createAudioReconciler(store, audio(), {
+      provideGraphFactory: async () => graph.factory,
+      instrumentLoader,
+    });
+    await reconciler.ready();
+
+    store.dispatch({
+      type: 'set_instrument',
+      args: { track_id: 'melody', instrument: 'vcsl-recorder' },
+      source: 'human',
+      why: 'Try the recorder.',
+    });
+
+    expect(reconciler.getSnapshot().loading['melody:vcsl-recorder']).toBe(0);
+    finishReplacement?.({
+      instrument: { id: 'vcsl-recorder', trigger: vi.fn(), dispose: vi.fn() },
+      loaded: true,
+    });
+    await reconciler.ready();
+    reconciler.dispose();
+  });
+
   it('clears a late instrument load when its track disappears', async () => {
     const graph = graphFactory();
     let finishReplacement: ((result: InstrumentLoadResult) => void) | undefined;

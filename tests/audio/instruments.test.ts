@@ -163,9 +163,9 @@ describe('instrument catalogue', () => {
     );
   });
 
-  it('substitutes when any file in a remote instrument is missing', async () => {
+  it('substitutes when any expected object is absent from a partially uploaded instrument', async () => {
     const fake = factories();
-    const probeRemote = vi.fn(async (url: string) => !url.endsWith('/c3.ogg'));
+    const probeRemote = vi.fn(async (url: string) => !url.endsWith('/c5.ogg'));
     const result = await loadInstrument('electric-piano', {
       context,
       destination: {},
@@ -176,6 +176,7 @@ describe('instrument catalogue', () => {
 
     expect(probeRemote).toHaveBeenCalledTimes(4);
     expect(result.loaded).toBe(false);
+    expect(result.reason).toContain('sample origin is incomplete');
     expect(vi.mocked(fake.value.sampler)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fake.value.sampler).mock.calls[0]?.[2].samples.baseUrl).toBe(
       '/samples/piano/grand/',

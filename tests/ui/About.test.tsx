@@ -54,13 +54,21 @@ describe('About', () => {
     expect(fallen.kind).toBe('bundled');
     expect(fallen.base).toBe('https://pack.example');
     expect(fallen.sentence).toContain('bundled subset instead');
+    expect(remoteSampleState([], 'https://pack.example').sentence).toContain('No active track');
   });
 
   it('shows the configured origin and every fallback notice in the panel', () => {
     vi.stubEnv('VITE_SAMPLES_BASE_URL', 'https://pack.example');
-    render(<About onClose={() => undefined} fallbacks={['Electric piano needs the pack.']} />);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    render(
+      <About
+        onClose={() => undefined}
+        fallbacks={['Electric piano needs the pack.', 'Electric piano needs the pack.']}
+      />,
+    );
     expect(screen.getByTestId('sample-origin')).toHaveTextContent('https://pack.example');
-    expect(screen.getByText('Electric piano needs the pack.')).toBeInTheDocument();
+    expect(screen.getAllByText('Electric piano needs the pack.')).toHaveLength(2);
+    expect(consoleError).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
 });

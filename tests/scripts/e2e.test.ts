@@ -1,6 +1,6 @@
 import { basename } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { parseArguments, scenarioPaths } from '../../scripts/e2e.mjs';
+import { describe, expect, it, vi } from 'vitest';
+import { parseArguments, scenarioPaths, startSelectedDriver } from '../../scripts/e2e.mjs';
 
 describe('parseArguments', () => {
   it('defaults to the local preview build, the MCP driver and every scenario', () => {
@@ -70,5 +70,20 @@ describe('scenarioPaths', () => {
       scenarioPaths(['recording-lock', 'demo']).map((path) => basename(path, '.json')),
     ).toEqual(['demo', 'recording-lock']);
     expect(() => scenarioPaths(['demoo'])).toThrow(/No scenario "demoo"/);
+  });
+});
+
+describe('startSelectedDriver', () => {
+  it('does not turn a failed MCP start into a green CDP run', async () => {
+    const cdp = vi.fn(async () => 'cdp');
+    await expect(
+      startSelectedDriver('mcp', {
+        mcp: async () => {
+          throw new Error('missing binary');
+        },
+        cdp,
+      }),
+    ).rejects.toThrow(/Run again with --driver cdp/);
+    expect(cdp).not.toHaveBeenCalled();
   });
 });

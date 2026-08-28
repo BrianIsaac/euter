@@ -199,6 +199,7 @@ export function createAudioReconciler(
     const version = state.loadVersion;
     clearTrackLoadState(track.id, state);
     state.loadingKey = key;
+    loadingProgress.set(key, 0);
     fallbackReasons.delete(key);
     state.loadPromise = instrumentLoader(track.instrument, {
       context: audio.requireRunning(),

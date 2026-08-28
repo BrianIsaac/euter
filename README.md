@@ -49,9 +49,11 @@ import and a played take are the same object to the rest of the app.
 
 ## What you can say
 
-Eight lines that exercise the whole surface. Each was run through `pnpm e2e` against the built
-bundle and against https://euter.pages.dev on 28 Aug 2026; the calls and summaries below are what
-came back.
+Eight lines for the core demo flow, with the tool sequences the end-to-end harness replays for
+them. `pnpm e2e` invokes those WebMCP tools directly; it does not send the prose to ChatGPT, so the
+model's choice of tools remains an operator check. The direct calls below ran against the built
+bundle and https://euter.pages.dev on 28 Aug 2026. The other scenarios bring the total to all 28
+registered tools.
 
 | #   | Say                                                                                                       | Calls, and what came back                                                                                                                                                                                                                         |
 | --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -59,10 +61,10 @@ came back.
 | 2   | "That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there." | `set_key` → `Set key to C major` (r2), `suggest_chords` → `4 lofi chords for bars 1-4 in C major` (no edit), `set_chords` → `Set 2 chords in bars 3-4` (r5), `generate_part` → `Generated lofi drums in bars 1-8` (r6).                           |
 | 3   | "Give me two ways to harmonise the verse and play the second one."                                        | `propose_options` → two cards (r3); `audition_option` → `Playing "Lift it" over bars 1-4. Nothing is committed until it is chosen.` The song's chords were still C and F while it played; the person's Choose click made them Am7 and Fmaj7 (r4). |
 | 4   | "Ask me to hum the bassline for the chorus."                                                              | `request_take` → `Requested a take for bars 5-8` (r7); the banner "Hum me a bassline for the chorus" appears over those bars and arms them for Record.                                                                                            |
-| 5   | "Commit my take onto the melody and tighten the timing a little."                                         | `commit_take` → `Committed take-6b230d4a to Melody` (r8), `set_quantize` → `Quantised Melody to 16n at 60%` (r9).                                                                                                                                 |
+| 5   | "Commit my take onto the melody and tighten the timing a little."                                         | `commit_take` → `Committed <take-id> to Melody` (r8), `set_quantize` → `Quantised Melody to 16n at 60%` (r9).                                                                                                                                     |
 | 6   | "Make it a verse, then an eight-bar chorus that lifts, and play from the chorus."                         | `arrange` → `Arranged 2 sections across 12 bars` (r10), `generate_part` → `Generated lofi chords in bars 1-8` (r11), `play` → `Playing from bar 5`.                                                                                               |
 | 7   | "The bass is too busy - take that back and pull it down a few dB."                                        | `undo` → `Undid Generated lofi chords in bars 1-8` (r12; undo is itself a step forward), `set_mix` → `Updated the mix for Bass` (r15).                                                                                                            |
-| 8   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polled eight times → `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel.                                                                     |
+| 8   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polls until `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel.                                                                              |
 
 ## Measured in the ChatGPT desktop app
 
@@ -146,20 +148,26 @@ those twelve codes is provoked once in
 
 ## Prior art
 
-Agent-driven music tools exist, and none of them is this. OpenAI's own showcase has **Fieldwork //
-12**, a WebMCP beat machine with 26 tools over one 12 x 16 pattern and no microphone.
-**LeanMCP Music Composer** puts a piano roll behind 23 tools but runs the model _inside_ the page
-through its own gateway rather than the browser's agent, and ships no licence. **Amped Studio's Hum
-& Beatz** converts a hum to MIDI in a browser, manually and once, with no arranger. **WavTool**'s
-"Conductor" was the closest consumer precedent - typed instructions that placed MIDI and could
-explain themselves - and it has been offline since Nov 2024 (acquired by Suno). **Hookpad Aria**
-suggests chords and melodies inside a closed songwriting sketchpad. **`opendaw-mcp`** drives a
+Agent-driven music tools exist, and none of them is this. OpenAI's showcase has
+[**Fieldwork // 12**](https://developers.openai.com/showcase/ko-field-beat-machine), a WebMCP beat
+machine with 26 tools over one 12 x 16 pattern and no microphone.
+[**LeanMCP Music Composer**](https://github.com/Leanmcp-Community/music-composer-webmcp) puts a
+piano roll behind 23 tools but runs the model _inside_ the page through its own gateway rather than
+the browser's agent, and ships no licence. [**Amped Studio's Hum &
+Beatz**](https://ampedstudio.com/manual/hum-beatz/) converts a hum to MIDI in a browser, manually
+and once, with no arranger. **WavTool**'s "Conductor" was the closest consumer precedent - typed
+instructions that placed MIDI and could explain themselves - and it has been offline since Nov
+2024 ([acquired by Suno](https://suno.com/blog/suno-acquires-wavtool)).
+[**Hookpad Aria**](https://www.hooktheory.com/hookpad/aria) suggests chords and melodies inside a
+closed songwriting sketchpad. [**`opendaw-mcp`**](https://pypi.org/project/opendaw-mcp/) drives a
 browser DAW with 543 tools from a Python server through headless Playwright, with nobody watching
-or listening. The desktop bridges (**ableton-mcp**, **reaper-mcp**, **WigAI** for Bitwig, FL
-Studio's first-party **Gopher**) all need an installed DAW and a local socket. None of them hears
-the person in a browser tab, arranges that hum into sections on a timeline the person can hear,
-or attaches the reason to the edit - and none is driven by the person's own agent through the
-browser's own standard.
+or listening. Desktop bridges such as
+[**ableton-mcp**](https://github.com/ahujasid/ableton-mcp),
+[**reaper-mcp**](https://github.com/bonfire-systems/reaper-mcp) and
+[**WigAI**](https://github.com/fabb/WigAI) need an installed DAW and a local socket. None of these
+hears the person in a browser tab, arranges that hum into sections on a timeline the person can
+hear, or attaches the reason to the edit - and none is driven by the person's own agent through
+the browser's own standard.
 
 ## Sounds and licences
 
@@ -172,9 +180,9 @@ renders the same table.
 - **Remote** (1,398,573 B across 21 objects): the electric piano, two more kits and the VCSL
   strings, vibraphone, recorder and saxello (CC0 1.0). They load from the R2 origin named by
   `VITE_SAMPLES_BASE_URL` **once the operator has run `pnpm samples -- --upload`**. Until then the
-  app asks the origin for the first sample of any remote instrument, finds it absent, plays the
-  bundled substitute, and says so in the transport, in the About panel and in the completed
-  render's `get_job` result. Nothing is silently missing.
+  app checks every expected sample object before handing the instrument to smplr. A missing object
+  selects the bundled substitute and is named in the transport, the About panel and the completed
+  render's `get_job` result.
 - Salamander and gleitz samples are deliberately not used, so no CC BY attribution applies.
 
 ## Development
@@ -197,8 +205,9 @@ Every file under `src/` has a test at the same path under `tests/`;
 
 ### The end-to-end harness
 
-`pnpm e2e` is the real thing and is **not** in the commit gate, because it needs a headed Chrome
-with WebMCP enabled. It launches Chrome on a throwaway profile pre-armed with
+`pnpm e2e` is the browser integration check and is **not** in the commit gate because it needs a
+compatible Chrome with WebMCP enabled and performs real audio exports. It launches Chrome headed by
+default on a throwaway profile pre-armed with
 `enable-webmcp-testing`, connects an MCP stdio client to
 `chrome-devtools-mcp --categoryExperimentalWebmcp=true`, and runs the JSON scenarios in
 [`tests/e2e/scenarios/`](tests/e2e/scenarios) through `list_webmcp_tools` and
@@ -210,15 +219,18 @@ pnpm build && pnpm e2e                      # the local build; the harness start
 pnpm e2e --url https://euter.pages.dev      # the deployed site; it writes nothing there
 pnpm e2e --scenario errors                  # one scenario
 pnpm e2e --driver cdp                       # the CDP WebMCP domain instead of chrome-devtools-mcp
+pnpm e2e --headless                         # supported by Chrome 152; headed remains the default
 pnpm e2e --help                             # every flag
 ```
 
 The four scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
 MIDI file), `errors` (every error code provoked once), `stale-revision` (a person edits between two
 agent calls) and `recording-lock` (one track closed to edits while it is being sung). Together they
-invoke all 28 tools, which a unit test pins. Both drivers run all four; `--driver cdp` is the fallback route
-(`WebMCP.enable`, `invokeTool`, `toolResponded`) for an environment where
-`chrome-devtools-mcp` cannot be started.
+invoke all 28 tools. The unit test rejects missing or assertion-free scenario entries, and a full
+run independently compares the registered surface with tools that actually passed a behavioural
+assertion. `--driver mcp` is strict: it fails if chrome-devtools-mcp cannot start, so a green default
+run is evidence for that route. `--driver cdp` explicitly exercises the fallback route
+(`WebMCP.enable`, `invokeTool`, `toolResponded`).
 
 The day-one measurements are in
 [`src/content/day-one-checks.md`](src/content/day-one-checks.md) and are read into the About

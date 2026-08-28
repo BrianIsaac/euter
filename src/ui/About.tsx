@@ -15,7 +15,7 @@ export interface AboutProps {
   onLoadExample?: (() => void) | undefined;
   /**
    * The engine's visible fallback notices, one per track whose instrument could not be loaded
-   * from the remote pack. An empty list means nothing has fallen back in this session.
+   * from the remote pack. An empty list means no active track is currently using a substitute.
    */
   fallbacks?: readonly string[] | undefined;
 }
@@ -51,13 +51,13 @@ export function remoteSampleState(
     return {
       kind: 'bundled',
       base: trimmed,
-      sentence: `The remote pack is configured at ${trimmed}, but a sound in this session came from the bundled subset instead.`,
+      sentence: `The remote pack is configured at ${trimmed}, but an active track is using the bundled subset instead.`,
     };
   }
   return {
     kind: 'remote',
     base: trimmed,
-    sentence: `The remote pack is configured at ${trimmed}. Nothing has fallen back to the bundled subset in this session.`,
+    sentence: `The remote pack is configured at ${trimmed}. No active track is using a bundled substitute.`,
   };
 }
 
@@ -214,8 +214,8 @@ export function About({ onClose, onLoadExample, fallbacks = [] }: AboutProps) {
         <p data-testid="sample-origin">{samples.sentence}</p>
         {fallbacks.length === 0 ? null : (
           <ul>
-            {fallbacks.map((notice) => (
-              <li key={notice}>{notice}</li>
+            {fallbacks.map((notice, index) => (
+              <li key={`${index}:${notice}`}>{notice}</li>
             ))}
           </ul>
         )}

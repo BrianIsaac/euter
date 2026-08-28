@@ -341,6 +341,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
     : null;
 
   let reconciler: AudioReconciler | null = null;
+  let stopReconciler: (() => void) | null = null;
   let activation: Promise<void> | null = null;
   let previewSequence = 0;
   let preview: { option_id: string; label: string } | null = null;
@@ -375,7 +376,10 @@ export function createEngine(options: EngineOptions = {}): Engine {
     // could not connect to it ("Overload resolution failed"). Measured in Chrome 151, 27 Aug.
     const running = audio.activateFromGesture();
     activation = running.then(async () => {
-      reconciler ??= (options.createReconciler ?? createAudioReconciler)(playback, audio);
+      if (reconciler === null) {
+        reconciler = (options.createReconciler ?? createAudioReconciler)(playback, audio);
+        stopReconciler = reconciler.subscribe(notify);
+      }
       reconciler.reconcile();
       await startInstrument().catch(() => undefined);
       notify();
@@ -628,6 +632,8 @@ export function createEngine(options: EngineOptions = {}): Engine {
       stopJobs();
       stopRecorder();
       stopAudio();
+      stopReconciler?.();
+      stopReconciler = null;
       persistence?.dispose();
       playback.dispose();
       reconciler?.dispose();

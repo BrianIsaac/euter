@@ -56,7 +56,7 @@ export function findChrome(override) {
   const found = CHROME_CANDIDATES.find((candidate) => existsSync(candidate));
   if (!found) {
     throw new Error(
-      `No Chrome found in ${CHROME_CANDIDATES.join(', ')}; pass --chrome <path> (the harness needs a headed Chrome 150+ with WebMCP).`,
+      `No Chrome found in ${CHROME_CANDIDATES.join(', ')}; pass --chrome <path> (the harness needs Chrome 150+ with WebMCP; headed is the default).`,
     );
   }
   return found;
@@ -529,7 +529,7 @@ export async function createCdpDriver(page) {
       const deadline = Date.now() + (timeoutMs || 10_000);
       while (Date.now() < deadline) {
         const found = await evaluate(
-          '(needles) => needles.some((needle) => (document.body.innerText || "").includes(needle))',
+          '(needles) => needles.some((needle) => (document.body.textContent || "").includes(needle))',
           [texts],
         );
         if (found === true) {
@@ -537,7 +537,11 @@ export async function createCdpDriver(page) {
         }
         await new Promise((done) => setTimeout(done, 200));
       }
-      throw new Error(`None of ${JSON.stringify(texts)} appeared within ${timeoutMs} ms`);
+      const bodyText = await evaluate('() => document.body.textContent || ""');
+      throw new Error(
+        `None of ${JSON.stringify(texts)} appeared within ${timeoutMs} ms; ` +
+          `body text was ${JSON.stringify(String(bodyText).slice(-1_000))}`,
+      );
     },
     async consoleMessages() {
       return consoleLines.join('\n');

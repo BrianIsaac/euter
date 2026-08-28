@@ -6,6 +6,7 @@ import {
   armProfile,
   CHROME_CANDIDATES,
   chromeArguments,
+  createCdpDriver,
   findChrome,
   removeProfile,
   waitForCdp,
@@ -79,5 +80,33 @@ describe('findChrome', () => {
 describe('waitForCdp', () => {
   it('gives up with the last error when nothing answers the port', async () => {
     await expect(waitForCdp(9, 300)).rejects.toThrow(/never answered/);
+  });
+});
+
+describe('createCdpDriver', () => {
+  it('waits on DOM text without losing the source case to CSS text-transform', async () => {
+    const listeners = new Map<string, (params: Record<string, unknown>) => void>();
+    const page = {
+      on(event: string, listener: (params: Record<string, unknown>) => void) {
+        listeners.set(event, listener);
+        return () => listeners.delete(event);
+      },
+      async send(method: string, params?: unknown) {
+        if (method !== 'Runtime.evaluate') return {};
+        const expression = (params as { expression?: string } | undefined)?.expression;
+        return {
+          result: {
+            value: expression?.includes('document.body.textContent') === true,
+          },
+        };
+      },
+      close() {},
+    };
+
+    const driver = (await createCdpDriver(page)) as {
+      waitForText(texts: string[], timeoutMs: number): Promise<void>;
+    };
+    await expect(driver.waitForText(['Sounds and licences'], 20)).resolves.toBeUndefined();
+    expect(listeners.has('WebMCP.toolsAdded')).toBe(true);
   });
 });

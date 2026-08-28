@@ -51,7 +51,7 @@ export const descriptions = {
   add_track:
     'Adds a melody, chords, bass or drums track with a listed instrument and optional display name. The result contains the new track and id; instrument names are reported by get_song_state.',
   set_instrument:
-    'Changes a track’s instrument to a name reported by get_song_state. Samples load lazily: loaded:false means the sound is not playing yet, and a note field names the bundled instrument sounding in its place when the requested samples are unavailable.',
+    'Changes a track’s instrument to a name reported by get_song_state. Samples load lazily: loaded:false means the requested sound is not playing yet. If loading falls back, the transport and About panel name the bundled instrument sounding in its place.',
   set_mix: 'Sets a track’s volume_db, pan, mute or solo. Only the supplied fields change.',
   generate_part:
     'Writes a deterministic bass, chords or drums part from the stored chords, key and pop, soul or lofi style over a bar range. Bass follows roots and fifths, chords have smooth voice leading and drums follow the style pattern. Notes in those bars are replaced.',
