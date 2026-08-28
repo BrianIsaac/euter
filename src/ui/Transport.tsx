@@ -34,6 +34,8 @@ export function transportMessage(thrown: unknown): string {
 export function Transport({ engine, song, onDispatch, onError }: TransportProps) {
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
   const [fromBar, setFromBar] = useState(1);
+  const canUndo = engine.store.history.getPast().length > 0;
+  const canRedo = engine.store.history.getFuture().length > 0;
 
   const play = (): void => {
     void engine
@@ -62,6 +64,24 @@ export function Transport({ engine, song, onDispatch, onError }: TransportProps)
         </button>
         <button type="button" onClick={stop} disabled={!snapshot.playing}>
           Stop
+        </button>
+        <button
+          type="button"
+          disabled={!canUndo}
+          onClick={() => {
+            if (engine.store.undo('human') === null) onError('There is nothing to undo.');
+          }}
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          disabled={!canRedo}
+          onClick={() => {
+            if (engine.store.redo('human') === null) onError('There is nothing to redo.');
+          }}
+        >
+          Redo
         </button>
         <label className="transport-field">
           from bar
