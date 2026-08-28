@@ -23,3 +23,8 @@ node_modules/.tmp
 .wrangler
 .sample-cache/
 samples-dist/
+
+# agent tooling - copied in from the primary checkout, never committed
+.claude/
+CLAUDE.md
+AGENTS.md
