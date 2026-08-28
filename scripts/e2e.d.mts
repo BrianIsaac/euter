@@ -11,3 +11,7 @@ export interface HarnessOptions {
 }
 export function parseArguments(argv: string[]): HarnessOptions;
 export function scenarioPaths(names: string[]): string[];
+export function startSelectedDriver<T>(
+  kind: 'mcp' | 'cdp',
+  starters: { mcp: () => Promise<T>; cdp: () => Promise<T> },
+): Promise<T>;

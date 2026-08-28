@@ -89,12 +89,14 @@ describe('createCdpDriver', () => {
     const page = {
       on(event: string, listener: (params: Record<string, unknown>) => void) {
         listeners.set(event, listener);
+        return () => listeners.delete(event);
       },
-      async send(method: string, params?: { expression?: string }) {
+      async send(method: string, params?: unknown) {
         if (method !== 'Runtime.evaluate') return {};
+        const expression = (params as { expression?: string } | undefined)?.expression;
         return {
           result: {
-            value: params?.expression?.includes('document.body.textContent') === true,
+            value: expression?.includes('document.body.textContent') === true,
           },
         };
       },

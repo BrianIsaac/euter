@@ -21,6 +21,8 @@ export function resolveFunction(source: unknown, vars: Record<string, unknown>):
 export function validateScenario(scenario: unknown, source: string): Scenario;
 export function loadScenario(path: string): Scenario;
 export function hasBehaviouralExpectation(expect: unknown): boolean;
+export function coveredToolName(step: Record<string, unknown>, passed: boolean): string | null;
+export function runtimeCoverageFailures(registered: string[], covered: string[]): string[];
 export function matchRevision(
   actual: unknown,
   spec: number | string,

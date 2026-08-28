@@ -8,6 +8,7 @@ import {
   checkEnvelope,
   checkPaths,
   checkTools,
+  coveredToolName,
   hasBehaviouralExpectation,
   loadScenario,
   matchRevision,
@@ -15,6 +16,7 @@ import {
   readPath,
   resolve,
   resolveFunction,
+  runtimeCoverageFailures,
   stepLabel,
   untilSatisfied,
   validateScenario,
@@ -134,6 +136,21 @@ describe('validateScenario', () => {
         'f.json',
       ),
     ).toThrow(/behavioural expectation/);
+  });
+
+  it('counts only passing behavioural calls and compares them with the live surface', () => {
+    const step = {
+      action: 'tool',
+      tool: 'render',
+      expect: { summary_includes: 'Rendering' },
+    };
+    expect(coveredToolName(step, true)).toBe('render');
+    expect(coveredToolName(step, false)).toBeNull();
+    expect(coveredToolName({ ...step, expect: { ok: true } }, true)).toBeNull();
+    expect(runtimeCoverageFailures(['render', 'play'], ['render', 'ghost'])).toEqual([
+      'registered tools not covered by a passing scenario: play',
+      'passing scenarios invoked tools not on the registered surface: ghost',
+    ]);
   });
 });
 

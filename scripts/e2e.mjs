@@ -35,10 +35,11 @@ import {
   checkEnvelope,
   checkPaths,
   checkTools,
-  hasBehaviouralExpectation,
+  coveredToolName,
   loadScenario,
   resolve as substitute,
   resolveFunction,
+  runtimeCoverageFailures,
   stepLabel,
   untilSatisfied,
 } from './e2e-scenario.mjs';
@@ -125,6 +126,29 @@ export function parseArguments(argv) {
     }
   }
   return options;
+}
+
+/**
+ * Starts only the requested WebMCP route. A default MCP run must never become a CDP run while
+ * keeping a successful exit status.
+ *
+ * @template T
+ * @param {'mcp'|'cdp'} kind - The explicitly requested route.
+ * @param {{ mcp: () => Promise<T>, cdp: () => Promise<T> }} starters - Lazy route starters.
+ * @returns {Promise<T>} The selected route.
+ */
+export async function startSelectedDriver(kind, starters) {
+  if (kind === 'cdp') {
+    return starters.cdp();
+  }
+  try {
+    return await starters.mcp();
+  } catch (error) {
+    throw new Error(
+      `chrome-devtools-mcp could not be used (${error instanceof Error ? error.message : String(error)}). Run again with --driver cdp to exercise the fallback route explicitly.`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -512,14 +536,8 @@ async function runScenario(run) {
       stepFailures = [error instanceof Error ? error.message : String(error)];
     }
     const passed = stepFailures.length === 0;
-    if (
-      passed &&
-      (step.action === 'tool' || step.action === 'poll') &&
-      typeof step.tool === 'string' &&
-      hasBehaviouralExpectation(step.expect)
-    ) {
-      coveredTools.add(step.tool);
-    }
+    const coveredTool = coveredToolName(step, passed);
+    if (coveredTool !== null) coveredTools.add(coveredTool);
     report(`  ${passed ? 'ok' : 'XX'}  ${label.padEnd(28)} ${detail}`);
     for (const line of extra) {
       report(`        ${line}`);
@@ -588,35 +606,45 @@ async function main() {
   /** @type {import('./e2e-chrome.mjs').Driver} */
   let driver;
   /** @type {{ close: () => Promise<void> }|null} */
-  let mcpClient = null;
+  let mcpClient;
   /** @type {(() => Promise<number>)|null} */
-  let refreshPage = null;
+  let refreshPage;
   /** @type {string} */
   let driverNote;
-  if (options.driver === 'mcp') {
-    try {
-      const started = await startMcpDriver({
-        port: options.port,
-        url: options.url,
-        onStderr: () => {},
-      });
-      driver = started.driver;
-      mcpClient = started.client;
-      refreshPage = started.refreshPage;
-      driverNote = `chrome-devtools-mcp ${JSON.stringify(started.serverInfo)}`;
-    } catch (error) {
-      page.close();
-      browser.close();
-      await chrome.close();
-      if (preview) await preview.close();
-      throw new Error(
-        `chrome-devtools-mcp could not be used (${error instanceof Error ? error.message : String(error)}). Run again with --driver cdp to exercise the fallback route explicitly.`,
-        { cause: error },
-      );
-    }
-  } else {
-    driver = await createCdpDriver(page);
-    driverNote = 'CDP WebMCP domain';
+  try {
+    const selected = await startSelectedDriver(options.driver, {
+      async mcp() {
+        const started = await startMcpDriver({
+          port: options.port,
+          url: options.url,
+          onStderr: () => {},
+        });
+        return {
+          driver: started.driver,
+          mcpClient: started.client,
+          refreshPage: started.refreshPage,
+          driverNote: `chrome-devtools-mcp ${JSON.stringify(started.serverInfo)}`,
+        };
+      },
+      async cdp() {
+        return {
+          driver: await createCdpDriver(page),
+          mcpClient: null,
+          refreshPage: null,
+          driverNote: 'CDP WebMCP domain',
+        };
+      },
+    });
+    driver = selected.driver;
+    mcpClient = selected.mcpClient;
+    refreshPage = selected.refreshPage;
+    driverNote = selected.driverNote;
+  } catch (error) {
+    page.close();
+    browser.close();
+    await chrome.close();
+    if (preview) await preview.close();
+    throw error;
   }
 
   report('euter end-to-end harness');
@@ -681,18 +709,7 @@ async function main() {
     if (options.scenarios.length === 0) {
       const registered = (await driver.listTools()).map(({ name }) => name);
       const covered = new Set(results.flatMap(({ coveredTools }) => coveredTools));
-      const missing = registered.filter((name) => !covered.has(name));
-      const unknown = [...covered].filter((name) => !registered.includes(name));
-      if (missing.length > 0) {
-        harnessFailures.push(
-          `registered tools not covered by a passing scenario: ${missing.join(', ')}`,
-        );
-      }
-      if (unknown.length > 0) {
-        harnessFailures.push(
-          `passing scenarios invoked tools not on the registered surface: ${unknown.join(', ')}`,
-        );
-      }
+      harnessFailures.push(...runtimeCoverageFailures(registered, [...covered]));
       const passed = harnessFailures.length === 0;
       report(
         `  ${passed ? 'ok' : 'XX'}  runtime coverage             ${covered.size}/${registered.length} registered tools passed a behavioural assertion`,

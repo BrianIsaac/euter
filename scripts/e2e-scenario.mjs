@@ -137,6 +137,37 @@ export function hasBehaviouralExpectation(expect) {
   );
 }
 
+/** Returns the tool a successful, behavioural step is allowed to cover. */
+export function coveredToolName(step, passed) {
+  if (
+    !passed ||
+    (step.action !== 'tool' && step.action !== 'poll') ||
+    typeof step.tool !== 'string' ||
+    !hasBehaviouralExpectation(step.expect)
+  ) {
+    return null;
+  }
+  return step.tool;
+}
+
+/** Compares live registrations with tools covered by successful behavioural assertions. */
+export function runtimeCoverageFailures(registered, covered) {
+  const registeredSet = new Set(registered);
+  const coveredSet = new Set(covered);
+  const failures = [];
+  const missing = registered.filter((name) => !coveredSet.has(name));
+  const unknown = [...coveredSet].filter((name) => !registeredSet.has(name));
+  if (missing.length > 0) {
+    failures.push(`registered tools not covered by a passing scenario: ${missing.join(', ')}`);
+  }
+  if (unknown.length > 0) {
+    failures.push(
+      `passing scenarios invoked tools not on the registered surface: ${unknown.join(', ')}`,
+    );
+  }
+  return failures;
+}
+
 function validateExpectation(action, expect, where) {
   const recognised = EXPECT_KEYS[action];
   if (recognised === undefined) return;
