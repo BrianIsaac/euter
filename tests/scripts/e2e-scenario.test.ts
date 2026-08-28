@@ -69,6 +69,7 @@ describe('validateScenario', () => {
       'demo.json',
       'errors.json',
       'recording-lock.json',
+      'sample-fallback.json',
       'stale-revision.json',
       'take-backing.json',
     ]);
@@ -82,7 +83,7 @@ describe('validateScenario', () => {
     }
   });
 
-  it('invokes every registered tool somewhere across the five scenarios', () => {
+  it('invokes every registered tool somewhere across the six scenarios', () => {
     const invoked = new Set<string>();
     for (const file of readdirSync(scenarioDir).filter((name) => name.endsWith('.json'))) {
       for (const step of loadScenario(join(scenarioDir, file)).steps) {

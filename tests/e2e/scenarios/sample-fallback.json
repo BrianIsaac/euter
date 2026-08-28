@@ -1,0 +1,92 @@
+{
+  "name": "sample-fallback",
+  "title": "A deliberate sample 404 selects and names the bundled audible substitute",
+  "reset": true,
+  "steps": [
+    {
+      "action": "eval",
+      "function": "() => Object.fromEntries(window.euter.bus.getDocument().tracks.map((track) => [track.kind, track.id]))",
+      "capture": {
+        "melody_id": "melody"
+      },
+      "expect": {
+        "data_defined": ["melody"]
+      }
+    },
+    {
+      "action": "eval",
+      "note": "The origin is populated: this is not the old assumption that an empty bucket will provoke fallback.",
+      "function": "async () => { const response = await fetch('https://pub-6577ff8ba87b4d7e863a12dce1501192.r2.dev/electric-piano/c2.ogg', { method: 'HEAD' }); return { status: response.status, ok: response.ok }; }",
+      "expect": {
+        "data": {
+          "status": 200,
+          "ok": true
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Play"
+      }
+    },
+    {
+      "action": "http_404",
+      "note": "CDP fulfils the next matching real HEAD request with HTTP 404; the runner fails the following tool step if no request is intercepted.",
+      "url_pattern": "*/vcsl-saxello/d3.ogg"
+    },
+    {
+      "action": "tool",
+      "tool": "set_instrument",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "instrument": "vcsl-saxello",
+        "why": "Trying a breathy lead colour."
+      },
+      "expect": {
+        "ok": true,
+        "revision": 1,
+        "data": {
+          "data.track_id": "{{melody_id}}",
+          "data.instrument": "vcsl-saxello",
+          "data.loaded": false
+        }
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["playing Grand piano instead"],
+      "timeout_ms": 20000
+    },
+    {
+      "action": "eval",
+      "note": "The fallback belongs to the deliberately failed saxello load and remains audible as the bundled piano.",
+      "function": "async () => { const key = \"{{melody_id}}:vcsl-saxello\"; const deadline = Date.now() + 20000; while (Date.now() < deadline) { const notice = window.euter.engine.getSnapshot().fallbacks[key]; if (notice) return notice; await new Promise((resolve) => setTimeout(resolve, 100)); } return null; }",
+      "expect": {
+        "data_includes": {
+          "": "sample origin is incomplete; playing Grand piano instead"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "About"
+      }
+    },
+    {
+      "action": "wait_for",
+      "text": ["bundled subset instead", "playing Grand piano instead"],
+      "timeout_ms": 10000
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Close about"
+      }
+    }
+  ]
+}

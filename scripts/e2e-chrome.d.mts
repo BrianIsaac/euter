@@ -17,6 +17,7 @@ export function launchChrome(options: {
   url: string;
   headless?: boolean;
   keepProfile?: boolean;
+  extra?: string[];
   onStderr?: (line: string) => void;
 }): Promise<{
   pid: number | undefined;
@@ -41,4 +42,11 @@ export function setPermission(
   name: string,
   state: 'granted' | 'denied' | 'prompt',
 ): Promise<void>;
+export function interceptHttp404Once(
+  page: Pick<CdpConnection, 'send' | 'on'>,
+  urlPattern: string,
+): Promise<{
+  hit: Promise<{ url: string; method: string }>;
+  close(): Promise<void>;
+}>;
 export function createCdpDriver(page: CdpConnection): Promise<unknown>;

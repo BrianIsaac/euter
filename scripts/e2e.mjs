@@ -26,6 +26,7 @@ import {
   createCdpDriver,
   findChrome,
   findPageTarget,
+  interceptHttp404Once,
   launchChrome,
   setPermission,
 } from './e2e-chrome.mjs';
@@ -158,7 +159,14 @@ export async function startSelectedDriver(kind, starters) {
  * @returns {string[]} Absolute paths, in the plan's order.
  */
 export function scenarioPaths(names) {
-  const order = ['demo', 'errors', 'stale-revision', 'recording-lock', 'take-backing'];
+  const order = [
+    'demo',
+    'errors',
+    'stale-revision',
+    'recording-lock',
+    'take-backing',
+    'sample-fallback',
+  ];
   const present = readdirSync(scenarioDir)
     .filter((file) => file.endsWith('.json'))
     .map((file) => basename(file, '.json'));
@@ -346,11 +354,11 @@ async function waitForTools(driver, expected, timeoutMs = 30_000) {
 /**
  * Runs one scenario.
  *
- * @param {{ scenario: ReturnType<typeof loadScenario>, driver: import('./e2e-chrome.mjs').Driver, browser: Awaited<ReturnType<typeof connectCdp>>, url: string, report: (line: string) => void, continueOnFailure?: boolean }} run - The run.
+ * @param {{ scenario: ReturnType<typeof loadScenario>, driver: import('./e2e-chrome.mjs').Driver, browser: Awaited<ReturnType<typeof connectCdp>>, page: Awaited<ReturnType<typeof connectCdp>>, url: string, report: (line: string) => void, continueOnFailure?: boolean }} run - The run.
  * @returns {Promise<{ name: string, steps: Record<string, unknown>[], failures: string[], coveredTools: string[] }>} The result.
  */
 async function runScenario(run) {
-  const { scenario, driver, browser, url, report } = run;
+  const { scenario, driver, browser, page, url, report } = run;
   /** @type {Record<string, unknown>} */
   const vars = {};
   /** @type {Record<string, unknown>[]} */
@@ -360,6 +368,29 @@ async function runScenario(run) {
   const coveredTools = new Set();
   /** @type {number|null} */
   let lastRevision = null;
+  /** @type {Awaited<ReturnType<typeof interceptHttp404Once>>|null} */
+  let pendingHttp404 = null;
+
+  const waitForHttp404 = async () => {
+    const interception = pendingHttp404;
+    if (interception === null) return null;
+    pendingHttp404 = null;
+    let timer;
+    try {
+      return await Promise.race([
+        interception.hit,
+        new Promise((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('No request matched the armed HTTP 404 within 20 seconds')),
+            20_000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      await interception.close();
+    }
+  };
 
   report(`\n${scenario.name} - ${scenario.title}`);
   if (scenario.reset) {
@@ -409,6 +440,10 @@ async function runScenario(run) {
           const envelope = /** @type {Record<string, unknown>} */ (result.envelope ?? {});
           if (typeof envelope.revision === 'number') {
             lastRevision = envelope.revision;
+          }
+          const intercepted = await waitForHttp404();
+          if (intercepted !== null) {
+            extra.push(`HTTP 404 ${intercepted.method} ${intercepted.url}`);
           }
           detail =
             envelope.ok === true
@@ -506,6 +541,14 @@ async function runScenario(run) {
           detail = 'set';
           break;
         }
+        case 'http_404': {
+          if (pendingHttp404 !== null) {
+            throw new Error('An HTTP 404 interception is already armed');
+          }
+          pendingHttp404 = await interceptHttp404Once(page, String(step.url_pattern));
+          detail = 'armed for the next matching request';
+          break;
+        }
         case 'console': {
           const text = await driver.consoleMessages();
           const expect = /** @type {Record<string, unknown>} */ (step.expect ?? {});
@@ -553,6 +596,10 @@ async function runScenario(run) {
       break;
     }
   }
+  if (pendingHttp404 !== null) {
+    await pendingHttp404.close();
+    failures.push(`${scenario.name}: an HTTP 404 interception was armed but no tool followed it`);
+  }
   return { name: scenario.name, steps, failures, coveredTools: [...coveredTools] };
 }
 
@@ -589,6 +636,7 @@ async function main() {
   const scenarios = paths.map((path) => loadScenario(path));
   const preview = await startPreview(options.url);
   const chromePath = findChrome(options.chrome);
+  const localPreview = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(options.url).hostname);
   /** @type {string[]} */
   const chromeStderr = [];
   const chrome = await launchChrome({
@@ -597,6 +645,7 @@ async function main() {
     url: options.url,
     headless: options.headless,
     keepProfile: options.keepOpen,
+    ...(localPreview ? { extra: ['--disable-web-security'] } : {}),
     onStderr: (line) => chromeStderr.push(line),
   });
   const target = await findPageTarget(options.port, options.url);
@@ -656,6 +705,9 @@ async function main() {
   if (preview) {
     report(`  preview    scripts/preview-headers.mjs (pid ${preview.pid})`);
   }
+  if (localPreview) {
+    report('  sample CORS disabled in the throwaway local profile; deployed runs enforce it');
+  }
   report(`  scenarios  ${scenarios.map((scenario) => scenario.name).join(', ')}`);
 
   let cleaned = false;
@@ -694,6 +746,7 @@ async function main() {
         scenario,
         driver,
         browser,
+        page,
         url: options.url,
         report,
         continueOnFailure: options.continueOnFailure,

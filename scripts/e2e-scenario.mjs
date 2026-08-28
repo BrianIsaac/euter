@@ -31,6 +31,7 @@ export const ACTIONS = [
   'wait_for',
   'eval',
   'permission',
+  'http_404',
   'console',
 ];
 
@@ -44,6 +45,7 @@ const REQUIRED_KEYS = {
   wait_for: ['text'],
   eval: ['function'],
   permission: ['permission', 'state'],
+  http_404: ['url_pattern'],
   console: [],
 };
 
@@ -57,6 +59,7 @@ const ALLOWED_KEYS = {
   wait_for: ['text', 'timeout_ms'],
   eval: ['function', 'capture', 'expect'],
   permission: ['permission', 'state'],
+  http_404: ['url_pattern'],
   console: ['expect'],
 };
 
@@ -626,6 +629,8 @@ export function stepLabel(step) {
       return `${step.action} ${JSON.stringify(step.target)}`;
     case 'permission':
       return `permission ${step.permission}=${step.state}`;
+    case 'http_404':
+      return `http_404 ${step.url_pattern}`;
     case 'wait_for':
       return `wait_for ${JSON.stringify(step.text)}`;
     default:

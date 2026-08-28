@@ -142,7 +142,7 @@ export async function waitForCdp(port, timeoutMs = 30_000) {
 /**
  * Launches Chrome with a throwaway profile.
  *
- * @param {{ chrome: string, port: number, url: string, headless?: boolean, keepProfile?: boolean, onStderr?: (line: string) => void }} options - The run.
+ * @param {{ chrome: string, port: number, url: string, headless?: boolean, keepProfile?: boolean, extra?: string[], onStderr?: (line: string) => void }} options - The run.
  * @returns {Promise<{ pid: number|undefined, profileDir: string, version: Record<string, string>, close: () => Promise<void> }>} The running browser.
  */
 export async function launchChrome(options) {
@@ -154,6 +154,7 @@ export async function launchChrome(options) {
       port: options.port,
       url: options.url,
       ...(options.headless === undefined ? {} : { headless: options.headless }),
+      ...(options.extra === undefined ? {} : { extra: options.extra }),
     }),
     { stdio: ['ignore', 'ignore', 'pipe'] },
   );
@@ -312,6 +313,64 @@ export async function setPermission(browser, origin, name, state) {
     permission: { name },
     setting: state,
   });
+}
+
+/**
+ * Makes the next page request matching a CDP URL pattern receive a real HTTP 404 response.
+ *
+ * The response carries permissive CORS headers so page `fetch` observes status 404 instead of a
+ * network error. The interception disables itself after one hit.
+ *
+ * @param {Pick<Awaited<ReturnType<typeof connectCdp>>, 'send'|'on'>} page - Page CDP session.
+ * @param {string} urlPattern - CDP Fetch glob, such as `*\/instrument/c3.ogg`.
+ * @returns {Promise<{ hit: Promise<{ url: string, method: string }>, close: () => Promise<void> }>} The one-shot interception.
+ */
+export async function interceptHttp404Once(page, urlPattern) {
+  /** @type {(value: { url: string, method: string }) => void} */
+  let resolveHit = () => undefined;
+  /** @type {(reason: Error) => void} */
+  let rejectHit = () => undefined;
+  const hit = new Promise((resolve, reject) => {
+    resolveHit = resolve;
+    rejectHit = reject;
+  });
+  let disabled = false;
+  const disable = async () => {
+    if (disabled) return;
+    disabled = true;
+    await page.send('Fetch.disable');
+  };
+  const removeListener = page.on('Fetch.requestPaused', (params) => {
+    const request = /** @type {Record<string, unknown>} */ (params.request ?? {});
+    const requestId = String(params.requestId ?? '');
+    const url = String(request.url ?? '');
+    const method = String(request.method ?? '');
+    removeListener();
+    void page
+      .send('Fetch.fulfillRequest', {
+        requestId,
+        responseCode: 404,
+        responsePhrase: 'Not Found',
+        responseHeaders: [
+          { name: 'Access-Control-Allow-Origin', value: '*' },
+          { name: 'Cache-Control', value: 'no-store' },
+          { name: 'Content-Length', value: '0' },
+        ],
+      })
+      .then(disable)
+      .then(() => resolveHit({ url, method }))
+      .catch((error) => rejectHit(error instanceof Error ? error : new Error(String(error))));
+  });
+  await page.send('Fetch.enable', {
+    patterns: [{ urlPattern, requestStage: 'Request' }],
+  });
+  return {
+    hit,
+    async close() {
+      removeListener();
+      await disable();
+    },
+  };
 }
 
 /** The page-side helper the CDP driver installs to find and click elements by accessible name. */

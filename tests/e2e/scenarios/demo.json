@@ -519,7 +519,7 @@
     },
     {
       "action": "tool",
-      "note": "The electric piano lives in the remote pack; without it the bundled grand piano sounds instead and the app says so.",
+      "note": "The uploaded remote pack serves the electric piano; the tool returns while its asynchronous samples are still loading.",
       "tool": "set_instrument",
       "input": {
         "track_id": "{{pad_id}}",
@@ -537,18 +537,13 @@
       }
     },
     {
-      "action": "wait_for",
-      "note": "The substitution is visible in the transport, not silent: the remote pack is configured but does not serve the electric piano yet.",
-      "text": ["playing Grand piano instead"],
-      "timeout_ms": 20000
-    },
-    {
       "action": "eval",
-      "note": "The notice belongs to the newly added Pad, rather than passing on the example Chords track's earlier fallback.",
-      "function": "async () => { const key = \"{{pad_id}}:electric-piano\"; const deadline = Date.now() + 20000; while (Date.now() < deadline) { const notice = window.euter.engine.getSnapshot().fallbacks[key]; if (notice) return notice; await new Promise((resolve) => setTimeout(resolve, 100)); } return null; }",
+      "note": "Once loading settles, the requested electric piano is live and there is no bundled-substitute notice.",
+      "function": "async () => { const key = \"{{pad_id}}:electric-piano\"; const deadline = Date.now() + 20000; while (Date.now() < deadline && key in window.euter.engine.getSnapshot().loading) await new Promise((resolve) => setTimeout(resolve, 100)); const snapshot = window.euter.engine.getSnapshot(); return { loading: key in snapshot.loading, fallback: snapshot.fallbacks[key] ?? null }; }",
       "expect": {
-        "data_includes": {
-          "": "playing Grand piano instead"
+        "data": {
+          "loading": false,
+          "fallback": null
         }
       }
     },
@@ -699,8 +694,8 @@
     },
     {
       "action": "wait_for",
-      "note": "About reports the remote pack honestly: it is configured, and a bundled sound stood in.",
-      "text": ["bundled subset instead"],
+      "note": "About reports the post-upload state without claiming an active substitute.",
+      "text": ["No active track is using a bundled substitute"],
       "timeout_ms": 10000
     },
     {
@@ -712,7 +707,7 @@
     },
     {
       "action": "console",
-      "note": "No uncaught page error. The R2 sample 404s are the documented fallback while the remote half of the pack is not uploaded; the app names the substitution in the transport and the About panel.",
+      "note": "No uncaught page error after the uploaded remote instruments and both export formats were exercised.",
       "expect": {
         "excludes": [
           "Uncaught",
