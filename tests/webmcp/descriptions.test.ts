@@ -36,7 +36,8 @@ describe('descriptions', () => {
     // A ranged render starts at time zero in the file (R-26, midi bars 5-8).
     expect(descriptions.render).toContain('begins at time zero');
     // The R2 pack is not uploaded yet, so a non-bundled instrument substitutes audibly.
-    expect(descriptions.set_instrument).toContain('note field');
+    expect(descriptions.set_instrument).toContain('loaded:false');
+    expect(descriptions.set_instrument).toContain('transport and About panel');
     expect(descriptions.get_job).toContain('fell back to a bundled sound');
     // Codes the errors scenario provoked from these tools.
     expect(descriptions.play).toContain('OUT_OF_RANGE');

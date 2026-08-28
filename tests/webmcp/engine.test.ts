@@ -4,6 +4,7 @@ import {
   type OfflineRenderEngine,
   type RenderOptions,
 } from '../../src/audio/render.ts';
+import type { AudioReconciler } from '../../src/audio/reconciler.ts';
 import { createEmptySong } from '../../src/song/types.ts';
 import { ToolError } from '../../src/webmcp/envelope.ts';
 import { createTestEngine, fakeAudio, fakeAudioBuffer, makeTake } from '../helpers/harness.ts';
@@ -36,6 +37,38 @@ describe('engine', () => {
     await engine.activate();
     expect(engine.audio.getSnapshot().state).toBe('running');
     engine.dispose();
+  });
+
+  it('invalidates the public snapshot when the reconciler loading state changes', async () => {
+    let publish = (): void => undefined;
+    let loading: Record<string, number> = {};
+    const stop = vi.fn();
+    const reconciler: AudioReconciler = {
+      ready: () => Promise.resolve(),
+      reconcile: () => undefined,
+      getSnapshot: () => ({ ready: true, nodes: [], parts: {}, loading, fallbacks: {} }),
+      subscribe(listener) {
+        publish = listener;
+        return stop;
+      },
+      dispose: vi.fn(),
+    };
+    const { engine } = createTestEngine({
+      audio: fakeAudio('uninitialised'),
+      createReconciler: () => reconciler,
+    });
+    await engine.activate();
+    const listener = vi.fn();
+    engine.subscribe(listener);
+    expect(engine.getSnapshot().loading).toEqual({});
+
+    loading = { 'melody:vcsl-recorder': 0 };
+    publish();
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(engine.getSnapshot().loading).toEqual({ 'melody:vcsl-recorder': 0 });
+    engine.dispose();
+    expect(stop).toHaveBeenCalledOnce();
   });
 
   it('releases live audio, capture and render resources when disposed', async () => {
