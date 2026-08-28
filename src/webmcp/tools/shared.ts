@@ -128,7 +128,10 @@ export function takeData(take: Take, beatsPerBar = 4): TakeData {
 /** Returns the bounded song evidence around a rough take for musical interpretation. */
 export function takeContext(song: SongDocument, take: Take): TakeContext {
   const beatsPerBar = song.time_sig[0];
-  const performedBars = takeBarRange(take, beatsPerBar, song.bars);
+  const performedBars =
+    take.notes.length === 0 && take.target_bars !== undefined
+      ? take.target_bars
+      : takeBarRange(take, beatsPerBar, song.bars);
   const targetBars: [number, number] =
     take.target_bars === undefined
       ? performedBars

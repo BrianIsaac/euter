@@ -847,6 +847,7 @@ function noteRange(
 }
 
 function rangeForTake(take: Take, beatsPerBar: number, fallbackBar: number): [number, number] {
+  if (take.notes.length === 0 && take.target_bars !== undefined) return take.target_bars;
   const performed = noteRange(take.notes, beatsPerBar, fallbackBar);
   if (take.target_bars === undefined) return performed;
   return [Math.min(take.target_bars[0], performed[0]), Math.max(take.target_bars[1], performed[1])];
