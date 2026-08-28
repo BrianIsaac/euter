@@ -125,7 +125,13 @@ export const proposeOptionsInput = z.strictObject({
     .array(
       z.strictObject({
         label: z.string().min(1).max(80).describe('Two or three words shown to the person'),
-        why: z.string().min(1).max(200).describe('One sentence on why this one is worth hearing'),
+        why: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe(
+            'One sentence on why this one is worth hearing; a take reading names any note it infers rather than detects',
+          ),
         chords: z.array(chordField).min(1).optional().describe('Chords this option would set'),
         style: styleField.optional(),
         track_id: trackIdField.optional().describe('Track the notes belong to, for a part option'),
