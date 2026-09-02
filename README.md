@@ -22,6 +22,11 @@ Built for the WebMCP Challenge (OpenAI, Devpost), deadline 4 Sep 2026 04:00 GMT+
 
 Live: **https://euter.pages.dev**
 
+The page opens empty: eight bars at 92 bpm in C major, with one empty Melody track selected and
+armed for Record. Start with a hum, the Musical Typing keys or an imported voice memo. To hear the
+original First Light demo immediately, click **Load the example** on the empty page or open the
+shareable URL **https://euter.pages.dev/?example=1**.
+
 Two surfaces, both first-class. The steps below are what was actually measured, not what the
 documentation promises.
 
@@ -29,8 +34,8 @@ documentation promises.
 
 1. Open the URL in the app's built-in browser (Ctrl+Shift+B) and allow the site. Measured on the
    Linux build 26.820.60940 with GPT-5.6 Sol; Terra works the same way.
-2. **Press Play, Record or a key once.** The audio context is created by your click, so `play`
-   answers `AUDIO_LOCKED` until you have.
+2. **Press Record or a key once** to begin your own song, or load the example and press Play. The
+   audio context is created by your click, so `play` answers `AUDIO_LOCKED` until you have.
 3. **Name the tab in your prompt**: "in the tab I have open". A bare chat answered "the ping tool
    isn't available in this session" until the prompt named the open tab, and a prompt that said
    "open this URL" made the agent use a tab of its own while the visible page never moved
@@ -48,7 +53,7 @@ you press. The header reads `Agent tools: ready (28)` when the page has register
    the page already serves. `chrome://version` then shows `--enable-features=WebMCPTesting`.
 2. DevTools > Application > WebMCP lists the 28 tools and runs any of them; the Model Context Tool
    Inspector extension works too. `pnpm e2e` drives the same surface unattended.
-3. Press Play once, for the same reason as above.
+3. Press Record or a key once, or load the example and press Play, for the same reason as above.
 
 Without a microphone, drop a voice memo on the take panel or choose a file - a recording, an
 import and a played take are the same object to the rest of the app.
@@ -61,16 +66,16 @@ model's choice of tools remains an operator check. The direct calls below ran ag
 bundle and https://euter.pages.dev on 28 Aug 2026. The other scenarios bring the total to all 28
 registered tools.
 
-| #   | Say                                                                                                       | Calls, and what came back                                                                                                                                                                                                                         |
-| --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | "Read the song and tell me what I have so far."                                                           | `get_song_state` → `First Light: 8 bars, 92 bpm, C major, 4 tracks` (955 characters, revision unchanged). `get_track_notes` pages one track's notes.                                                                                              |
-| 2   | "That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there." | `set_key` → `Set key to C major` (r2), `suggest_chords` → `4 lofi chords for bars 1-4 in C major` (no edit), `set_chords` → `Set 2 chords in bars 3-4` (r5), `generate_part` → `Generated lofi drums in bars 1-8` (r6).                           |
-| 3   | "Give me two ways to harmonise the verse and play the second one."                                        | `propose_options` → two cards (r3); `audition_option` → `Playing "Lift it" over bars 1-4. Nothing is committed until it is chosen.` The song's chords were still C and F while it played; the person's Choose click made them Am7 and Fmaj7 (r4). |
-| 4   | "Ask me to hum the bassline for the chorus."                                                              | `request_take` → `Requested a take for bars 5-8` (r7); the banner "Hum me a bassline for the chorus" appears over those bars and arms them for Record.                                                                                            |
-| 5   | "Help me hear what I meant before we commit the hum."                                                     | `get_take` → the rough notes in musical context; `propose_options {kind: "take"}` → two readings plus the automatic raw card; `audition_option` changes nothing; the person's Choose commits through the take path.                               |
-| 6   | "Make it a verse, then an eight-bar chorus that lifts, and play from the chorus."                         | `arrange` → `Arranged 2 sections across 12 bars` (r10), `generate_part` → `Generated lofi chords in bars 1-8` (r11), `play` → `Playing from bar 5`.                                                                                               |
-| 7   | "The bass is too busy - take that back and pull it down a few dB."                                        | `undo` → `Undid Generated lofi chords in bars 1-8` (r12; undo is itself a step forward), `set_mix` → `Updated the mix for Bass` (r15).                                                                                                            |
-| 8   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polls until `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel.                                                                              |
+| #   | Say                                                                                                       | Calls, and what came back                                                                                                                                                                                                                                          |
+| --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | After loading the example: "Read the song and tell me what I have so far."                                | `get_song_state` → `First Light: 8 bars, 92 bpm, C major, 4 tracks` (955 characters, revision unchanged). On the empty page it instead says there are no notes yet and suggests humming, playing the keys or importing. `get_track_notes` pages one track's notes. |
+| 2   | "That's the tune. Find the key, give me chords and a laid-back beat, and tell me why each part is there." | `set_key` → `Set key to C major` (r2), `suggest_chords` → `4 lofi chords for bars 1-4 in C major` (no edit), `set_chords` → `Set 2 chords in bars 3-4` (r5), `generate_part` → `Generated lofi drums in bars 1-8` (r6).                                            |
+| 3   | "Give me two ways to harmonise the verse and play the second one."                                        | `propose_options` → two cards (r3); `audition_option` → `Playing "Lift it" over bars 1-4. Nothing is committed until it is chosen.` The song's chords were still C and F while it played; the person's Choose click made them Am7 and Fmaj7 (r4).                  |
+| 4   | "Ask me to hum the bassline for the chorus."                                                              | `request_take` → `Requested a take for bars 5-8` (r7); the banner "Hum me a bassline for the chorus" appears over those bars and arms them for Record.                                                                                                             |
+| 5   | "Help me hear what I meant before we commit the hum."                                                     | `get_take` → the rough notes in musical context; `propose_options {kind: "take"}` → two readings plus the automatic raw card; `audition_option` changes nothing; the person's Choose commits through the take path.                                                |
+| 6   | "Make it a verse, then an eight-bar chorus that lifts, and play from the chorus."                         | `arrange` → `Arranged 2 sections across 12 bars` (r10), `generate_part` → `Generated lofi chords in bars 1-8` (r11), `play` → `Playing from bar 5`.                                                                                                                |
+| 7   | "The bass is too busy - take that back and pull it down a few dB."                                        | `undo` → `Undid Generated lofi chords in bars 1-8` (r12; undo is itself a step forward), `set_mix` → `Updated the mix for Bass` (r15).                                                                                                                             |
+| 8   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polls until `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel.                                                                                               |
 
 ## Measured in the ChatGPT desktop app
 
@@ -218,7 +223,9 @@ default on a throwaway profile pre-armed with
 `chrome-devtools-mcp --categoryExperimentalWebmcp=true`, and runs the JSON scenarios in
 [`tests/e2e/scenarios/`](tests/e2e/scenarios) through `list_webmcp_tools` and
 `execute_webmcp_tool`, asserting each envelope, each revision, the 1,500-character output budget,
-the 28 tools and the six reads.
+and all 28 tool behaviours. Scenarios that depend on First Light declare an example start and the
+harness reloads them through `?example=1`, so the product keeps its normal empty default without
+making the demo setup click-dependent.
 
 ```sh
 pnpm build && pnpm e2e                      # the local build; the harness starts the preview server
