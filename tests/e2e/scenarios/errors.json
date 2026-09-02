@@ -1,6 +1,7 @@
 {
   "name": "errors",
   "title": "Every error code in the envelope contract, provoked once",
+  "start": "example",
   "reset": true,
   "steps": [
     {

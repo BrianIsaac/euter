@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadExampleSong, SONG_STORAGE_KEY } from '../../src/song/serialise.ts';
-import { createRuntime, safeStorage } from '../../src/webmcp/runtime.ts';
+import { createRuntime, safeStorage, startsWithExample } from '../../src/webmcp/runtime.ts';
 import { createFakeContext } from '../helpers/fakeContext.ts';
 import { createTestEngine } from '../helpers/harness.ts';
 
@@ -28,10 +28,29 @@ describe('runtime', () => {
     runtime.engine.dispose();
   });
 
-  it('starts from the example song when storage holds nothing usable', () => {
+  it('starts empty when storage holds nothing usable', () => {
     const runtime = createRuntime({ storage: null, contexts: () => [] });
+    expect(runtime.bus.getDocument()).toMatchObject({
+      title: 'Untitled',
+      bpm: 92,
+      tracks: [{ id: 'melody', notes: [] }],
+    });
+    runtime.engine.dispose();
+  });
+
+  it('lets ?example=1 override storage for a judge or end-to-end run', () => {
+    const previous = window.location.href;
+    window.history.replaceState(null, '', '/?example=1');
+    const saved = { ...loadExampleSong(), title: 'Saved Song' };
+    const runtime = createRuntime({
+      storage: { getItem: () => JSON.stringify(saved), setItem: () => undefined },
+      contexts: () => [],
+    });
     expect(runtime.bus.getDocument().title).toBe('First Light');
     runtime.engine.dispose();
+    window.history.replaceState(null, '', previous);
+    expect(startsWithExample('?example=1')).toBe(true);
+    expect(startsWithExample('?example=0')).toBe(false);
   });
 
   it('is unavailable without a context', async () => {

@@ -1,4 +1,4 @@
-/** Debounced local persistence and the original example song (plan Architecture item 1). */
+/** Debounced local persistence and the optional First Light example (plan Architecture item 1). */
 import { z } from 'zod';
 import type { SongDocument } from './types.ts';
 
@@ -284,7 +284,7 @@ export function createSongPersistence(
 }
 
 /**
- * Loads the original example used when a person wants to explore without recording first.
+ * Loads the original example when a person chooses it or opens `?example=1`.
  *
  * @returns An eight-bar C-major song with melody, chords, bass and drums.
  */

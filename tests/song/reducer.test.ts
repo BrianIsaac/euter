@@ -4,7 +4,7 @@ import { ToolError } from '../../src/webmcp/envelope.ts';
 import { createSongReducer } from '../../src/song/reducer.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
 import { createSongStore } from '../../src/song/store.ts';
-import type { SongDocument } from '../../src/song/types.ts';
+import { createEmptySong, type SongDocument } from '../../src/song/types.ts';
 
 const agent = (
   type: string,
@@ -30,6 +30,43 @@ function store(song = loadExampleSong(), recordingTrackId: () => string | null =
 }
 
 describe('song reducer and command bus', () => {
+  it('uses the reducer snapshot path for both a new song and the example', () => {
+    const songStore = store();
+    const emptied = songStore.dispatch({
+      type: '__restore_snapshot',
+      args: { document: createEmptySong(), summary: 'Started a new song' },
+      source: 'human',
+    });
+    expect(emptied).toMatchObject({
+      revision: 1,
+      changed: ['song'],
+      summary: 'Started a new song',
+    });
+    expect(songStore.getDocument()).toMatchObject({
+      revision: 1,
+      title: 'Untitled',
+      tracks: [{ id: 'melody', notes: [] }],
+    });
+
+    const loaded = songStore.dispatch({
+      type: '__restore_snapshot',
+      args: { document: loadExampleSong(), summary: 'Loaded the example song' },
+      source: 'human',
+    });
+    expect(loaded).toMatchObject({
+      revision: 2,
+      changed: ['song'],
+      summary: 'Loaded the example song',
+    });
+    expect(songStore.getDocument()).toMatchObject({ revision: 2, title: 'First Light' });
+    expect(songStore.getDocument().tracks.map(({ id }) => id)).toEqual([
+      'melody',
+      'chords',
+      'bass',
+      'drums',
+    ]);
+  });
+
   it('keeps ping working on the song reducer', () => {
     const songStore = store();
     expect(

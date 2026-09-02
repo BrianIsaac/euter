@@ -26,9 +26,11 @@ describe('About', () => {
   it('offers the example song loader only when the shell provides one', () => {
     const onLoadExample = vi.fn();
     const { rerender } = render(<About onClose={() => undefined} />);
-    expect(screen.queryByRole('button', { name: 'Load the example song' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Euterpe opens empty/)).toBeInTheDocument();
+    expect(screen.getByText('?example=1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load the example' })).not.toBeInTheDocument();
     rerender(<About onClose={() => undefined} onLoadExample={onLoadExample} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Load the example song' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load the example' }));
     expect(onLoadExample).toHaveBeenCalled();
   });
 

@@ -1,6 +1,7 @@
 {
   "name": "demo",
   "title": "The demo call order, from an imported hum to an MP3 and a MIDI file",
+  "start": "example",
   "reset": true,
   "steps": [
     {

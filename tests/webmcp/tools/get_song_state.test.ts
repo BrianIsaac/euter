@@ -1,10 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { SONG_STATE_BUDGET } from '../../../src/song/selectors.ts';
 import { loadExampleSong } from '../../../src/song/serialise.ts';
+import { createEmptySong } from '../../../src/song/types.ts';
 import { getSongState } from '../../../src/webmcp/tools/get_song_state.ts';
 import { createHarness, makeTake } from '../../helpers/harness.ts';
 
 describe('get_song_state', () => {
+  it('truthfully orients the agent from an empty session inside both size budgets', async () => {
+    const harness = createHarness({ engine: { document: createEmptySong() } });
+    const envelope = (await harness.invoke('get_song_state')) as {
+      ok: true;
+      summary: string;
+      data: { tracks: string[] };
+    };
+    expect(envelope.ok).toBe(true);
+    expect(envelope.summary).toBe(
+      'Untitled is empty: no notes yet. Start with a hum, play the keys, or import audio.',
+    );
+    expect(envelope.data.tracks).toEqual(['melody melody/grand-piano: empty']);
+    expect(JSON.stringify(envelope.data).length).toBeLessThanOrEqual(SONG_STATE_BUDGET);
+    expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(1500);
+    harness.engine.dispose();
+  });
+
   it('returns the orientation object inside the 1,200-character budget', async () => {
     const harness = createHarness();
     harness.engine.addTake(makeTake('take-1'), 'Kept your hum.', 'agent');

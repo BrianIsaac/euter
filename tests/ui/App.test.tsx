@@ -49,7 +49,7 @@ describe('App', () => {
   });
 
   it('shows the add-track path without trying to draw a roll when the song has no tracks', () => {
-    renderApp(createHarness({ engine: { document: createEmptySong('Blank') } }));
+    renderApp(createHarness({ engine: { document: { ...createEmptySong('Blank'), tracks: [] } } }));
 
     expect(screen.queryByLabelText('Piano roll')).not.toBeInTheDocument();
     expect(screen.getByText('Add a track to start writing notes.')).toBeInTheDocument();
@@ -294,21 +294,48 @@ describe('App', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('being recorded');
   });
 
-  it('loads the example song from the header', () => {
+  it('loads the example from the empty page in one click', () => {
+    const harness = renderApp(createHarness({ engine: { document: createEmptySong() } }));
+    expect(screen.getAllByTestId('track')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /Melody.*armed/u })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'New song' })).toBeDisabled();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Load the example' }));
+    });
+    expect(harness.engine.store.getDocument()).toMatchObject({ title: 'First Light', bpm: 92 });
+    expect(harness.engine.store.getDocument().tracks.map(({ id }) => id)).toEqual([
+      'melody',
+      'chords',
+      'bass',
+      'drums',
+    ]);
+    expect(screen.queryByRole('button', { name: 'Load the example' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New song' })).toBeEnabled();
+  });
+
+  it('confirms before starting a new song and leaves the replacement undoable', () => {
+    const confirm = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
     const harness = renderApp();
-    act(() => {
-      harness.engine.store.dispatch({
-        type: 'set_tempo',
-        args: { bpm: 140 },
-        source: 'human',
-        why: 'Too fast.',
-      });
+    const button = screen.getByRole('button', { name: 'New song' });
+
+    fireEvent.click(button);
+    expect(harness.engine.store.getDocument().title).toBe('First Light');
+    expect(confirm).toHaveBeenCalledOnce();
+
+    fireEvent.click(button);
+    expect(harness.engine.store.getDocument()).toMatchObject({
+      title: 'Untitled',
+      tracks: [{ id: 'melody', notes: [] }],
     });
-    expect(screen.getByTestId('song-revision')).toHaveTextContent('r1');
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'Example song' }));
-    });
-    expect(harness.engine.store.getDocument().bpm).toBe(92);
+    expect(harness.engine.store.history.getPast()).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(harness.engine.store.getDocument().title).toBe('First Light');
   });
 
   it('opens and closes the diagnostics and about panels', () => {

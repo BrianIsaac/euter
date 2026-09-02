@@ -1,6 +1,7 @@
 {
   "name": "take-backing",
   "title": "A bar-one requested take reports where backing actually started and which track was silent",
+  "start": "example",
   "reset": true,
   "steps": [
     {

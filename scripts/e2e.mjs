@@ -397,9 +397,14 @@ async function runScenario(run) {
   if (scenario.reset) {
     // The document is cleared in the *new* document, before the app's persistence reads it:
     // clearing it in the outgoing page is undone by the `pagehide` flush (R-07).
-    await driver.reload('try { localStorage.clear(); } catch (error) { /* private mode */ }');
+    const search = scenario.start === 'example' ? '?example=1' : '';
+    await driver.reload(
+      `try { localStorage.clear(); } catch (error) { /* private mode */ } history.replaceState(null, "", location.pathname + ${JSON.stringify(search)} + location.hash);`,
+    );
     const count = await waitForTools(driver, 1);
-    report(`  ..  reset       cleared storage, reloaded, ${count} tools registered`);
+    report(
+      `  ..  reset       cleared storage, started ${scenario.start}, reloaded, ${count} tools registered`,
+    );
   }
 
   for (const [index, step] of scenario.steps.entries()) {

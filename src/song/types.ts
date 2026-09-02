@@ -151,29 +151,76 @@ export interface SongDocument {
 
 /** The immutable time signature used by the first-song product. */
 export const DEFAULT_TIME_SIGNATURE: [4, 4] = [4, 4];
+export const DEFAULT_BPM = 92;
+export const DEFAULT_BARS = 8;
 
 /**
  * Creates an empty song at revision 0.
  *
  * @param title - The title shown in the header.
- * @returns A song with eight empty bars.
+ * @returns A song with eight empty bars and one empty melody track ready for capture.
  */
 export function createEmptySong(title = 'Untitled'): SongDocument {
   return {
     revision: 0,
     title,
-    bpm: 90,
+    bpm: DEFAULT_BPM,
     time_sig: [...DEFAULT_TIME_SIGNATURE],
     key: { name: 'C major', confidence: 0, alternatives: [] },
-    bars: 8,
+    bars: DEFAULT_BARS,
     sections: [],
     chords: [],
-    tracks: [],
+    tracks: [
+      {
+        id: 'melody',
+        name: 'Melody',
+        kind: 'melody',
+        instrument: 'grand-piano',
+        volume_db: -3,
+        pan: 0,
+        mute: false,
+        solo: false,
+        notes_rev: 0,
+        notes: [],
+      },
+    ],
     takes: [],
     notes_log: [],
     option_sets: [],
     take_request: null,
   };
+}
+
+/** Returns whether a document is exactly the untouched new-song session, ignoring revision. */
+export function isEmptySong(song: SongDocument): boolean {
+  const track = song.tracks[0];
+  return (
+    song.title === 'Untitled' &&
+    song.bpm === DEFAULT_BPM &&
+    song.time_sig[0] === DEFAULT_TIME_SIGNATURE[0] &&
+    song.time_sig[1] === DEFAULT_TIME_SIGNATURE[1] &&
+    song.key.name === 'C major' &&
+    song.key.confidence === 0 &&
+    song.key.alternatives.length === 0 &&
+    song.bars === DEFAULT_BARS &&
+    song.sections.length === 0 &&
+    song.chords.length === 0 &&
+    song.tracks.length === 1 &&
+    track?.id === 'melody' &&
+    track.name === 'Melody' &&
+    track.kind === 'melody' &&
+    track.instrument === 'grand-piano' &&
+    track.volume_db === -3 &&
+    track.pan === 0 &&
+    !track.mute &&
+    !track.solo &&
+    track.notes_rev === 0 &&
+    track.notes.length === 0 &&
+    song.takes.length === 0 &&
+    song.notes_log.length === 0 &&
+    song.option_sets.length === 0 &&
+    song.take_request === null
+  );
 }
 
 /**

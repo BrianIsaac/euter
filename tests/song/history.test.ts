@@ -11,7 +11,7 @@ describe('song history', () => {
     after.key.name = 'D major';
 
     expect(history.undo()).toMatchObject({
-      document: { revision: 0, bpm: 90 },
+      document: { revision: 0, bpm: 92 },
       summary: 'Undid Set tempo to 100 bpm',
       edits: 1,
     });

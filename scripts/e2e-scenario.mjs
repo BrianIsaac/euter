@@ -271,7 +271,7 @@ export function resolveFunction(source, vars) {
  *
  * @param {unknown} scenario - The parsed JSON.
  * @param {string} source - The file name, for the message.
- * @returns {{ name: string, title: string, reset: boolean, steps: Record<string, unknown>[] }} The scenario.
+ * @returns {{ name: string, title: string, start: "empty"|"example", reset: boolean, steps: Record<string, unknown>[] }} The scenario.
  */
 export function validateScenario(scenario, source) {
   if (scenario === null || typeof scenario !== 'object' || Array.isArray(scenario)) {
@@ -285,6 +285,9 @@ export function validateScenario(scenario, source) {
   }
   if (record.reset !== undefined && typeof record.reset !== 'boolean') {
     throw new Error(`${source}: "reset" must be a boolean`);
+  }
+  if (record.start !== undefined && record.start !== 'empty' && record.start !== 'example') {
+    throw new Error(`${source}: "start" must be "empty" or "example"`);
   }
   if (!Array.isArray(record.steps) || record.steps.length === 0) {
     throw new Error(`${source}: "steps" must be a non-empty array`);
@@ -320,6 +323,7 @@ export function validateScenario(scenario, source) {
   return {
     name: /** @type {string} */ (record.name),
     title: /** @type {string} */ (record.title),
+    start: /** @type {"empty"|"example"} */ (record.start ?? 'empty'),
     reset: record.reset === undefined ? true : /** @type {boolean} */ (record.reset),
     steps: /** @type {Record<string, unknown>[]} */ (record.steps),
   };

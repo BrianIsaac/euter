@@ -45,7 +45,13 @@ import {
 } from '../song/serialise.ts';
 import type { SongStateContext } from '../song/selectors.ts';
 import { createSongStore, type SongStore } from '../song/store.ts';
-import type { SongDocument, Take, TeachingOption, TeachingOptionSet } from '../song/types.ts';
+import {
+  createEmptySong,
+  type SongDocument,
+  type Take,
+  type TeachingOption,
+  type TeachingOptionSet,
+} from '../song/types.ts';
 import { createCaptureReducer } from './captureReducer.ts';
 import { ToolError } from './envelope.ts';
 import type { EnvironmentStore } from './environment.ts';
@@ -147,6 +153,7 @@ export interface Engine {
   exportResult(jobId: string): ExportResult | null;
   importFile(file: File): Promise<ImportedAudio>;
   loadExample(): void;
+  newSong(): void;
   stateContext(): SongStateContext;
   getSnapshot(): EngineSnapshot;
   subscribe(listener: () => void): () => void;
@@ -217,7 +224,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
   };
 
   const initial =
-    options.document ?? (options.storage ? loadSong(options.storage) : null) ?? loadExampleSong();
+    options.document ?? (options.storage ? loadSong(options.storage) : null) ?? createEmptySong();
   const store = createSongStore(
     initial,
     createCaptureReducer(createSongReducer({ recordingTrackId, idFactory: makeId })),
@@ -456,6 +463,19 @@ export function createEngine(options: EngineOptions = {}): Engine {
     notify();
   };
 
+  const replaceSong = (document: SongDocument, summary: string): void => {
+    const before = store.getDocument();
+    const result = store.dispatch({
+      type: '__restore_snapshot',
+      args: { document, summary },
+      source: 'human',
+    });
+    store.history.record(before, store.getDocument(), result.summary);
+    pendingTakeId = null;
+    clearPreview();
+    notify();
+  };
+
   const exports = new Map<string, ExportResult>();
 
   const runExport = async (
@@ -593,16 +613,10 @@ export function createEngine(options: EngineOptions = {}): Engine {
       return result.data;
     },
     loadExample() {
-      const before = store.getDocument();
-      const example = loadExampleSong();
-      const result = store.dispatch({
-        type: '__restore_snapshot',
-        args: { document: example, summary: 'Loaded the example song' },
-        source: 'human',
-      });
-      store.history.record(before, store.getDocument(), result.summary);
-      pendingTakeId = null;
-      notify();
+      replaceSong(loadExampleSong(), 'Loaded the example song');
+    },
+    newSong() {
+      replaceSong(createEmptySong(), 'Started a new song');
     },
     stateContext() {
       const audioSnapshot = audio.getSnapshot();

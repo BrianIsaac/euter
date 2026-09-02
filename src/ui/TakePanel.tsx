@@ -26,6 +26,8 @@ export interface RecorderPanelPort {
 
 export interface TakePanelProps {
   recorder: RecorderPanelPort | RecorderController;
+  /** Track selected in the song when no agent take request names a different target. */
+  trackId?: string | undefined;
   take?: Take | null;
   request?: ArmedTakeRequest | null;
   onTake?: (recorded: RecordedTake) => void;
@@ -41,12 +43,17 @@ function pitchLabel(hz: number): string {
   return `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 }
 
-function recordingOptions(request: ArmedTakeRequest | null | undefined): StartRecordingOptions {
+function recordingOptions(
+  request: ArmedTakeRequest | null | undefined,
+  trackId: string | undefined,
+): StartRecordingOptions {
   return {
     countInBars: 1,
     metronome: true,
     ...(request === null || request === undefined
-      ? {}
+      ? trackId === undefined || trackId === ''
+        ? {}
+        : { trackId }
       : {
           trackId: request.trackId,
           targetBars: request.targetBars,
@@ -57,6 +64,7 @@ function recordingOptions(request: ArmedTakeRequest | null | undefined): StartRe
 
 export function TakePanel({
   recorder,
+  trackId,
   take = null,
   request = null,
   onTake,
@@ -72,7 +80,7 @@ export function TakePanel({
 
   const start = (): void => {
     if (take !== null) onRetake?.();
-    void recorder.start(recordingOptions(request));
+    void recorder.start(recordingOptions(request, trackId));
   };
   const stop = (): void => {
     void recorder.stop().then((result) => {

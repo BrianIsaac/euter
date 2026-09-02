@@ -1,6 +1,7 @@
 {
   "name": "recording-lock",
   "title": "While a track records, that track alone is closed to edits",
+  "start": "example",
   "reset": true,
   "steps": [
     {
