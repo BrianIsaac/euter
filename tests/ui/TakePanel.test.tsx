@@ -80,6 +80,17 @@ describe('TakePanel', () => {
     });
   });
 
+  it('arms the selected track for a first-click recording', () => {
+    const recorder = fakeRecorder(idle);
+    render(<TakePanel recorder={recorder} trackId="melody" onCommit={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+    expect(recorder.start).toHaveBeenCalledWith({
+      countInBars: 1,
+      metronome: true,
+      trackId: 'melody',
+    });
+  });
+
   it('renders the live pitch line and returns the stopped take', async () => {
     const snapshot: RecorderSnapshot = {
       ...idle,

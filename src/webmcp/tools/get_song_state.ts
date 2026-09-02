@@ -23,11 +23,13 @@ export const getSongState: ToolDefinition<typeof getSongStateInput> = {
       string,
       unknown
     >;
-    return ok(
-      song.revision,
-      [],
-      `${song.title}: ${song.bars} bars, ${song.bpm} bpm, ${song.key.name}, ${song.tracks.length} tracks`,
-      state,
-    );
+    const hasMaterial =
+      song.chords.length > 0 ||
+      song.takes.length > 0 ||
+      song.tracks.some((track) => track.notes.length > 0);
+    const summary = hasMaterial
+      ? `${song.title}: ${song.bars} bars, ${song.bpm} bpm, ${song.key.name}, ${song.tracks.length} tracks`
+      : `${song.title} is empty: no notes yet. Start with a hum, play the keys, or import audio.`;
+    return ok(song.revision, [], summary, state);
   },
 };

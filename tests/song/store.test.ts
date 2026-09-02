@@ -12,6 +12,23 @@ const edit = (type: string, args: Record<string, unknown>): Command => ({
 });
 
 describe('song store history integration', () => {
+  it('starts empty with one melody track ready for the first take', () => {
+    const songStore = createSongStore();
+    expect(songStore.getDocument()).toMatchObject({
+      revision: 0,
+      title: 'Untitled',
+      bpm: 92,
+      bars: 8,
+      key: { name: 'C major' },
+      tracks: [{ id: 'melody', kind: 'melody', notes: [] }],
+      chords: [],
+      sections: [],
+      takes: [],
+      notes_log: [],
+    });
+    expect(songStore.history.getPast()).toEqual([]);
+  });
+
   it('undoes, redoes and pops to an activity revision with monotonic live revisions', () => {
     const songStore = createSongStore(loadExampleSong(), createSongReducer());
     songStore.dispatch(edit('set_tempo', { bpm: 100 }));

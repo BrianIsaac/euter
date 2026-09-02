@@ -9,8 +9,7 @@ import {
 } from '../webmcp/bus.ts';
 import { createSongHistory, type HistoryMove, type SongHistory } from './history.ts';
 import { songReducer } from './reducer.ts';
-import { loadExampleSong } from './serialise.ts';
-import type { SongDocument } from './types.ts';
+import { createEmptySong, type SongDocument } from './types.ts';
 
 export interface SongStore extends CommandBus<SongDocument> {
   history: SongHistory;
@@ -26,7 +25,7 @@ export interface SongStore extends CommandBus<SongDocument> {
  * Wires the song reducer into `createCommandBus`; `ping` remains available until Lane C removes it.
  */
 export function createSongStore(
-  initial: SongDocument = loadExampleSong(),
+  initial: SongDocument = createEmptySong(),
   reducer: Reducer<SongDocument> = songReducer,
   options: BusOptions = {},
 ): SongStore {

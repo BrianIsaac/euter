@@ -77,6 +77,7 @@ describe('validateScenario', () => {
     for (const file of files) {
       const scenario = loadScenario(join(scenarioDir, file));
       expect(scenario.name).toBe(file.replace(/\.json$/, ''));
+      expect(scenario.start).toBe('example');
       expect(scenario.steps.length).toBeGreaterThan(0);
       for (const step of scenario.steps) {
         expect(ACTIONS).toContain(step.action);
@@ -104,6 +105,9 @@ describe('validateScenario', () => {
 
   it('names the step and the key when a scenario is malformed', () => {
     expect(() => validateScenario({ name: 'x' }, 'f.json')).toThrow(/"title"/);
+    expect(() =>
+      validateScenario({ name: 'x', title: 'y', start: 'first-light', steps: [] }, 'f.json'),
+    ).toThrow(/"start" must be "empty" or "example"/);
     expect(() =>
       validateScenario({ name: 'x', title: 'y', steps: [{ action: 'sing' }] }, 'f.json'),
     ).toThrow(/f.json step 1: "action" must be one of/);

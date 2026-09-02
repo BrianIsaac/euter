@@ -4,6 +4,7 @@ export interface ScenarioStep extends Record<string, unknown> {
 export interface Scenario {
   name: string;
   title: string;
+  start: 'empty' | 'example';
   reset: boolean;
   steps: ScenarioStep[];
 }

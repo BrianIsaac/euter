@@ -6,7 +6,12 @@
  */
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import type { RecordedTake } from '../input/recorder.ts';
-import type { SongDocument, TeachingOption, TeachingOptionSet } from '../song/types.ts';
+import {
+  isEmptySong,
+  type SongDocument,
+  type TeachingOption,
+  type TeachingOptionSet,
+} from '../song/types.ts';
 import type { ActivityEntry, Command } from '../webmcp/bus.ts';
 import type { Engine } from '../webmcp/engine.ts';
 import { formatStatus } from '../webmcp/registry.ts';
@@ -115,6 +120,7 @@ export function App({ runtime }: AppProps) {
   const targetBars = latest?.target_bars ?? null;
   const takeRequest = engine.takeRequest();
   const pendingTake = engine.pendingTake();
+  const emptySong = isEmptySong(song);
 
   /** Reports whether the command landed, so a refused write never tears down the take panel. */
   const dispatch = useCallback(
@@ -231,6 +237,21 @@ export function App({ runtime }: AppProps) {
     setPanel((current) => (current === next ? 'none' : next));
   };
 
+  const replaceSong = (replacement: 'empty' | 'example'): void => {
+    if (replacement === 'empty') {
+      const confirmed = window.confirm(
+        'Start a new song? Your current work will be replaced, but you can restore it with Undo.',
+      );
+      if (!confirmed) return;
+      engine.newSong();
+    } else {
+      engine.loadExample();
+    }
+    setSelection(null);
+    setGridBar(1);
+    setError(null);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -250,8 +271,13 @@ export function App({ runtime }: AppProps) {
           <span>{song.key.name}</span>
         </div>
         <nav className="header-nav">
-          <button type="button" onClick={() => engine.loadExample()}>
-            Example song
+          {emptySong ? (
+            <button type="button" onClick={() => replaceSong('example')}>
+              Load the example
+            </button>
+          ) : null}
+          <button type="button" disabled={emptySong} onClick={() => replaceSong('empty')}>
+            New song
           </button>
           <button
             type="button"
@@ -336,6 +362,7 @@ export function App({ runtime }: AppProps) {
           <div className="rail">
             <TakePanel
               recorder={recorderPort}
+              trackId={selectedTrackId}
               take={pendingTake}
               request={takeRequest}
               onTake={onTake}
@@ -368,7 +395,7 @@ export function App({ runtime }: AppProps) {
       {panel === 'about' ? (
         <About
           onClose={() => setPanel('none')}
-          onLoadExample={() => engine.loadExample()}
+          onLoadExample={emptySong ? () => replaceSong('example') : undefined}
           fallbacks={Object.values(engineState.fallbacks)}
         />
       ) : null}

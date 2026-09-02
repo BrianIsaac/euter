@@ -3,6 +3,7 @@
  * Tests build their own with fake contexts (landscape §4.4, the Vercel smoke-test shape).
  */
 import type { SongDocument } from '../song/types.ts';
+import { loadExampleSong } from '../song/serialise.ts';
 import type { CommandBus } from './bus.ts';
 import { createEngine, type Engine, type EngineOptions } from './engine.ts';
 import { createEnvironmentStore, readEnvironment, type EnvironmentStore } from './environment.ts';
@@ -30,6 +31,13 @@ export interface RuntimeOptions {
   window?: Window | undefined;
 }
 
+export const EXAMPLE_QUERY_PARAM = 'example';
+
+/** Returns whether the current URL explicitly asks to start from First Light. */
+export function startsWithExample(search: string): boolean {
+  return new URLSearchParams(search).get(EXAMPLE_QUERY_PARAM) === '1';
+}
+
 /**
  * Reads `localStorage` without throwing where a browser refuses it.
  *
@@ -53,12 +61,20 @@ export function safeStorage(win: Window): Storage | null {
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const win = options.window ?? window;
   const environment = createEnvironmentStore(readEnvironment(win));
+  const queryDocument =
+    options.document === undefined &&
+    options.engineOptions?.document === undefined &&
+    startsWithExample(win.location.search)
+      ? loadExampleSong()
+      : undefined;
   const engine =
     options.engine ??
     createEngine({
       environment,
       storage: options.storage === undefined ? safeStorage(win) : options.storage,
-      ...(options.document ? { document: options.document } : {}),
+      ...((options.document ?? queryDocument)
+        ? { document: options.document ?? queryDocument }
+        : {}),
       ...options.engineOptions,
     });
   const queue = createQueue();

@@ -11,7 +11,7 @@ import { parseMeasured, type MeasuredBlock } from './measured.ts';
 
 export interface AboutProps {
   onClose: () => void;
-  /** Replaces the song with the original example, for the agent-only path. */
+  /** Replaces the empty session with the original example. */
   onLoadExample?: (() => void) | undefined;
   /**
    * The engine's visible fallback notices, one per track whose instrument could not be loaded
@@ -167,18 +167,19 @@ export function About({ onClose, onLoadExample, fallbacks = [] }: AboutProps) {
         </p>
       </section>
 
-      {onLoadExample === undefined ? null : (
-        <section className="diag-section">
-          <h3>Example song</h3>
-          <p>
-            "First Light" is an original eight-bar example: melody, chords, bass and drums. Load it
-            to explore the app, or to give your agent something to work on before you record.
-          </p>
+      <section className="diag-section">
+        <h3>Example song</h3>
+        <p>
+          Euterpe opens empty, with one Melody track armed for your hum, keyboard take or import.
+          "First Light" is an original eight-bar example with melody, chords, bass and drums. Use
+          Load the example on the empty page, or open <code>?example=1</code>, to hear it at once.
+        </p>
+        {onLoadExample === undefined ? null : (
           <button type="button" onClick={onLoadExample}>
-            Load the example song
+            Load the example
           </button>
-        </section>
-      )}
+        )}
+      </section>
 
       <section className="diag-section">
         <h3>Versions</h3>

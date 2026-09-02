@@ -1,6 +1,7 @@
 {
   "name": "sample-fallback",
   "title": "A deliberate sample 404 selects and names the bundled audible substitute",
+  "start": "example",
   "reset": true,
   "steps": [
     {

@@ -493,20 +493,29 @@ describe('engine', () => {
     engine.dispose();
   });
 
-  it('loads the example song as an undoable replacement of unsaved work', () => {
-    const { engine } = createTestEngine();
+  it('loads the example and starts a new song as undoable reducer replacements', () => {
+    const { engine } = createTestEngine({ document: createEmptySong() });
+    engine.loadExample();
+    expect(engine.store.getDocument().title).toBe('First Light');
+    expect(engine.store.history.getPast()).toHaveLength(1);
+
     engine.store.dispatch({
       type: 'set_tempo',
       args: { bpm: 140 },
       source: 'human',
       why: 'Too fast.',
     });
-    expect(engine.store.history.getPast()).toHaveLength(1);
-    engine.loadExample();
-    expect(engine.store.getDocument().bpm).toBe(92);
     expect(engine.store.history.getPast()).toHaveLength(2);
+    engine.newSong();
+    expect(engine.store.getDocument()).toMatchObject({
+      title: 'Untitled',
+      bpm: 92,
+      tracks: [{ id: 'melody', notes: [] }],
+    });
+    expect(engine.store.history.getPast()).toHaveLength(3);
     expect(engine.store.undo('human')).toMatchObject({ edits: 1 });
     expect(engine.store.getDocument().bpm).toBe(140);
+    expect(engine.store.getDocument().title).toBe('First Light');
     engine.dispose();
   });
 });

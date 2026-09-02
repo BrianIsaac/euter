@@ -59,6 +59,7 @@ export function TrackList({ song, selectedTrackId, onSelect, onDispatch }: Track
             >
               {track.name}
               <span className="muted"> {track.notes.length} notes</span>
+              {track.id === selectedTrackId ? <span className="muted"> armed</span> : null}
             </button>
 
             <label className="track-field">

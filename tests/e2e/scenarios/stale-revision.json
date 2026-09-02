@@ -1,6 +1,7 @@
 {
   "name": "stale-revision",
   "title": "A person edits between two agent calls; the second call is refused with what changed",
+  "start": "example",
   "reset": true,
   "steps": [
     {
