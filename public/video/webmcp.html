@@ -662,6 +662,74 @@
         font: 11px var(--mono);
       }
 
+      .closing-scene {
+        grid-template-rows: 1fr;
+        place-items: center;
+        background: radial-gradient(circle at 50% 45%, rgb(125 211 192 / 8%), transparent 34%);
+      }
+
+      .closing-card {
+        width: min(1120px, calc(100vw - 160px));
+        text-align: center;
+      }
+
+      .closing-card h2 {
+        max-width: none;
+        font-size: clamp(64px, 9vw, 150px);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+      }
+
+      .closing-tagline {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: clamp(19px, 2vw, 32px);
+      }
+
+      .closing-claim {
+        margin: 30px 0 34px;
+        color: var(--text);
+        font: clamp(11px, 0.95vw, 14px) var(--mono);
+      }
+
+      .pulse-line {
+        display: flex;
+        width: min(580px, 70vw);
+        height: 48px;
+        margin: 0 auto 24px;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .pulse-line span {
+        width: 3px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      .pulse-line span:nth-child(3n) {
+        background: var(--agent);
+        animation-delay: -0.6s;
+      }
+
+      .pulse-line span:nth-child(3n + 1) {
+        background: var(--accent-2);
+        animation-delay: -1.2s;
+      }
+
+      .closing-url {
+        font: 600 clamp(21px, 2.4vw, 38px) var(--mono);
+      }
+
+      .closing-source {
+        margin-top: 8px;
+        color: var(--muted);
+        font: clamp(11px, 1vw, 14px) var(--mono);
+      }
+
       .explainer-footer {
         min-height: 25px;
       }
@@ -724,6 +792,18 @@
         }
       }
 
+      @keyframes pulse {
+        0%,
+        100% {
+          height: 8px;
+          opacity: 0.55;
+        }
+        50% {
+          height: 38px;
+          opacity: 1;
+        }
+      }
+
       @media (max-width: 850px), (max-height: 620px) {
         .scene {
           padding: 24px;
@@ -760,7 +840,7 @@
     </style>
   </head>
   <body>
-    <main class="explainer" data-duration-ms="34000" aria-label="How WebMCP works in Euterpe">
+    <main class="explainer" data-duration-ms="39000" aria-label="How WebMCP works in Euterpe">
       <header class="explainer-header">
         <div class="brand"><strong>Euterpe</strong><span>a producer beside you</span></div>
         <span class="header-label">How WebMCP works here</span>
@@ -970,15 +1050,34 @@ navigator.modelContext</pre>
             </div>
           </div>
         </section>
+
+        <section class="scene closing-scene" data-scene="closing" aria-hidden="true">
+          <div class="closing-card">
+            <h2>Euterpe</h2>
+            <p class="closing-tagline">Hum a melody. Make a song with your agent.</p>
+            <p class="closing-claim">
+              28 WebMCP tools &middot; visible, explained and undoable &middot; the person stays in
+              control
+            </p>
+            <div class="pulse-line" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span>
+            </div>
+            <p class="closing-url">euter.pages.dev</p>
+            <p class="closing-source">Source linked on Devpost &middot; MIT</p>
+          </div>
+        </section>
       </div>
 
       <footer class="explainer-footer">
         <div class="chapter-labels" aria-hidden="true">
           <span class="is-active">standard</span><span>register</span><span>share</span
-          ><span>decide</span><span>together</span>
+          ><span>decide</span><span>together</span><span>closing</span>
         </div>
         <div class="progress-track" aria-hidden="true"><div class="progress-bar"></div></div>
-        <span class="time" aria-live="off">00:00 / 00:34</span>
+        <span class="time" aria-live="off">00:00 / 00:39</span>
       </footer>
     </main>
 
@@ -989,6 +1088,7 @@ navigator.modelContext</pre>
         { name: 'shared-document', duration: 9000 },
         { name: 'control-loop', duration: 8000 },
         { name: 'together', duration: 4000 },
+        { name: 'closing', duration: 5000 },
       ];
       const totalDuration = phases.reduce((total, phase) => total + phase.duration, 0);
       const scenes = [...document.querySelectorAll('.scene')];
@@ -1031,7 +1131,7 @@ navigator.modelContext</pre>
         const elapsed = Math.min(now - startedAt, totalDuration);
         showScene(sceneAt(elapsed));
         progress.style.width = `${(elapsed / totalDuration) * 100}%`;
-        time.textContent = `${formatTime(elapsed)} / 00:34`;
+        time.textContent = `${formatTime(elapsed)} / 00:39`;
         if (elapsed < totalDuration) {
           animationFrame = requestAnimationFrame(renderFrame);
         }
@@ -1042,7 +1142,7 @@ navigator.modelContext</pre>
         activeIndex = -1;
         showScene(0);
         progress.style.width = '0%';
-        time.textContent = '00:00 / 00:34';
+        time.textContent = '00:00 / 00:39';
         startedAt = performance.now();
         animationFrame = requestAnimationFrame(renderFrame);
       }
