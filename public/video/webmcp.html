@@ -1,0 +1,1064 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A timed visual explanation of how Euterpe uses WebMCP for human-agent music making."
+    />
+    <title>How WebMCP works in Euterpe</title>
+    <style>
+      :root {
+        --bg: #14161b;
+        --panel: #1c1f26;
+        --panel-2: #232733;
+        --line: #2f3442;
+        --text: #e7e9ee;
+        --muted: #9aa3b2;
+        --accent: #7dd3c0;
+        --accent-2: #e8c26a;
+        --agent: #b48cff;
+        --danger: #ff7b7b;
+        --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color-scheme: dark;
+        font-family: var(--sans);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      body::before {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(circle at 18% 12%, rgb(125 211 192 / 8%), transparent 34%),
+          radial-gradient(circle at 82% 80%, rgb(180 140 255 / 8%), transparent 32%), var(--bg);
+        content: '';
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 7px 13px;
+        background: var(--panel-2);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        border-color: var(--accent);
+        outline: none;
+      }
+
+      code,
+      .mono {
+        font-family: var(--mono);
+      }
+
+      .explainer {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        width: 100%;
+        height: 100%;
+        padding: clamp(14px, 2vw, 30px) clamp(18px, 3vw, 48px) clamp(12px, 1.6vw, 24px);
+      }
+
+      .explainer-header,
+      .explainer-footer {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        white-space: nowrap;
+      }
+
+      .brand strong {
+        font-size: clamp(18px, 1.6vw, 24px);
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .brand span,
+      .header-label,
+      .time,
+      .chapter-labels {
+        color: var(--muted);
+        font-size: clamp(11px, 0.9vw, 13px);
+      }
+
+      .header-label {
+        margin-left: auto;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .status {
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        padding: 4px 10px;
+        color: var(--accent);
+        font: 12px var(--mono);
+      }
+
+      .stage {
+        position: relative;
+        min-height: 0;
+        margin: clamp(10px, 1.6vw, 24px) 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background:
+          linear-gradient(rgb(255 255 255 / 1%) 1px, transparent 1px),
+          linear-gradient(90deg, rgb(255 255 255 / 1%) 1px, transparent 1px), var(--panel);
+        background-size: 36px 36px;
+        box-shadow: 0 24px 80px rgb(0 0 0 / 24%);
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: clamp(14px, 2vw, 30px);
+        padding: clamp(28px, 4vw, 68px);
+        opacity: 0;
+        transform: translateY(18px) scale(0.99);
+        transition:
+          opacity 520ms ease,
+          transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        pointer-events: none;
+      }
+
+      .scene.is-active {
+        z-index: 2;
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+
+      .scene-copy {
+        max-width: 980px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font: 600 clamp(11px, 1vw, 14px) var(--mono);
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1,
+      h2 {
+        max-width: 1100px;
+        font-size: clamp(29px, 3.2vw, 56px);
+        font-weight: 600;
+        line-height: 1.05;
+        letter-spacing: -0.025em;
+      }
+
+      .lede {
+        max-width: 890px;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: clamp(15px, 1.35vw, 22px);
+      }
+
+      .diagram {
+        align-self: stretch;
+        min-height: 0;
+      }
+
+      .standard-diagram {
+        display: grid;
+        grid-template-columns: minmax(190px, 0.75fr) minmax(180px, 0.65fr) minmax(320px, 1.35fr);
+        align-items: center;
+        gap: clamp(18px, 3vw, 54px);
+      }
+
+      .card,
+      .code-card,
+      .node,
+      .song-document,
+      .mock-app {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgb(28 31 38 / 96%);
+      }
+
+      .actor-card {
+        position: relative;
+        padding: clamp(20px, 2vw, 34px);
+        text-align: center;
+      }
+
+      .actor-icon {
+        display: grid;
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 14px;
+        place-items: center;
+        border: 1px solid var(--agent);
+        border-radius: 50%;
+        color: var(--agent);
+        font: 600 22px var(--mono);
+      }
+
+      .actor-card strong,
+      .site-card strong,
+      .node strong,
+      .loop-step strong {
+        display: block;
+        font-size: clamp(15px, 1.2vw, 19px);
+        font-weight: 600;
+      }
+
+      .actor-card small,
+      .site-card small,
+      .node small,
+      .loop-step small {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: clamp(11px, 0.9vw, 14px);
+      }
+
+      .bridge {
+        position: relative;
+        text-align: center;
+      }
+
+      .bridge-line {
+        position: relative;
+        height: 2px;
+        margin: 15px 0;
+        overflow: visible;
+        background: linear-gradient(90deg, var(--agent), var(--accent));
+      }
+
+      .bridge-line::after {
+        position: absolute;
+        top: -4px;
+        left: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent-2);
+        box-shadow: 0 0 20px var(--accent-2);
+        content: '';
+      }
+
+      .scene.is-active .bridge-line::after {
+        animation: travel 1.8s ease-in-out infinite;
+      }
+
+      .bridge-label {
+        color: var(--accent-2);
+        font: 600 clamp(12px, 1vw, 15px) var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .site-card {
+        padding: clamp(18px, 2vw, 30px);
+      }
+
+      .mini-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 13px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .ready-pill {
+        margin-left: auto;
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        padding: 3px 8px;
+        color: var(--accent);
+        font: 11px var(--mono);
+      }
+
+      .tool-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .tool-chip,
+      .fact-chip {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 7px 9px;
+        background: var(--panel-2);
+        color: var(--muted);
+        font: clamp(10px, 0.82vw, 13px) var(--mono);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tool-chip.read {
+        border-color: rgb(125 211 192 / 46%);
+        color: var(--accent);
+      }
+
+      .tool-chip.write {
+        border-color: rgb(180 140 255 / 46%);
+        color: var(--agent);
+      }
+
+      .registration-diagram {
+        display: grid;
+        grid-template-columns: minmax(410px, 1.25fr) minmax(280px, 0.75fr);
+        gap: clamp(20px, 3vw, 50px);
+        align-items: center;
+      }
+
+      .code-card {
+        overflow: hidden;
+      }
+
+      .code-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font: 12px var(--mono);
+      }
+
+      .code-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--line);
+      }
+
+      pre {
+        margin: 0;
+        padding: clamp(18px, 2.3vw, 34px);
+        font: clamp(12px, 1vw, 16px) / 1.75 var(--mono);
+        white-space: pre-wrap;
+      }
+
+      .code-key {
+        color: var(--agent);
+      }
+
+      .code-string {
+        color: var(--accent-2);
+      }
+
+      .code-comment {
+        color: var(--muted);
+      }
+
+      .registration-facts {
+        display: grid;
+        gap: 10px;
+      }
+
+      .registration-facts .fact-chip {
+        padding: 12px 14px;
+        white-space: normal;
+      }
+
+      .registration-facts b {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .shared-diagram {
+        display: grid;
+        grid-template-columns: minmax(185px, 0.7fr) minmax(340px, 1.25fr) minmax(200px, 0.8fr);
+        gap: clamp(16px, 2.5vw, 38px);
+        align-items: stretch;
+      }
+
+      .input-stack,
+      .output-stack {
+        display: grid;
+        gap: 10px;
+        align-content: center;
+      }
+
+      .node {
+        position: relative;
+        padding: 15px 17px;
+      }
+
+      .node.human {
+        border-left: 3px solid var(--accent-2);
+      }
+
+      .node.agent {
+        border-left: 3px solid var(--agent);
+      }
+
+      .node.output {
+        border-left: 3px solid var(--accent);
+      }
+
+      .flow-core {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 10px;
+        align-content: center;
+      }
+
+      .queue-label,
+      .bus-label {
+        border: 1px solid var(--agent);
+        border-radius: 999px;
+        padding: 7px 12px;
+        color: var(--agent);
+        font: clamp(10px, 0.85vw, 13px) var(--mono);
+        text-align: center;
+      }
+
+      .bus-label {
+        border-color: var(--accent-2);
+        color: var(--accent-2);
+      }
+
+      .song-document {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto repeat(4, 1fr);
+        gap: 7px;
+        padding: 15px;
+      }
+
+      .song-title {
+        display: flex;
+        justify-content: space-between;
+        font: 12px var(--mono);
+      }
+
+      .song-title span:last-child {
+        color: var(--accent);
+      }
+
+      .track {
+        position: relative;
+        overflow: hidden;
+        min-height: 23px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: repeating-linear-gradient(
+          90deg,
+          var(--panel-2) 0,
+          var(--panel-2) calc(12.5% - 1px),
+          var(--line) 12.5%
+        );
+      }
+
+      .track::before,
+      .track::after {
+        position: absolute;
+        height: 5px;
+        border-radius: 2px;
+        background: var(--agent);
+        content: '';
+      }
+
+      .track::before {
+        top: 5px;
+        left: 8%;
+        width: 24%;
+      }
+
+      .track::after {
+        right: 10%;
+        bottom: 5px;
+        width: 36%;
+        background: var(--accent);
+      }
+
+      .track:nth-child(3)::before {
+        left: 22%;
+        width: 42%;
+        background: var(--accent-2);
+      }
+
+      .track:nth-child(4)::after {
+        right: 24%;
+        width: 24%;
+      }
+
+      .scene.is-active .song-document {
+        animation: document-pulse 2.4s ease-in-out infinite;
+      }
+
+      .control-diagram {
+        display: grid;
+        grid-template-columns: minmax(430px, 1.15fr) minmax(270px, 0.85fr);
+        gap: clamp(24px, 4vw, 64px);
+        align-items: center;
+      }
+
+      .loop {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .loop::before {
+        position: absolute;
+        inset: 18% 22%;
+        z-index: -1;
+        border: 2px dashed rgb(125 211 192 / 28%);
+        border-radius: 50%;
+        content: '';
+      }
+
+      .loop-step {
+        min-height: 108px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 17px;
+        background: var(--panel-2);
+      }
+
+      .loop-step .number {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--accent);
+        font: 12px var(--mono);
+      }
+
+      .loop-step:nth-child(2),
+      .loop-step:nth-child(3) {
+        border-color: rgb(180 140 255 / 38%);
+      }
+
+      .control-summary {
+        display: grid;
+        gap: 12px;
+      }
+
+      .large-fact {
+        border-left: 3px solid var(--accent);
+        padding: 5px 0 5px 17px;
+      }
+
+      .large-fact.agent-fact {
+        border-color: var(--agent);
+      }
+
+      .large-fact strong {
+        display: block;
+        font-size: clamp(17px, 1.5vw, 24px);
+        font-weight: 600;
+      }
+
+      .large-fact span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: clamp(12px, 1vw, 15px);
+      }
+
+      .final-diagram {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+        gap: clamp(24px, 4vw, 68px);
+        align-items: center;
+      }
+
+      .final-copy {
+        align-self: center;
+      }
+
+      .final-copy h2 {
+        font-size: clamp(36px, 4.6vw, 76px);
+      }
+
+      .final-copy .lede {
+        max-width: 760px;
+      }
+
+      .final-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 22px;
+      }
+
+      .final-facts .fact-chip {
+        color: var(--text);
+      }
+
+      .mock-app {
+        padding: 16px;
+      }
+
+      .mock-roll {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .activity {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 10px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 9px;
+        background: var(--panel-2);
+        font-size: clamp(10px, 0.85vw, 13px);
+      }
+
+      .activity + .activity {
+        margin-top: 7px;
+      }
+
+      .activity .source {
+        color: var(--agent);
+        font: 11px var(--mono);
+      }
+
+      .activity.human .source {
+        color: var(--accent-2);
+      }
+
+      .activity .revision {
+        color: var(--accent);
+        font: 11px var(--mono);
+      }
+
+      .explainer-footer {
+        min-height: 25px;
+      }
+
+      .progress-track {
+        position: relative;
+        flex: 1;
+        height: 3px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--line);
+      }
+
+      .progress-bar {
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--accent), var(--agent));
+      }
+
+      .chapter-labels {
+        display: flex;
+        gap: 12px;
+        font-family: var(--mono);
+      }
+
+      .chapter-labels span {
+        transition: color 250ms ease;
+      }
+
+      .chapter-labels span.is-active {
+        color: var(--text);
+      }
+
+      .time {
+        min-width: 78px;
+        font-family: var(--mono);
+        text-align: right;
+      }
+
+      @keyframes travel {
+        0%,
+        100% {
+          left: 0;
+        }
+        50% {
+          left: calc(100% - 10px);
+        }
+      }
+
+      @keyframes document-pulse {
+        0%,
+        100% {
+          border-color: var(--line);
+          box-shadow: none;
+        }
+        45% {
+          border-color: var(--accent);
+          box-shadow: 0 0 30px rgb(125 211 192 / 12%);
+        }
+      }
+
+      @media (max-width: 850px), (max-height: 620px) {
+        .scene {
+          padding: 24px;
+        }
+
+        .standard-diagram,
+        .registration-diagram,
+        .shared-diagram,
+        .control-diagram,
+        .final-diagram {
+          gap: 14px;
+        }
+
+        .tool-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .actor-icon {
+          width: 48px;
+          height: 48px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="explainer" data-duration-ms="34000" aria-label="How WebMCP works in Euterpe">
+      <header class="explainer-header">
+        <div class="brand"><strong>Euterpe</strong><span>a producer beside you</span></div>
+        <span class="header-label">How WebMCP works here</span>
+        <span class="status">28 tools ready</span>
+        <button id="replay" type="button">Replay</button>
+      </header>
+
+      <div class="stage">
+        <section class="scene is-active" data-scene="standard" aria-hidden="false">
+          <div class="scene-copy">
+            <p class="eyebrow">WebMCP · an emerging open standard</p>
+            <h1>A website gives the browser&rsquo;s agent a toolbelt.</h1>
+            <p class="lede">
+              Structured tools replace guessing through pixels: the site declares what can be read,
+              what can change, and the inputs each action accepts.
+            </p>
+          </div>
+          <div class="diagram standard-diagram" aria-label="Agent connected to Euterpe by WebMCP">
+            <div class="card actor-card">
+              <span class="actor-icon">A</span>
+              <strong>Browser&rsquo;s agent</strong>
+              <small>discovers names, descriptions and schemas</small>
+            </div>
+            <div class="bridge">
+              <span class="bridge-label">WebMCP</span>
+              <div class="bridge-line"></div>
+              <small>structured calls &middot; JSON results</small>
+            </div>
+            <div class="card site-card">
+              <div class="mini-header">
+                <strong>Euterpe</strong>
+                <small>the live page</small>
+                <span class="ready-pill">ready (28)</span>
+              </div>
+              <div class="tool-grid">
+                <span class="tool-chip read">get_song_state</span>
+                <span class="tool-chip write">set_chords</span>
+                <span class="tool-chip read">suggest_chords</span>
+                <span class="tool-chip write">arrange</span>
+                <span class="tool-chip write">propose_options</span>
+                <span class="tool-chip write">undo</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scene" data-scene="registration" aria-hidden="true">
+          <div class="scene-copy">
+            <p class="eyebrow">Inside the page</p>
+            <h2>Euterpe registers 28 musical tools.</h2>
+            <p class="lede">
+              Each one has a name, description, strict input schema and execute function.
+            </p>
+          </div>
+          <div class="diagram registration-diagram">
+            <div class="code-card">
+              <div class="code-title">
+                <span class="code-dot"></span><span class="code-dot"></span
+                ><span class="code-dot"></span>registration layer
+              </div>
+              <pre><span class="code-comment">// preferred context</span>
+document.modelContext.<span class="code-key">registerTool</span>({
+  name: <span class="code-string">"propose_options"</span>,
+  description,
+  inputSchema,
+  execute
+}, { signal });
+
+<span class="code-comment">// compatibility fallback</span>
+navigator.modelContext</pre>
+            </div>
+            <div class="registration-facts">
+              <span class="fact-chip"
+                ><b>6 read tools</b><br />marked <span class="mono">readOnlyHint</span></span
+              >
+              <span class="fact-chip"><b>Strict inputs</b><br />validated before execution</span>
+              <span class="fact-chip"
+                ><b>Two contexts</b><br />deduplicated when they are the same</span
+              >
+              <span class="fact-chip"
+                ><b>Clean lifecycle</b><br /><span class="mono">AbortController</span> on
+                dispose</span
+              >
+            </div>
+          </div>
+        </section>
+
+        <section class="scene" data-scene="shared-document" aria-hidden="true">
+          <div class="scene-copy">
+            <p class="eyebrow">One document, one bus</p>
+            <h2>Human and agent work on the same song.</h2>
+            <p class="lede">
+              There is no hidden agent copy. Every accepted edit becomes a visible revision.
+            </p>
+          </div>
+          <div class="diagram shared-diagram" aria-label="Human and agent edit one song document">
+            <div class="input-stack">
+              <div class="node human">
+                <strong>Person</strong><small>hums, plays, clicks and drags</small>
+              </div>
+              <div class="node agent">
+                <strong>Agent</strong><small>reads state, reasons and calls a tool</small>
+              </div>
+            </div>
+            <div class="flow-core">
+              <div class="queue-label">agent calls &rarr; serialised queue</div>
+              <div class="bus-label">human gestures + agent writes &rarr; command bus</div>
+              <div class="song-document">
+                <div class="song-title"><span>Untitled song</span><span>revision 7</span></div>
+                <div class="track"></div>
+                <div class="track"></div>
+                <div class="track"></div>
+                <div class="track"></div>
+              </div>
+            </div>
+            <div class="output-stack">
+              <div class="node output">
+                <strong>Visible interface</strong><small>roll, activity, reasons and Undo</small>
+              </div>
+              <div class="node output">
+                <strong>Web Audio graph</strong><small>reconciled from the song document</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scene" data-scene="control-loop" aria-hidden="true">
+          <div class="scene-copy">
+            <p class="eyebrow">The collaboration loop</p>
+            <h2>The person stays the author—and the ears.</h2>
+            <p class="lede">The agent reads compact musical state; it does not hear the audio.</p>
+          </div>
+          <div class="diagram control-diagram">
+            <div class="loop">
+              <div class="loop-step">
+                <span class="number">01 · READ</span><strong>Agent reads notes</strong
+                ><small>bars, tracks, chords and revision</small>
+              </div>
+              <div class="loop-step">
+                <span class="number">02 · OFFER</span><strong>Agent proposes options</strong
+                ><small>nothing is committed yet</small>
+              </div>
+              <div class="loop-step">
+                <span class="number">04 · REVISE</span><strong>Both can edit or undo</strong
+                ><small>one shared, visible history</small>
+              </div>
+              <div class="loop-step">
+                <span class="number">03 · DECIDE</span><strong>Person listens and chooses</strong
+                ><small>audition first, keep only what fits</small>
+              </div>
+            </div>
+            <div class="control-summary">
+              <div class="large-fact agent-fact">
+                <strong>Every write explains itself.</strong>
+                <span
+                  ><span class="mono">why</span>, changed fields, target bars and revision return
+                  together.</span
+                >
+              </div>
+              <div class="large-fact">
+                <strong>Every change lands in view.</strong>
+                <span>The activity strip, producer note and piano roll show what happened.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scene" data-scene="together" aria-hidden="true">
+          <div class="diagram final-diagram">
+            <div class="final-copy">
+              <p class="eyebrow">Why WebMCP matters here</p>
+              <h2>A shared instrument, not a chatbot beside one.</h2>
+              <p class="lede">
+                The person performs, listens and decides. The agent reads, reasons and edits. The
+                same live page makes their work visible to both.
+              </p>
+              <div class="final-facts">
+                <span class="fact-chip">28 structured tools</span>
+                <span class="fact-chip">visible changes</span>
+                <span class="fact-chip">reasons pinned to bars</span>
+                <span class="fact-chip">one shared Undo</span>
+              </div>
+            </div>
+            <div class="mock-app" aria-label="Euterpe activity strip">
+              <div class="mini-header">
+                <strong>Euterpe</strong><small>Agent activity</small
+                ><span class="ready-pill">ready (28)</span>
+              </div>
+              <div class="mock-roll">
+                <div class="activity human">
+                  <span class="source">YOU</span><span>Committed the melody take</span
+                  ><span class="revision">r1</span>
+                </div>
+                <div class="activity">
+                  <span class="source">AGENT</span><span>Offered two chord paths</span
+                  ><span class="revision">r3</span>
+                </div>
+                <div class="activity human">
+                  <span class="source">YOU</span><span>Chose &ldquo;Lift it&rdquo;</span
+                  ><span class="revision">r4</span>
+                </div>
+                <div class="activity">
+                  <span class="source">AGENT</span><span>Built drums around your phrase</span
+                  ><span class="revision">r7</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="explainer-footer">
+        <div class="chapter-labels" aria-hidden="true">
+          <span class="is-active">standard</span><span>register</span><span>share</span
+          ><span>decide</span><span>together</span>
+        </div>
+        <div class="progress-track" aria-hidden="true"><div class="progress-bar"></div></div>
+        <span class="time" aria-live="off">00:00 / 00:34</span>
+      </footer>
+    </main>
+
+    <script>
+      const phases = [
+        { name: 'standard', duration: 6000 },
+        { name: 'registration', duration: 7000 },
+        { name: 'shared-document', duration: 9000 },
+        { name: 'control-loop', duration: 8000 },
+        { name: 'together', duration: 4000 },
+      ];
+      const totalDuration = phases.reduce((total, phase) => total + phase.duration, 0);
+      const scenes = [...document.querySelectorAll('.scene')];
+      const labels = [...document.querySelectorAll('.chapter-labels span')];
+      const progress = document.querySelector('.progress-bar');
+      const time = document.querySelector('.time');
+      const replay = document.querySelector('#replay');
+      let animationFrame = 0;
+      let startedAt = 0;
+      let activeIndex = -1;
+
+      function formatTime(milliseconds) {
+        const seconds = Math.floor(milliseconds / 1000);
+        return `00:${String(seconds).padStart(2, '0')}`;
+      }
+
+      function showScene(index) {
+        if (index === activeIndex) return;
+        activeIndex = index;
+        scenes.forEach((scene, sceneIndex) => {
+          const active = sceneIndex === index;
+          scene.classList.toggle('is-active', active);
+          scene.setAttribute('aria-hidden', String(!active));
+        });
+        labels.forEach((label, labelIndex) => {
+          label.classList.toggle('is-active', labelIndex === index);
+        });
+      }
+
+      function sceneAt(elapsed) {
+        let boundary = 0;
+        for (let index = 0; index < phases.length; index += 1) {
+          boundary += phases[index].duration;
+          if (elapsed < boundary) return index;
+        }
+        return phases.length - 1;
+      }
+
+      function renderFrame(now) {
+        const elapsed = Math.min(now - startedAt, totalDuration);
+        showScene(sceneAt(elapsed));
+        progress.style.width = `${(elapsed / totalDuration) * 100}%`;
+        time.textContent = `${formatTime(elapsed)} / 00:34`;
+        if (elapsed < totalDuration) {
+          animationFrame = requestAnimationFrame(renderFrame);
+        }
+      }
+
+      function play() {
+        cancelAnimationFrame(animationFrame);
+        activeIndex = -1;
+        showScene(0);
+        progress.style.width = '0%';
+        time.textContent = '00:00 / 00:34';
+        startedAt = performance.now();
+        animationFrame = requestAnimationFrame(renderFrame);
+      }
+
+      replay.addEventListener('click', play);
+      document.addEventListener('keydown', (event) => {
+        if (event.key.toLowerCase() === 'r' || event.key === ' ') {
+          event.preventDefault();
+          play();
+        }
+      });
+
+      const autoplay = new URLSearchParams(window.location.search).get('autoplay') !== '0';
+      if (autoplay) {
+        window.setTimeout(play, 1000);
+      }
+    </script>
+  </body>
+</html>
