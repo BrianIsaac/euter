@@ -2,6 +2,7 @@
 
 export interface RecorderAudioContext {
   readonly state: AudioContextState;
+  readonly currentTime: number;
   readonly sampleRate: number;
   readonly baseLatency: number;
   readonly outputLatency: number;
@@ -20,6 +21,8 @@ export interface CountInOptions {
 export interface CountInResult {
   /** Actual capture-clock time occupied by the count-in. */
   durationSeconds: number;
+  /** AudioContext time of the arranged beat where retained audio starts. */
+  recordingStartContextTime: number;
   /** Stops backing/click playback and restores the normal song graph after the take. */
   finish?: (() => void) | undefined;
 }

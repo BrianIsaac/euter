@@ -28,7 +28,7 @@ export const descriptions = {
   get_job:
     'Reads a job state, progress percentage, and on completion its download URL, duration and peak dBFS, or its failure message. A completed render also names any instrument that fell back to a bundled sound.',
   start_recording:
-    'Arms the selected microphone, keyboard or MIDI input on a track with a count-in and optional continuing click. A prior person gesture and microphone permission are required for microphone capture. The recorded track is locked against edits until stop_recording, and arming a second take while one is live returns RECORDING_IN_PROGRESS.',
+    'Records a track over the song with a count-in, continuing click and optional headphone-only mic monitoring. Placement uses the worklet clock and browser-reported input/output latency; capture is refused when input latency is unavailable. The track stays locked until stop_recording; a second live take returns RECORDING_IN_PROGRESS.',
   stop_recording:
     'Stops the recorder and retains its audio while transcribing the take to notes. The result contains bounded take data and placed_on_track; commit_take puts the voice in playback and WAV or MP3 exports.',
   commit_take:

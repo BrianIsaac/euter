@@ -10,6 +10,11 @@ sampled and synthesised instruments driven by notes, the agent reasons about the
 through 29 tools, and every change it makes carries one sentence on why, pinned to the bars it
 changed and undoable with them.
 
+The singing is part of the song, not just raw material for note detection. Euterpe retains each
+microphone or imported take as audio, plays it beside the instrument tracks, and includes it in WAV
+and MP3 exports. The agent can set its level, align its timing and apply reversible, key-aware pitch
+correction; MIDI export refuses a song with voice clips because MIDI cannot carry their audio.
+
 A captured hum is evidence, not an instruction to copy a noisy transcript. `get_take` returns its
 rough notes with the key, chords, section and neighbouring parts; the agent offers two or three
 readings with a musical reason for each; the person auditions and chooses. Nothing reaches the
@@ -58,9 +63,19 @@ you press. The header reads `Agent tools: ready (29)` when the page has register
 Without a microphone, drop a voice memo on the take panel or choose a file - a recording, an
 import and a played take are the same object to the rest of the app.
 
+Record on an arranged song to sing over the beat: Euterpe plays the other tracks while muting the
+one being replaced. **Hear my voice (headphones)** adds opt-in microphone monitoring. Placement is
+not a hard-coded offset: the capture worklet stamps its audio clock, the count-in records the exact
+scheduled boundary, and Euterpe combines those clocks with the active device's reported input and
+output latency. If the browser does not report microphone latency, arranged capture is refused
+instead of saved with guessed alignment. This follows the definitions of capture `latency` in
+[Media Capture and Streams](https://www.w3.org/TR/mediacapture-streams/#def-constraint-latency) and
+`baseLatency` / `outputLatency` in the
+[Web Audio API](https://www.w3.org/TR/webaudio-1.1/#dom-audiocontext-outputlatency).
+
 ## What you can say
 
-Eight lines for the core demo flow, with the tool sequences the end-to-end harness replays for
+Nine lines for the core demo flow, with the tool sequences the end-to-end harness replays for
 them. `pnpm e2e` invokes those WebMCP tools directly; it does not send the prose to ChatGPT, so the
 model's choice of tools remains an operator check. The direct calls below ran against the built
 bundle and https://euter.pages.dev on 28 Aug 2026. The other scenarios bring the total to all 29
@@ -75,7 +90,8 @@ registered tools.
 | 5   | "Help me hear what I meant before we commit the hum."                                                     | `get_take` → the rough notes in musical context; `propose_options {kind: "take"}` → two readings plus the automatic raw card; `audition_option` changes nothing; the person's Choose commits through the take path.                                                |
 | 6   | "Make it a verse, then an eight-bar chorus that lifts, and play from the chorus."                         | `arrange` → `Arranged 2 sections across 12 bars` (r10), `generate_part` → `Generated lofi chords in bars 1-8` (r11), `play` → `Playing from bar 5`.                                                                                                                |
 | 7   | "The bass is too busy - take that back and pull it down a few dB."                                        | `undo` → `Undid Generated lofi chords in bars 1-8` (r12; undo is itself a step forward), `set_mix` → `Updated the mix for Bass` (r15).                                                                                                                             |
-| 8   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polls until `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel.                                                                                               |
+| 8   | "Let me sing a vocal over this beat."                                                                     | `request_take` arms the bars; Record plays the arrangement with that track silent, measures capture alignment, and keeps the resulting voice. `tune_vocal`, `set_quantize` and `set_mix` make the pitch, timing and level producer-adjustable.                     |
+| 9   | "Export it as an MP3."                                                                                    | `render` → a job id at once, `get_job` polls until `mp3 is ready: first-light.mp3`, with its duration, peak dBFS and the link the person clicks in the export panel. WAV and MP3 contain the voice; MIDI explicitly refuses retained clips.                        |
 
 ## Measured in the ChatGPT desktop app
 
@@ -147,7 +163,14 @@ those twelve codes is provoked once in
   the recorded track and only that track.
 - **The graph follows the document** ([`src/audio/reconciler.ts`](src/audio/reconciler.ts)): tools
   never touch Tone. `play` and `stop` go through the transport; `audition_option` plays a preview
-  document so an option can be heard without moving `revision`.
+  document so an option can be heard without moving `revision`. Instrument notes and retained
+  voice clips are separate graph paths; the same clip scheduler feeds live playback and offline
+  WAV/MP3 rendering.
+- **Capture shares the audio clock** ([`src/input/recorder.ts`](src/input/recorder.ts),
+  [`src/transcribe/pitch.worklet.ts`](src/transcribe/pitch.worklet.ts)): a singer can monitor the
+  arrangement and optionally their microphone over headphones. The retained take records its
+  worklet-clock boundary and the browser-reported input/output latency used for placement. No
+  unmeasured fixed correction is substituted when the input reading is absent.
 - **Jobs** ([`src/audio/jobs.ts`](src/audio/jobs.ts)): `render` returns a `job_id` at once, `get_job`
   polls, the person clicks the download link, and `options.signal` cancels the job.
 - **Visible** ([`src/ui/`](src/ui)): the activity strip lists every command with its source, summary
@@ -236,12 +259,12 @@ pnpm e2e --headless                         # supported by Chrome 152; headed re
 pnpm e2e --help                             # every flag
 ```
 
-The seven scenarios are `demo` (the whole call order, from importing a hum to an MP3 and a ranged
-MIDI file), `hum-intent` (a measured six-segment/four-note human take goes through context, two
+The seven scenarios are `demo` (the whole call order, from importing a hum through tuned voice to
+an MP3 and an explicit MIDI-with-audio refusal), `hum-intent` (a measured six-segment/four-note human take goes through context, two
 auditionable readings, a chosen reading and the untouched raw escape), `errors` (every error code
 provoked once), `stale-revision` (a person edits between two agent calls), `recording-lock` (one
-track closed to edits while it is being sung), `take-backing` (the actual bar and mute state used
-behind a bar-one requested take), and `sample-fallback` (a deliberate sample 404 selects a named
+track closed to edits while it is being sung), `take-backing` (real arrangement and headphone
+monitoring plus worklet-clock/device-latency placement), and `sample-fallback` (a deliberate sample 404 selects a named
 bundled substitute). Together they invoke all 29 tools. The unit test rejects missing or
 assertion-free scenario entries, and a full run independently compares the registered surface with
 tools that actually passed a behavioural assertion. `--driver mcp` is strict: it fails if

@@ -34,6 +34,8 @@ export interface StartRecordingOptions {
   prompt?: string;
   countInBars: 1 | 2;
   metronome: boolean;
+  /** Routes the microphone to the output; headphones are required to avoid feedback. */
+  monitorInput?: boolean;
 }
 
 export interface RecordedTake {
@@ -49,13 +51,23 @@ export interface RecorderSnapshot {
   targetBars: BarRange | null;
   trackId: string | null;
   prompt: string | null;
+  monitoring: RecorderMonitoring | null;
   error: RecorderFailure | null;
+}
+
+export interface RecorderMonitoring {
+  backing: 'arrangement' | 'click';
+  input: boolean;
+  input_latency_s: number;
+  base_latency_s: number;
+  output_latency_s: number;
 }
 
 interface WorkletTakeMessage {
   type: 'take';
   pcm: Float32Array;
   sampleRate: number;
+  captureStartedAtContextTime: number;
 }
 
 interface WorkletPort {
@@ -70,7 +82,11 @@ interface CaptureGraph {
 
 export interface RecorderDependencies {
   getUserMedia?: () => Promise<MediaStream>;
-  connectWorklet?: (context: RecorderAudioContext, stream: MediaStream) => CaptureGraph;
+  connectWorklet?: (
+    context: RecorderAudioContext,
+    stream: MediaStream,
+    monitorInput: boolean,
+  ) => CaptureGraph;
   makeTakeId?: () => string;
   captureTimeoutMs?: number;
 }
@@ -80,7 +96,10 @@ interface ActiveCapture {
   graph: CaptureGraph;
   pcm: Promise<WorkletTakeMessage>;
   options: StartRecordingOptions;
-  countInSeconds: number;
+  inputLatencySeconds: number;
+  baseLatencySeconds: number;
+  outputLatencySeconds: number;
+  recordingStartContextTime: number | null;
   countInController: AbortController;
   finishBacking: (() => void) | null;
 }
@@ -91,6 +110,7 @@ const INITIAL_SNAPSHOT: RecorderSnapshot = {
   targetBars: null,
   trackId: null,
   prompt: null,
+  monitoring: null,
   error: null,
 };
 
@@ -99,12 +119,19 @@ function failure(code: RecorderErrorCode, message: string, recoverable = true): 
 }
 
 function defaultGetUserMedia(): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia({ audio: true });
+  const audio: MediaTrackConstraints & { latency: { ideal: number } } = {
+    channelCount: { ideal: 1 },
+    latency: { ideal: 0 },
+  };
+  return navigator.mediaDevices.getUserMedia({
+    audio,
+  });
 }
 
 function defaultConnectWorklet(
   contextPort: RecorderAudioContext,
   stream: MediaStream,
+  monitorInput = false,
 ): CaptureGraph {
   const context = contextPort as AudioContext;
   const source = context.createMediaStreamSource(stream);
@@ -114,6 +141,7 @@ function defaultConnectWorklet(
     channelCount: 1,
   });
   source.connect(node);
+  if (monitorInput) source.connect(context.destination);
   return {
     port: node.port,
     disconnect() {
@@ -121,6 +149,13 @@ function defaultConnectWorklet(
       node.disconnect();
     },
   };
+}
+
+function reportedInputLatency(stream: MediaStream): number | null {
+  const settings = stream.getAudioTracks()[0]?.getSettings() as
+    (MediaTrackSettings & { latency?: number }) | undefined;
+  const latency = settings?.latency;
+  return typeof latency === 'number' && Number.isFinite(latency) && latency >= 0 ? latency : null;
 }
 
 function isWorkletTake(
@@ -220,6 +255,7 @@ export class RecorderController {
       targetBars: options.targetBars ?? null,
       trackId: options.trackId ?? null,
       prompt: options.prompt ?? null,
+      monitoring: null,
       error: null,
     });
     let stream: MediaStream;
@@ -234,10 +270,21 @@ export class RecorderController {
       return denied;
     }
 
+    const inputLatencySeconds = reportedInputLatency(stream);
+    if (inputLatencySeconds === null) {
+      stopStream(stream);
+      const unavailable = failure(
+        'CAPTURE_FAILED',
+        'This browser did not report microphone latency, so Euterpe cannot align the take honestly. Import a voice memo or use a browser and device that report audio latency.',
+      );
+      this.#publishFailure(unavailable);
+      return unavailable;
+    }
+
     let capture: ActiveCapture | null = null;
     try {
       await context.audioWorklet.addModule(pitchWorkletUrl);
-      const graph = this.#connectWorklet(context, stream);
+      const graph = this.#connectWorklet(context, stream, options.monitorInput ?? false);
       let resolvePcm: (message: WorkletTakeMessage) => void = () => undefined;
       const pcm = new Promise<WorkletTakeMessage>((resolve) => {
         resolvePcm = resolve;
@@ -255,12 +302,25 @@ export class RecorderController {
         graph,
         pcm,
         options,
-        countInSeconds: 0,
+        inputLatencySeconds,
+        baseLatencySeconds: context.baseLatency,
+        outputLatencySeconds: context.outputLatency,
+        recordingStartContextTime: null,
         countInController: new AbortController(),
         finishBacking: null,
       };
       this.#active = capture;
-      this.#publish({ ...this.#snapshot, status: 'counting-in' });
+      this.#publish({
+        ...this.#snapshot,
+        status: 'counting-in',
+        monitoring: {
+          backing: options.targetBars === undefined ? 'click' : 'arrangement',
+          input: options.monitorInput ?? false,
+          input_latency_s: inputLatencySeconds,
+          base_latency_s: context.baseLatency,
+          output_latency_s: context.outputLatency,
+        },
+      });
       const countInOptions = {
         bars: options.countInBars,
         metronome: options.metronome,
@@ -273,9 +333,21 @@ export class RecorderController {
         countIn.finish?.();
         return failure('CAPTURE_FAILED', 'The take ended during the count-in.');
       }
-      capture.countInSeconds = countIn.durationSeconds;
+      capture.recordingStartContextTime = countIn.recordingStartContextTime;
+      capture.baseLatencySeconds = context.baseLatency;
+      capture.outputLatencySeconds = context.outputLatency;
       capture.finishBacking = countIn.finish ?? null;
-      this.#publish({ ...this.#snapshot, status: 'recording' });
+      this.#publish({
+        ...this.#snapshot,
+        status: 'recording',
+        monitoring: {
+          backing: options.targetBars === undefined ? 'click' : 'arrangement',
+          input: options.monitorInput ?? false,
+          input_latency_s: inputLatencySeconds,
+          base_latency_s: capture.baseLatencySeconds,
+          output_latency_s: capture.outputLatencySeconds,
+        },
+      });
       return { ok: true, data: this.#snapshot };
     } catch {
       const interrupted = capture !== null && this.#active !== capture;
@@ -300,6 +372,8 @@ export class RecorderController {
     this.#finishCountIn(active);
     active.graph.port.postMessage({ type: 'stop' });
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    let failureMessage =
+      'The recorded audio did not arrive from the worklet. The take was not committed.';
     try {
       const message = await Promise.race([
         active.pcm,
@@ -312,20 +386,44 @@ export class RecorderController {
       const startBeat = active.options.targetBars
         ? (active.options.targetBars.barFrom - 1) * beatsPerBar
         : 0;
-      const context = this.transport.getAudioContext();
-      const baseLatency = context?.baseLatency ?? 0;
-      const outputLatency = context?.outputLatency ?? 0;
-      const trimStartSeconds = baseLatency + outputLatency + active.countInSeconds;
+      if (
+        active.recordingStartContextTime === null ||
+        !Number.isFinite(message.captureStartedAtContextTime)
+      ) {
+        failureMessage =
+          'The shared audio clock did not report the take boundary. The take was not committed.';
+        throw new Error('capture clock unavailable');
+      }
+      const captureOffsetSeconds =
+        active.recordingStartContextTime - message.captureStartedAtContextTime;
+      if (!Number.isFinite(captureOffsetSeconds) || captureOffsetSeconds < 0) {
+        failureMessage =
+          'The capture and arrangement clocks could not be aligned. The take was not committed.';
+        throw new Error('capture clock is not monotonic');
+      }
+      const trimStartSeconds =
+        captureOffsetSeconds +
+        active.inputLatencySeconds +
+        active.baseLatencySeconds +
+        active.outputLatencySeconds;
       const take = transcribePcmToTake(message.pcm, message.sampleRate, {
         id: this.#makeTakeId(),
         source: 'mic',
         bpm,
-        baseLatency,
-        outputLatency,
-        countInOffsetSeconds: active.countInSeconds,
+        inputLatency: active.inputLatencySeconds,
+        baseLatency: active.baseLatencySeconds,
+        outputLatency: active.outputLatencySeconds,
+        captureOffsetSeconds,
         startBeat,
       });
-      take.audio = encodeTakeAudio(message.pcm, message.sampleRate, trimStartSeconds, startBeat);
+      take.audio = encodeTakeAudio(message.pcm, message.sampleRate, trimStartSeconds, startBeat, {
+        method: 'worklet-clock-and-browser-latency',
+        capture_offset_s: captureOffsetSeconds,
+        input_latency_s: active.inputLatencySeconds,
+        base_latency_s: active.baseLatencySeconds,
+        output_latency_s: active.outputLatencySeconds,
+        compensation_s: trimStartSeconds,
+      });
       const result: RecordedTake = {
         take,
         wav: encodePcm16Wav(message.pcm, message.sampleRate),
@@ -336,10 +434,7 @@ export class RecorderController {
       this.#publish(INITIAL_SNAPSHOT);
       return { ok: true, data: result };
     } catch {
-      const failed = failure(
-        'CAPTURE_FAILED',
-        'The recorded audio did not arrive from the worklet. The take was not committed.',
-      );
+      const failed = failure('CAPTURE_FAILED', failureMessage);
       this.#cleanup(active);
       this.#publishFailure(failed);
       return failed;

@@ -17,12 +17,16 @@ function harness(contextState: AudioContextState = 'running') {
   const addModule = vi.fn(async () => undefined);
   const context: RecorderAudioContext = {
     state: contextState,
+    currentTime: 10,
     sampleRate: 16_000,
     baseLatency: 0.01,
     outputLatency: 0.01,
     audioWorklet: { addModule },
   };
-  const countIn = vi.fn<TransportPort['countIn']>(async () => ({ durationSeconds: 0.5 }));
+  const countIn = vi.fn<TransportPort['countIn']>(async () => ({
+    durationSeconds: 0.5,
+    recordingStartContextTime: 10.5,
+  }));
   const transport: TransportPort = {
     getAudioContext: () => context,
     getBpm: () => 120,
@@ -31,7 +35,14 @@ function harness(contextState: AudioContextState = 'running') {
     countIn,
   };
   const stopTrack = vi.fn();
-  const stream = { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+  const audioTrack = {
+    stop: stopTrack,
+    getSettings: () => ({ latency: 0.01 }),
+  } as unknown as MediaStreamTrack;
+  const stream = {
+    getTracks: () => [audioTrack],
+    getAudioTracks: () => [audioTrack],
+  } as unknown as MediaStream;
   const disconnect = vi.fn();
   const port: {
     onmessage: ((event: MessageEvent) => void) | null;
@@ -41,7 +52,14 @@ function harness(contextState: AudioContextState = 'running') {
     postMessage: vi.fn((message: unknown) => {
       if ((message as { type?: string }).type === 'stop') {
         const pcm = sine(261.63, 1.3, 16_000);
-        port.onmessage?.({ data: { type: 'take', pcm, sampleRate: 16_000 } } as MessageEvent);
+        port.onmessage?.({
+          data: {
+            type: 'take',
+            pcm,
+            sampleRate: 16_000,
+            captureStartedAtContextTime: 10,
+          },
+        } as MessageEvent);
       }
     }),
   };
@@ -104,6 +122,58 @@ describe('RecorderController', () => {
     }
   });
 
+  it('refuses an unmeasured microphone instead of guessing an alignment offset', async () => {
+    const test = harness();
+    const stop = vi.fn();
+    const track = { stop, getSettings: () => ({}) } as unknown as MediaStreamTrack;
+    test.dependencies.getUserMedia = vi.fn(
+      async () =>
+        ({
+          getTracks: () => [track],
+          getAudioTracks: () => [track],
+        }) as unknown as MediaStream,
+    );
+    const recorder = new RecorderController(test.transport, test.dependencies);
+
+    await expect(
+      recorder.start({
+        trackId: 'melody',
+        targetBars: { barFrom: 1, barTo: 4 },
+        countInBars: 1,
+        metronome: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'CAPTURE_FAILED',
+      message: expect.stringContaining('cannot align the take honestly'),
+    });
+    expect(test.dependencies.connectWorklet).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('reports arrangement and optional headphone mic monitoring while recording', async () => {
+    const test = harness();
+    const recorder = new RecorderController(test.transport, test.dependencies);
+
+    await recorder.start({
+      trackId: 'melody',
+      targetBars: { barFrom: 1, barTo: 4 },
+      countInBars: 1,
+      metronome: true,
+      monitorInput: true,
+    });
+
+    expect(test.dependencies.connectWorklet).toHaveBeenCalledWith(test.context, test.stream, true);
+    expect(recorder.getSnapshot().monitoring).toEqual({
+      backing: 'arrangement',
+      input: true,
+      input_latency_s: 0.01,
+      base_latency_s: 0.01,
+      output_latency_s: 0.01,
+    });
+    recorder.dispose();
+  });
+
   it('stops the microphone stream when the worklet module cannot load', async () => {
     const test = harness();
     test.addModule.mockRejectedValueOnce(new DOMException('missing', 'AbortError'));
@@ -143,8 +213,16 @@ describe('RecorderController', () => {
     expect(stopped.data.take.audio).toMatchObject({
       encoding: 'pcm16-base64',
       sample_rate: 16_000,
-      trim_start_s: 0.52,
+      trim_start_s: 0.53,
       start_beat: 8,
+      alignment: {
+        method: 'worklet-clock-and-browser-latency',
+        capture_offset_s: 0.5,
+        input_latency_s: 0.01,
+        base_latency_s: 0.01,
+        output_latency_s: 0.01,
+        compensation_s: 0.53,
+      },
     });
     expect(stopped.data.trackId).toBe('bass');
     expect(stopped.data.targetBars).toEqual({ barFrom: 3, barTo: 4 });
@@ -158,6 +236,7 @@ describe('RecorderController', () => {
       mutedTrackId: 'bass',
       signal: expect.any(AbortSignal),
     });
+    expect(test.dependencies.connectWorklet).toHaveBeenCalledWith(test.context, test.stream, false);
     expect(test.addModule).toHaveBeenCalledTimes(1);
     expect(test.disconnect).toHaveBeenCalledOnce();
     expect(test.stopTrack).toHaveBeenCalledOnce();
@@ -169,7 +248,11 @@ describe('RecorderController', () => {
   it('finishes the arranged backing when the take is cleaned up', async () => {
     const test = harness();
     const finish = vi.fn();
-    test.countIn.mockResolvedValueOnce({ durationSeconds: 0.5, finish });
+    test.countIn.mockResolvedValueOnce({
+      durationSeconds: 0.5,
+      recordingStartContextTime: 10.5,
+      finish,
+    });
     const recorder = new RecorderController(test.transport, test.dependencies);
     await recorder.start({
       trackId: 'bass',
@@ -186,7 +269,11 @@ describe('RecorderController', () => {
   it('stops backing before waiting for the worklet to finish a take', async () => {
     const test = harness();
     const finish = vi.fn();
-    test.countIn.mockResolvedValueOnce({ durationSeconds: 0.5, finish });
+    test.countIn.mockResolvedValueOnce({
+      durationSeconds: 0.5,
+      recordingStartContextTime: 10.5,
+      finish,
+    });
     vi.mocked(test.port.postMessage).mockImplementation(() => undefined);
     const recorder = new RecorderController(test.transport, test.dependencies);
     await recorder.start({
@@ -203,11 +290,45 @@ describe('RecorderController', () => {
     expect(finish).toHaveBeenCalledOnce();
   });
 
+  it('refuses a take when its worklet clock runs after the arranged boundary', async () => {
+    const test = harness();
+    vi.mocked(test.port.postMessage).mockImplementation((message: unknown) => {
+      if ((message as { type?: string }).type !== 'stop') return;
+      test.port.onmessage?.({
+        data: {
+          type: 'take',
+          pcm: sine(261.63, 1.3, 16_000),
+          sampleRate: 16_000,
+          captureStartedAtContextTime: 11,
+        },
+      } as MessageEvent);
+    });
+    const recorder = new RecorderController(test.transport, test.dependencies);
+    await recorder.start({
+      trackId: 'melody',
+      targetBars: { barFrom: 1, barTo: 4 },
+      countInBars: 1,
+      metronome: true,
+    });
+
+    await expect(recorder.stop()).resolves.toMatchObject({
+      ok: false,
+      code: 'CAPTURE_FAILED',
+      message: expect.stringContaining('could not be aligned'),
+    });
+  });
+
   it('aborts the arranged count-in immediately when disposed before recording begins', async () => {
     const test = harness();
     const finish = vi.fn();
     let observedSignal: AbortSignal | undefined;
-    let release: ((value: { durationSeconds: number; finish: () => void }) => void) | undefined;
+    let release:
+      | ((value: {
+          durationSeconds: number;
+          recordingStartContextTime: number;
+          finish: () => void;
+        }) => void)
+      | undefined;
     test.countIn.mockImplementationOnce(
       (options) =>
         new Promise((resolve, reject) => {
@@ -233,7 +354,7 @@ describe('RecorderController', () => {
     await vi.waitFor(() => expect(test.countIn).toHaveBeenCalledOnce());
 
     recorder.dispose();
-    release?.({ durationSeconds: 0.5, finish });
+    release?.({ durationSeconds: 0.5, recordingStartContextTime: 10.5, finish });
     await starting;
 
     expect(observedSignal?.aborted).toBe(true);

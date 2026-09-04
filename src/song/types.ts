@@ -70,6 +70,21 @@ export interface TakeAudio {
   trim_start_s: number;
   /** Song position represented by the first audible sample after trimming. */
   start_beat: number;
+  /** Evidence behind automatic placement for microphone takes; absent on legacy/imported audio. */
+  alignment?: TakeAudioAlignment | undefined;
+}
+
+export interface TakeAudioAlignment {
+  method: 'worklet-clock-and-browser-latency';
+  /** Worklet-clock interval from capture start to the arranged recording boundary. */
+  capture_offset_s: number;
+  /** MediaStreamTrack latency reported for the active microphone device. */
+  input_latency_s: number;
+  /** Web Audio processing and hardware-output estimates read for this take. */
+  base_latency_s: number;
+  output_latency_s: number;
+  /** Sum actually removed from the front of retained PCM. */
+  compensation_s: number;
 }
 
 export interface PitchFrame {

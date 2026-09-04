@@ -57,11 +57,14 @@ export const startRecording: ToolDefinition<typeof startRecordingInput> = {
       );
     }
     const armed = request !== null && request.trackId === track.id ? request : null;
+    const targetBars = armed?.targetBars ?? { barFrom: 1, barTo: song.bars };
     const result = await context.engine.recorder.start({
       trackId: track.id,
       countInBars: args.count_in_bars,
       metronome: args.metronome,
-      ...(armed === null ? {} : { targetBars: armed.targetBars, prompt: armed.prompt }),
+      monitorInput: args.monitor_input ?? false,
+      targetBars,
+      ...(armed === null ? {} : { prompt: armed.prompt }),
     });
     if (!result.ok) {
       throw new ToolError(recorderCode(result.code), result.message, result.recoverable);
@@ -69,16 +72,14 @@ export const startRecording: ToolDefinition<typeof startRecordingInput> = {
     return ok(
       song.revision,
       [],
-      `Recording ${track.name} after a ${args.count_in_bars}-bar count-in. Call stop_recording when the person has finished.`,
+      `Recording ${track.name} over the arrangement in bars ${targetBars.barFrom}-${targetBars.barTo} after a ${args.count_in_bars}-bar count-in. Call stop_recording when the person has finished.`,
       {
         track_id: track.id,
         count_in_bars: args.count_in_bars,
         metronome: args.metronome,
-        ...(armed === null
-          ? {}
-          : {
-              target_bars: [armed.targetBars.barFrom, armed.targetBars.barTo] as [number, number],
-            }),
+        input_monitoring: args.monitor_input ?? false,
+        latency_compensation: 'worklet-clock-and-browser-latency',
+        target_bars: [targetBars.barFrom, targetBars.barTo] as [number, number],
       },
     );
   },

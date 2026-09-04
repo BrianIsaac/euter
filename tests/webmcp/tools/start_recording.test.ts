@@ -18,6 +18,8 @@ interface RecordingEnvelope {
     track_id: string;
     count_in_bars: number;
     metronome: boolean;
+    input_monitoring: boolean;
+    latency_compensation: string;
     target_bars?: [number, number];
   };
 }
@@ -53,15 +55,24 @@ describe('start_recording', () => {
     })) as RecordingEnvelope;
 
     expect(envelope.ok).toBe(true);
-    expect(envelope.data).toEqual({ track_id: 'melody', count_in_bars: 1, metronome: true });
-    expect(envelope.summary).toContain('Recording Melody after a 1-bar count-in');
+    expect(envelope.data).toEqual({
+      track_id: 'melody',
+      count_in_bars: 1,
+      metronome: true,
+      input_monitoring: false,
+      latency_compensation: 'worklet-clock-and-browser-latency',
+      target_bars: [1, 8],
+    });
+    expect(envelope.summary).toContain(
+      'Recording Melody over the arrangement in bars 1-8 after a 1-bar count-in',
+    );
     expect(envelope.revision).toBe(0);
     expect(envelope.changed).toEqual([]);
     expect(harness.engine.store.getDocument().revision).toBe(0);
     expect(harness.recorder.getSnapshot()).toMatchObject({
       status: 'recording',
       trackId: 'melody',
-      targetBars: null,
+      targetBars: { barFrom: 1, barTo: 8 },
     });
     harness.engine.dispose();
   });
@@ -79,12 +90,15 @@ describe('start_recording', () => {
       track_id: 'bass',
       count_in_bars: 2,
       metronome: false,
+      monitor_input: true,
     })) as RecordingEnvelope;
 
     expect(envelope.data).toEqual({
       track_id: 'bass',
       count_in_bars: 2,
       metronome: false,
+      input_monitoring: true,
+      latency_compensation: 'worklet-clock-and-browser-latency',
       target_bars: [1, 4],
     });
     expect(envelope.revision).toBe(1);
@@ -93,6 +107,7 @@ describe('start_recording', () => {
       trackId: 'bass',
       targetBars: { barFrom: 1, barTo: 4 },
       prompt: 'Hum me a bassline for these four bars',
+      monitoring: { backing: 'arrangement', input: true },
     });
     harness.engine.dispose();
   });
@@ -125,6 +140,7 @@ describe('start_recording', () => {
       targetBars: null,
       trackId: null,
       prompt: null,
+      monitoring: null,
       error: {
         ok: false,
         code: 'MIC_DENIED',

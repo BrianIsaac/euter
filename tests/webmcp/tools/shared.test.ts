@@ -147,6 +147,22 @@ describe('shared tool helpers', () => {
 
   it('bounds a take to the note limit, rounds the readings and starts from its first bar', () => {
     const take = longTake();
+    take.audio = {
+      encoding: 'pcm16-base64',
+      sample_rate: 48_000,
+      channels: 1,
+      samples: '',
+      trim_start_s: 2.035,
+      start_beat: 0,
+      alignment: {
+        method: 'worklet-clock-and-browser-latency',
+        capture_offset_s: 2,
+        input_latency_s: 0.01,
+        base_latency_s: 0.005,
+        output_latency_s: 0.02,
+        compensation_s: 2.035,
+      },
+    };
     const data = takeData(take);
 
     expect(data.notes).toHaveLength(TAKE_NOTE_LIMIT);
@@ -161,6 +177,13 @@ describe('shared tool helpers', () => {
       median_clarity: 0.812,
       pitch_range: [60, 72],
       tempo_hint: 92,
+      audio_alignment: {
+        method: 'worklet-clock-and-browser-latency',
+        input_latency_ms: 10,
+        output_latency_ms: 25,
+        capture_offset_s: 2,
+        compensation_s: 2.035,
+      },
     });
     expect(Object.hasOwn(data, 'refining_job_id')).toBe(false);
     expect(takeData({ ...take, refining_job_id: 'job-3' }).refining_job_id).toBe('job-3');

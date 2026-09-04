@@ -24,6 +24,7 @@ export function encodeTakeAudio(
   sampleRate: number,
   trimStartSeconds = 0,
   startBeat = 0,
+  alignment?: TakeAudio['alignment'],
 ): TakeAudio {
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
     throw new RangeError('Audio sample rate must be greater than zero.');
@@ -47,6 +48,7 @@ export function encodeTakeAudio(
     samples: bytesToBase64(bytes),
     trim_start_s: trimStartSeconds,
     start_beat: startBeat,
+    ...(alignment === undefined ? {} : { alignment }),
   };
 }
 

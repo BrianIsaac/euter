@@ -52,7 +52,29 @@ function isTakeAudio(value: unknown): boolean {
     typeof audio.trim_start_s === 'number' &&
     audio.trim_start_s >= 0 &&
     typeof audio.start_beat === 'number' &&
-    audio.start_beat >= 0
+    audio.start_beat >= 0 &&
+    isTakeAudioAlignment(audio.alignment)
+  );
+}
+
+function isTakeAudioAlignment(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const alignment = value as Record<string, unknown>;
+  return (
+    alignment.method === 'worklet-clock-and-browser-latency' &&
+    [
+      'capture_offset_s',
+      'input_latency_s',
+      'base_latency_s',
+      'output_latency_s',
+      'compensation_s',
+    ].every(
+      (key) =>
+        typeof alignment[key] === 'number' &&
+        Number.isFinite(alignment[key]) &&
+        alignment[key] >= 0,
+    )
   );
 }
 

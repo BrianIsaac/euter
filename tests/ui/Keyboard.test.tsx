@@ -10,7 +10,7 @@ function recorder(): PlayedNoteRecorder {
     getBpm: () => 120,
     getTimeSignature: () => [4, 4],
     getPositionSeconds: () => 0,
-    countIn: async () => ({ durationSeconds: 0 }),
+    countIn: async () => ({ durationSeconds: 0, recordingStartContextTime: 0 }),
   };
   return new PlayedNoteRecorder(transport);
 }

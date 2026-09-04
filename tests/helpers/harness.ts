@@ -143,6 +143,7 @@ export function fakeRecorder(take: Take | null = null): FakeRecorder {
     targetBars: null,
     trackId: null,
     prompt: null,
+    monitoring: null,
     error: null,
   };
   let snapshot: RecorderSnapshot = initialSnapshot;
@@ -174,6 +175,13 @@ export function fakeRecorder(take: Take | null = null): FakeRecorder {
         targetBars: options.targetBars ?? null,
         trackId: options.trackId ?? null,
         prompt: options.prompt ?? null,
+        monitoring: {
+          backing: options.targetBars === undefined ? 'click' : 'arrangement',
+          input: options.monitorInput ?? false,
+          input_latency_s: 0.01,
+          base_latency_s: 0.01,
+          output_latency_s: 0.02,
+        },
         error: null,
       });
       return Promise.resolve({ ok: true as const, data: snapshot });
@@ -195,6 +203,7 @@ export function fakeRecorder(take: Take | null = null): FakeRecorder {
         targetBars: null,
         trackId: null,
         prompt: null,
+        monitoring: null,
         error: null,
       });
       if (!fake.nextTake) {
@@ -257,7 +266,7 @@ export function makeTake(id = 'take-1', notes?: Note[]): Take {
 export function fakeMetronome(): Metronome {
   return {
     scheduleCountIn(options) {
-      options.onComplete?.();
+      options.onComplete?.(0);
       return Promise.resolve({ duration_s: 2, cancel: () => undefined });
     },
     stop: () => undefined,
@@ -341,7 +350,6 @@ export function createTestEngine(options: TestEngineOptions = {}): {
     createObjectUrl: () => `blob:euter/${(urls += 1)}`,
     revokeObjectUrl: () => undefined,
     makeId,
-    delay: () => Promise.resolve(),
     exporters: {
       render: () => Promise.resolve(fakeAudioBuffer()),
       wav: () => new Uint8Array([82, 73, 70, 70]),

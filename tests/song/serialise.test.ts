@@ -67,7 +67,14 @@ describe('song serialisation', () => {
         median_clarity: 0,
         pitch_range: [0, 0],
         tempo_hint: 92,
-        audio: encodeTakeAudio(new Float32Array([0, 0.25, -0.25]), 8_000),
+        audio: encodeTakeAudio(new Float32Array([0, 0.25, -0.25]), 8_000, 0.035, 0, {
+          method: 'worklet-clock-and-browser-latency',
+          capture_offset_s: 0,
+          input_latency_s: 0.01,
+          base_latency_s: 0.005,
+          output_latency_s: 0.02,
+          compensation_s: 0.035,
+        }),
       },
     ];
     const melody = song.tracks[0];

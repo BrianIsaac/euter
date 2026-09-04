@@ -91,6 +91,10 @@ export const startRecordingInput = z.strictObject({
     .union([z.literal(1), z.literal(2)])
     .describe('Bars of count-in before recording'),
   metronome: z.boolean().describe('Whether the click keeps playing while recording'),
+  monitor_input: z
+    .boolean()
+    .optional()
+    .describe('Whether the microphone is routed to the output; headphones are required'),
   expected_revision: expectedRevisionField,
 });
 

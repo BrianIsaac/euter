@@ -27,6 +27,7 @@ const globalScope = globalThis as typeof globalThis & {
   AudioWorkletProcessor?: WorkletProcessorConstructor;
   registerProcessor?: (name: string, processor: WorkletProcessorConstructor) => void;
   sampleRate?: number;
+  currentTime?: number;
 };
 
 const ProcessorBase: WorkletProcessorConstructor =
@@ -111,17 +112,27 @@ export class PitchFrameEngine {
 
 export class PitchWorkletProcessor extends ProcessorBase {
   readonly #engine = new PitchFrameEngine(globalScope.sampleRate ?? 48_000);
+  #captureStartedAtContextTime = 0;
 
   constructor() {
     super();
     this.port.onmessage = ({ data }) => {
-      if (data.type === 'start') this.#engine.start();
+      if (data.type === 'start') {
+        this.#captureStartedAtContextTime = globalScope.currentTime ?? 0;
+        this.#engine.start();
+      }
       if (data.type === 'reset') this.#engine.reset();
       if (data.type === 'stop') {
         const pcm = this.#engine.finish();
-        this.port.postMessage({ type: 'take', pcm, sampleRate: this.#engine.sampleRate }, [
-          pcm.buffer,
-        ]);
+        this.port.postMessage(
+          {
+            type: 'take',
+            pcm,
+            sampleRate: this.#engine.sampleRate,
+            captureStartedAtContextTime: this.#captureStartedAtContextTime,
+          },
+          [pcm.buffer],
+        );
       }
     };
   }

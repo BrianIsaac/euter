@@ -837,14 +837,37 @@
           transition-duration: 0.01ms !important;
         }
       }
+
+      .speaker-script {
+        display: none;
+        position: absolute;
+        z-index: 20;
+        right: 28px;
+        bottom: 24px;
+        left: 28px;
+        margin: 0;
+        padding: 14px 18px;
+        border: 1px solid rgb(125 211 192 / 55%);
+        border-radius: 12px;
+        background: rgb(12 15 20 / 94%);
+        color: #eef8f5;
+        font-size: 16px;
+        line-height: 1.45;
+        box-shadow: 0 12px 36px rgb(0 0 0 / 35%);
+      }
+
+      body.show-notes .speaker-script {
+        display: block;
+      }
     </style>
   </head>
   <body>
-    <main class="explainer" data-duration-ms="39000" aria-label="How WebMCP works in Euterpe">
+    <main class="explainer" data-duration-ms="58000" aria-label="How WebMCP works in Euterpe">
       <header class="explainer-header">
         <div class="brand"><strong>Euterpe</strong><span>a producer beside you</span></div>
         <span class="header-label">How WebMCP works here</span>
         <span class="status">29 tools ready</span>
+        <button id="notes" type="button" aria-pressed="false">Script</button>
         <button id="replay" type="button">Replay</button>
       </header>
 
@@ -885,6 +908,10 @@
               </div>
             </div>
           </div>
+          <p class="speaker-script">
+            WebMCP lets Euterpe give the browser's agent real music-making tools. It reads song
+            state and makes structured calls instead of trying to guess through pixels.
+          </p>
         </section>
 
         <section class="scene" data-scene="registration" aria-hidden="true">
@@ -926,30 +953,35 @@ navigator.modelContext</pre>
               >
             </div>
           </div>
+          <p class="speaker-script">
+            Euterpe registers twenty-nine tools with names, descriptions and strict schemas. The
+            browser exposes them to the agent, while the page still owns every execution.
+          </p>
         </section>
 
-        <section class="scene" data-scene="shared-document" aria-hidden="true">
+        <section class="scene" data-scene="voice" aria-hidden="true">
           <div class="scene-copy">
-            <p class="eyebrow">One document, one bus</p>
-            <h2>Human and agent work on the same song.</h2>
+            <p class="eyebrow">The performance stays in the song</p>
+            <h2>Your voice is audio—not disposable analysis.</h2>
             <p class="lede">
-              There is no hidden agent copy. Every accepted edit becomes a visible revision.
+              Sing over the arrangement, keep the recording, and let the agent tune, align and mix
+              it without replacing the person.
             </p>
           </div>
-          <div class="diagram shared-diagram" aria-label="Human and agent edit one song document">
+          <div class="diagram shared-diagram" aria-label="A voice recording joins the song">
             <div class="input-stack">
               <div class="node human">
-                <strong>Person</strong><small>hums, plays, clicks and drags</small>
+                <strong>Person sings</strong><small>over the audible arrangement</small>
               </div>
               <div class="node agent">
-                <strong>Agent</strong><small>reads state, reasons and calls a tool</small>
+                <strong>Measured capture</strong><small>worklet clock + device latency</small>
               </div>
             </div>
             <div class="flow-core">
-              <div class="queue-label">agent calls &rarr; serialised queue</div>
-              <div class="bus-label">human gestures + agent writes &rarr; command bus</div>
+              <div class="queue-label">pitch frames + retained PCM audio</div>
+              <div class="bus-label">one take &rarr; one visible song revision</div>
               <div class="song-document">
-                <div class="song-title"><span>Untitled song</span><span>revision 7</span></div>
+                <div class="song-title"><span>Vocal take</span><span>revision 7</span></div>
                 <div class="track"></div>
                 <div class="track"></div>
                 <div class="track"></div>
@@ -958,13 +990,17 @@ navigator.modelContext</pre>
             </div>
             <div class="output-stack">
               <div class="node output">
-                <strong>Visible interface</strong><small>roll, activity, reasons and Undo</small>
+                <strong>Agent production</strong><small>tune, align, level and Undo</small>
               </div>
               <div class="node output">
-                <strong>Web Audio graph</strong><small>reconciled from the song document</small>
+                <strong>Hear it everywhere</strong><small>playback, WAV and MP3</small>
               </div>
             </div>
           </div>
+          <p class="speaker-script">
+            The important part is that my singing survives. Euterpe keeps the audio, places it with
+            measured browser timing, and lets the agent tune, align or mix it reversibly.
+          </p>
         </section>
 
         <section class="scene" data-scene="control-loop" aria-hidden="true">
@@ -1006,6 +1042,10 @@ navigator.modelContext</pre>
               </div>
             </div>
           </div>
+          <p class="speaker-script">
+            We share one song document. Agent calls pass through a serialised queue; I perform,
+            listen and choose, and every accepted write appears with a reason and an Undo.
+          </p>
         </section>
 
         <section class="scene" data-scene="together" aria-hidden="true">
@@ -1014,14 +1054,14 @@ navigator.modelContext</pre>
               <p class="eyebrow">Why WebMCP matters here</p>
               <h2>A shared instrument, not a chatbot beside one.</h2>
               <p class="lede">
-                The person performs, listens and decides. The agent reads, reasons and edits. The
-                same live page makes their work visible to both.
+                Faster from idea to arrangement. Musical decisions explained while you learn. A
+                retained vocal the agent can help produce, inside the same live page.
               </p>
               <div class="final-facts">
-                <span class="fact-chip">28 structured tools</span>
-                <span class="fact-chip">visible changes</span>
-                <span class="fact-chip">reasons pinned to bars</span>
-                <span class="fact-chip">one shared Undo</span>
+                <span class="fact-chip">29 structured tools</span>
+                <span class="fact-chip">faster iteration</span>
+                <span class="fact-chip">learning in context</span>
+                <span class="fact-chip">voice-to-production</span>
               </div>
             </div>
             <div class="mock-app" aria-label="Euterpe activity strip">
@@ -1049,6 +1089,11 @@ navigator.modelContext</pre>
               </div>
             </div>
           </div>
+          <p class="speaker-script">
+            That increases three things at once: productivity because edits are direct, learning
+            because reasons stay beside the music, and production capability because my real voice
+            remains part of the mix.
+          </p>
         </section>
 
         <section class="scene closing-scene" data-scene="closing" aria-hidden="true">
@@ -1068,27 +1113,31 @@ navigator.modelContext</pre>
             <p class="closing-url">euter.pages.dev</p>
             <p class="closing-source">Source linked on Devpost &middot; MIT</p>
           </div>
+          <p class="speaker-script">
+            Euterpe is an AI GarageBand for jump-starting a small idea into an actual song, with the
+            person still heard and still in control.
+          </p>
         </section>
       </div>
 
       <footer class="explainer-footer">
         <div class="chapter-labels" aria-hidden="true">
-          <span class="is-active">standard</span><span>register</span><span>share</span
+          <span class="is-active">standard</span><span>register</span><span>voice</span
           ><span>decide</span><span>together</span><span>closing</span>
         </div>
         <div class="progress-track" aria-hidden="true"><div class="progress-bar"></div></div>
-        <span class="time" aria-live="off">00:00 / 00:39</span>
+        <span class="time" aria-live="off">00:00 / 00:58</span>
       </footer>
     </main>
 
     <script>
       const phases = [
-        { name: 'standard', duration: 6000 },
-        { name: 'registration', duration: 7000 },
-        { name: 'shared-document', duration: 9000 },
-        { name: 'control-loop', duration: 8000 },
-        { name: 'together', duration: 4000 },
-        { name: 'closing', duration: 5000 },
+        { name: 'standard', duration: 9000 },
+        { name: 'registration', duration: 9000 },
+        { name: 'voice', duration: 11000 },
+        { name: 'control-loop', duration: 10000 },
+        { name: 'together', duration: 11000 },
+        { name: 'closing', duration: 8000 },
       ];
       const totalDuration = phases.reduce((total, phase) => total + phase.duration, 0);
       const scenes = [...document.querySelectorAll('.scene')];
@@ -1096,6 +1145,7 @@ navigator.modelContext</pre>
       const progress = document.querySelector('.progress-bar');
       const time = document.querySelector('.time');
       const replay = document.querySelector('#replay');
+      const notes = document.querySelector('#notes');
       let animationFrame = 0;
       let startedAt = 0;
       let activeIndex = -1;
@@ -1131,7 +1181,7 @@ navigator.modelContext</pre>
         const elapsed = Math.min(now - startedAt, totalDuration);
         showScene(sceneAt(elapsed));
         progress.style.width = `${(elapsed / totalDuration) * 100}%`;
-        time.textContent = `${formatTime(elapsed)} / 00:39`;
+        time.textContent = `${formatTime(elapsed)} / 00:58`;
         if (elapsed < totalDuration) {
           animationFrame = requestAnimationFrame(renderFrame);
         }
@@ -1142,20 +1192,27 @@ navigator.modelContext</pre>
         activeIndex = -1;
         showScene(0);
         progress.style.width = '0%';
-        time.textContent = '00:00 / 00:39';
+        time.textContent = '00:00 / 00:58';
         startedAt = performance.now();
         animationFrame = requestAnimationFrame(renderFrame);
       }
 
       replay.addEventListener('click', play);
+      notes.addEventListener('click', () => {
+        const shown = document.body.classList.toggle('show-notes');
+        notes.setAttribute('aria-pressed', String(shown));
+      });
       document.addEventListener('keydown', (event) => {
         if (event.key.toLowerCase() === 'r' || event.key === ' ') {
           event.preventDefault();
           play();
         }
+        if (event.key.toLowerCase() === 'n') notes.click();
       });
 
-      const autoplay = new URLSearchParams(window.location.search).get('autoplay') !== '0';
+      const parameters = new URLSearchParams(window.location.search);
+      const autoplay = parameters.get('autoplay') !== '0';
+      if (parameters.get('notes') === '1') notes.click();
       if (autoplay) {
         window.setTimeout(play, 1000);
       }

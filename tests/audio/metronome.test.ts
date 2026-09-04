@@ -68,8 +68,26 @@ describe('transport metronome', () => {
       accented: true,
       time: 0.5,
     });
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith(4.5);
     expect(deps.transport.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the exact count-in clock marker when clicks are inaudible', async () => {
+    const deps = dependencies();
+    const onComplete = vi.fn();
+    const metronome = createMetronome(async () => deps);
+    await metronome.scheduleCountIn({
+      bars: 1,
+      bpm: 120,
+      audible: false,
+      onComplete,
+    });
+
+    deps.scheduled.get(1)?.callback(0.5);
+    deps.scheduled.get(5)?.callback(2.5);
+
+    expect(deps.click.play).not.toHaveBeenCalled();
+    expect(onComplete).toHaveBeenCalledWith(2.5);
   });
 
   it('continues the click and clears every scheduled event', async () => {

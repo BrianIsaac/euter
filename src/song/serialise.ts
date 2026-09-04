@@ -115,6 +115,17 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
               samples: z.string(),
               trim_start_s: z.number().finite().nonnegative(),
               start_beat: z.number().finite().nonnegative(),
+              alignment: z
+                .object({
+                  method: z.literal('worklet-clock-and-browser-latency'),
+                  capture_offset_s: z.number().finite().nonnegative(),
+                  input_latency_s: z.number().finite().nonnegative(),
+                  base_latency_s: z.number().finite().nonnegative(),
+                  output_latency_s: z.number().finite().nonnegative(),
+                  compensation_s: z.number().finite().nonnegative(),
+                })
+                .strict()
+                .optional(),
             })
             .strict()
             .optional(),
