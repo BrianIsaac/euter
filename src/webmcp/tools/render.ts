@@ -25,6 +25,13 @@ export const render: ToolDefinition<typeof renderInput> = {
     if (barTo > song.bars) {
       throw new ToolError('OUT_OF_RANGE', `The song has ${song.bars} bars.`, true);
     }
+    if (args.format === 'midi' && song.tracks.some((track) => track.clips.length > 0)) {
+      throw new ToolError(
+        'INVALID_ARGUMENT',
+        'MIDI cannot contain retained voice audio. Render WAV or MP3 to include the vocal.',
+        true,
+      );
+    }
     const job = context.engine.startExport(args.format, barFrom, barTo);
     context.signal.addEventListener(
       'abort',

@@ -14,6 +14,8 @@ const melody: Track = {
   solo: false,
   notes_rev: 1,
   notes: [{ p: 60, s: 1, d: 1, v: 0.8, source: 'agent' }],
+  clips_rev: 0,
+  clips: [],
 };
 
 function song(): SongDocument {

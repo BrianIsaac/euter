@@ -82,6 +82,8 @@ describe('song selectors', () => {
         { p: 60, s: 0, d: 1, v: 1, source: 'human' },
         { p: 67, s: 12, d: 1, v: 1, source: 'human' },
       ],
+      clips_rev: 0,
+      clips: [],
     };
     expect(selectTrackSummary(track)).toBe('lead bars 1-4: melody 60-67 2 notes; grand-piano');
   });

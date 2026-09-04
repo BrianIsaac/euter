@@ -58,7 +58,7 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
         .object({
           id: z.string().trim().min(1).max(64),
           name: z.string().trim().min(1).max(80),
-          kind: z.enum(['melody', 'chords', 'bass', 'drums']),
+          kind: z.enum(['melody', 'chords', 'bass', 'drums', 'vocal']),
           instrument: z.string().trim().min(1).max(80),
           volume_db: z.number().finite().min(-60).max(6),
           pan: z.number().finite().min(-1).max(1),
@@ -66,6 +66,20 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
           solo: z.boolean(),
           notes_rev: z.number().int().nonnegative(),
           notes: z.array(noteSchema),
+          clips_rev: z.number().int().nonnegative(),
+          clips: z.array(
+            z
+              .object({
+                id: z.string().trim().min(1).max(64),
+                take_id: z.string().trim().min(1).max(64),
+                s: z.number().finite().nonnegative(),
+                tuning_strength: z.number().finite().min(0).max(1).optional(),
+                timing_grid: z.enum(['8n', '16n']).optional(),
+                timing_strength: z.number().finite().min(0).max(1).optional(),
+                timing_swing: z.number().finite().min(0).max(0.5).optional(),
+              })
+              .strict(),
+          ),
         })
         .strict(),
     ),
@@ -93,6 +107,28 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
           median_clarity: z.number().finite().min(0).max(1),
           pitch_range: z.tuple([z.number().finite(), z.number().finite()]),
           tempo_hint: z.number().finite().positive().nullable(),
+          audio: z
+            .object({
+              encoding: z.literal('pcm16-base64'),
+              sample_rate: z.number().finite().min(8_000).max(192_000),
+              channels: z.literal(1),
+              samples: z.string(),
+              trim_start_s: z.number().finite().nonnegative(),
+              start_beat: z.number().finite().nonnegative(),
+              alignment: z
+                .object({
+                  method: z.literal('worklet-clock-and-browser-latency'),
+                  capture_offset_s: z.number().finite().nonnegative(),
+                  input_latency_s: z.number().finite().nonnegative(),
+                  base_latency_s: z.number().finite().nonnegative(),
+                  output_latency_s: z.number().finite().nonnegative(),
+                  compensation_s: z.number().finite().nonnegative(),
+                })
+                .strict()
+                .optional(),
+            })
+            .strict()
+            .optional(),
           refining_job_id: z.string().trim().min(1).max(64).optional(),
         })
         .strict(),
@@ -174,6 +210,15 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
           message: `Track "${track.id}" has a note outside the song.`,
         });
       }
+      for (const clip of track.clips) {
+        const take = song.takes.find(({ id }) => id === clip.take_id);
+        if (clip.s >= songBeats || take?.audio === undefined) {
+          context.addIssue({
+            code: 'custom',
+            message: `Track "${track.id}" has an invalid audio clip.`,
+          });
+        }
+      }
     }
   });
 
@@ -200,6 +245,17 @@ function migratePersistedSong(value: unknown): unknown {
   const record = value as Record<string, unknown>;
   return {
     ...record,
+    tracks: Array.isArray(record.tracks)
+      ? record.tracks.map((track) =>
+          typeof track === 'object' && track !== null && !Array.isArray(track)
+            ? {
+                ...track,
+                clips_rev: Object.hasOwn(track, 'clips_rev') ? track.clips_rev : 0,
+                clips: Object.hasOwn(track, 'clips') ? track.clips : [],
+              }
+            : track,
+        )
+      : record.tracks,
     option_sets: Object.hasOwn(record, 'option_sets') ? record.option_sets : [],
     take_request: Object.hasOwn(record, 'take_request') ? record.take_request : null,
   };
@@ -353,6 +409,8 @@ export function loadExampleSong(): SongDocument {
         solo: false,
         notes_rev: 1,
         notes: melody.map(([p, s, d]) => ({ p, s, d, v: 0.78, source: 'human' })),
+        clips_rev: 0,
+        clips: [],
       },
       {
         id: 'chords',
@@ -365,6 +423,8 @@ export function loadExampleSong(): SongDocument {
         solo: false,
         notes_rev: 1,
         notes: [],
+        clips_rev: 0,
+        clips: [],
       },
       {
         id: 'bass',
@@ -383,6 +443,8 @@ export function loadExampleSong(): SongDocument {
           v: 0.72,
           source: 'agent',
         })),
+        clips_rev: 0,
+        clips: [],
       },
       {
         id: 'drums',
@@ -395,6 +457,8 @@ export function loadExampleSong(): SongDocument {
         solo: false,
         notes_rev: 1,
         notes: drumNotes,
+        clips_rev: 0,
+        clips: [],
       },
     ],
     takes: [],

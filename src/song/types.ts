@@ -6,7 +6,7 @@
  * on recorded notes so quantisation remains reversible (music section 4.4).
  */
 
-export type TrackKind = 'melody' | 'chords' | 'bass' | 'drums';
+export type TrackKind = 'melody' | 'chords' | 'bass' | 'drums' | 'vocal';
 export type NoteSource = 'human' | 'agent' | 'take';
 export type TakeSource = 'mic' | 'import' | 'keyboard' | 'midi';
 export type CommandSource = 'human' | 'agent';
@@ -41,6 +41,50 @@ export interface Track {
   /** Bumped whenever `notes` changes so the audio reconciler rebuilds its Part. */
   notes_rev: number;
   notes: Note[];
+  /** Bumped whenever `clips` changes so the audio reconciler rebuilds its clip Part. */
+  clips_rev: number;
+  clips: AudioClip[];
+}
+
+/** A serialisable reference from a track timeline to audio retained by a take. */
+export interface AudioClip {
+  id: string;
+  take_id: string;
+  /** Absolute start in beats from the beginning of the song. */
+  s: number;
+  /** 0 preserves performed pitch; 1 moves voiced grains fully onto notes in the song key. */
+  tuning_strength?: number | undefined;
+  /** Audio-warp settings written by the same set_quantize control as symbolic notes. */
+  timing_grid?: '8n' | '16n' | undefined;
+  timing_strength?: number | undefined;
+  timing_swing?: number | undefined;
+}
+
+/** Mono PCM kept in JSON-safe form so history and persistence retain the person's voice. */
+export interface TakeAudio {
+  encoding: 'pcm16-base64';
+  sample_rate: number;
+  channels: 1;
+  samples: string;
+  /** Leading capture time (count-in and measured Web Audio latency) omitted during playback. */
+  trim_start_s: number;
+  /** Song position represented by the first audible sample after trimming. */
+  start_beat: number;
+  /** Evidence behind automatic placement for microphone takes; absent on legacy/imported audio. */
+  alignment?: TakeAudioAlignment | undefined;
+}
+
+export interface TakeAudioAlignment {
+  method: 'worklet-clock-and-browser-latency';
+  /** Worklet-clock interval from capture start to the arranged recording boundary. */
+  capture_offset_s: number;
+  /** MediaStreamTrack latency reported for the active microphone device. */
+  input_latency_s: number;
+  /** Web Audio processing and hardware-output estimates read for this take. */
+  base_latency_s: number;
+  output_latency_s: number;
+  /** Sum actually removed from the front of retained PCM. */
+  compensation_s: number;
 }
 
 export interface PitchFrame {
@@ -64,6 +108,8 @@ export interface Take {
   median_clarity: number;
   pitch_range: [number, number];
   tempo_hint: number | null;
+  /** Absent on legacy, keyboard and MIDI takes, which never carried recorded audio. */
+  audio?: TakeAudio | undefined;
   refining_job_id?: string | undefined;
 }
 
@@ -182,6 +228,8 @@ export function createEmptySong(title = 'Untitled'): SongDocument {
         solo: false,
         notes_rev: 0,
         notes: [],
+        clips_rev: 0,
+        clips: [],
       },
     ],
     takes: [],
@@ -216,6 +264,8 @@ export function isEmptySong(song: SongDocument): boolean {
     !track.solo &&
     track.notes_rev === 0 &&
     track.notes.length === 0 &&
+    track.clips_rev === 0 &&
+    track.clips.length === 0 &&
     song.takes.length === 0 &&
     song.notes_log.length === 0 &&
     song.option_sets.length === 0 &&

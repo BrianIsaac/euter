@@ -29,9 +29,12 @@ export interface CountInOptions {
   startBar?: number;
   /** False when SongTransport starts the shared Tone transport after the clicks are scheduled. */
   startTransport?: boolean;
+  /** False schedules the clock markers without sending a click to the output. */
+  audible?: boolean;
   continueClick?: boolean;
   onBeat?: ((beat: MetronomeBeat) => void) | undefined;
-  onComplete?: (() => void) | undefined;
+  /** Receives the exact AudioContext time scheduled for the first recording downbeat. */
+  onComplete?: ((time: number) => void) | undefined;
 }
 
 export interface ScheduledMetronome {
@@ -85,7 +88,7 @@ export function createMetronome(
           const accented = beat === 0;
           const id = dependencies.transport.schedule(
             (time) => {
-              dependencies?.click.play(time, accented);
+              if (options.audible !== false) dependencies?.click.play(time, accented);
               options.onBeat?.({ bar: bar + 1, beat: beat + 1, accented, time });
             },
             `${startBarIndex + bar}:${beat}:0`,
@@ -94,7 +97,7 @@ export function createMetronome(
         }
       }
       const completion = dependencies.transport.schedule(
-        () => options.onComplete?.(),
+        (time) => options.onComplete?.(time),
         `${startBarIndex + options.bars}:0:0`,
       );
       scheduled.push(completion);

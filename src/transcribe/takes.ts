@@ -11,9 +11,10 @@ export interface AnalysePcmOptions {
 }
 
 export interface TakeAlignment {
+  inputLatency?: number;
   baseLatency?: number;
   outputLatency?: number;
-  countInOffsetSeconds?: number;
+  captureOffsetSeconds?: number;
 }
 
 export interface CreateTakeOptions extends TakeAlignment {
@@ -77,12 +78,12 @@ export function analysePcm(
   return frames;
 }
 
-/** Aligns capture-clock frames to beat zero after count-in and Web Audio output latency. */
+/** Aligns capture-clock frames from measured clock and browser-reported device latency. */
 export function alignPitchTrack(
   frames: readonly PitchFrame[],
-  { baseLatency = 0, outputLatency = 0, countInOffsetSeconds = 0 }: TakeAlignment,
+  { inputLatency = 0, baseLatency = 0, outputLatency = 0, captureOffsetSeconds = 0 }: TakeAlignment,
 ): PitchFrame[] {
-  const offset = baseLatency + outputLatency + countInOffsetSeconds;
+  const offset = inputLatency + baseLatency + outputLatency + captureOffsetSeconds;
   return frames
     .filter((frame) => frame.t + 1e-9 >= offset)
     .map((frame) => ({ ...frame, t: roundSecond(Math.max(0, frame.t - offset)) }));
@@ -114,7 +115,10 @@ export function createTakeFromPitchTrack(
   const voiced = aligned.filter((frame) => frame.hz > 0 && frame.clarity >= clarityThreshold);
   const pitches = voiced.map((frame) => hzToMidi(frame.hz));
   const offset =
-    (options.baseLatency ?? 0) + (options.outputLatency ?? 0) + (options.countInOffsetSeconds ?? 0);
+    (options.inputLatency ?? 0) +
+    (options.baseLatency ?? 0) +
+    (options.outputLatency ?? 0) +
+    (options.captureOffsetSeconds ?? 0);
   const pitchRange: [number, number] =
     pitches.length === 0
       ? [0, 0]

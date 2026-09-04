@@ -28,6 +28,8 @@ describe('song types', () => {
         solo: false,
         notes_rev: 0,
         notes: [],
+        clips_rev: 0,
+        clips: [],
       },
     ]);
     expect(song.takes).toEqual([]);
@@ -84,6 +86,8 @@ describe('song types', () => {
           solo: false,
           notes_rev: 1,
           notes: [note],
+          clips_rev: 0,
+          clips: [],
         },
       ],
     };

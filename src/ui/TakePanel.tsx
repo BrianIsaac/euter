@@ -28,6 +28,8 @@ export interface TakePanelProps {
   recorder: RecorderPanelPort | RecorderController;
   /** Track selected in the song when no agent take request names a different target. */
   trackId?: string | undefined;
+  /** Full arranged range used when the person records without an agent request. */
+  songBars?: number | undefined;
   take?: Take | null;
   request?: ArmedTakeRequest | null;
   onTake?: (recorded: RecordedTake) => void;
@@ -46,14 +48,20 @@ function pitchLabel(hz: number): string {
 function recordingOptions(
   request: ArmedTakeRequest | null | undefined,
   trackId: string | undefined,
+  songBars: number | undefined,
+  monitorInput: boolean,
 ): StartRecordingOptions {
   return {
     countInBars: 1,
     metronome: true,
+    monitorInput,
     ...(request === null || request === undefined
       ? trackId === undefined || trackId === ''
         ? {}
-        : { trackId }
+        : {
+            trackId,
+            ...(songBars === undefined ? {} : { targetBars: { barFrom: 1, barTo: songBars } }),
+          }
       : {
           trackId: request.trackId,
           targetBars: request.targetBars,
@@ -65,6 +73,7 @@ function recordingOptions(
 export function TakePanel({
   recorder,
   trackId,
+  songBars,
   take = null,
   request = null,
   onTake,
@@ -75,12 +84,13 @@ export function TakePanel({
   const snapshot = useSyncExternalStore(recorder.subscribe, recorder.getSnapshot);
   const [grid, setGrid] = useState<QuantiseGrid>('16n');
   const [strength, setStrength] = useState(0.75);
+  const [monitorInput, setMonitorInput] = useState(false);
   const busy = snapshot.status !== 'idle' && snapshot.status !== 'error';
   const canStop = snapshot.status === 'recording' || snapshot.status === 'counting-in';
 
   const start = (): void => {
     if (take !== null) onRetake?.();
-    void recorder.start(recordingOptions(request, trackId));
+    void recorder.start(recordingOptions(request, trackId, songBars, monitorInput));
   };
   const stop = (): void => {
     void recorder.stop().then((result) => {
@@ -130,6 +140,24 @@ export function TakePanel({
       {snapshot.status === 'counting-in' ? (
         <p role="status">Count-in: listen for the bar, then begin.</p>
       ) : null}
+      {snapshot.monitoring === null ? null : (
+        <p className="muted" role="status">
+          {snapshot.monitoring.backing === 'arrangement'
+            ? 'Arrangement monitor is playing.'
+            : 'Click monitor is playing.'}{' '}
+          {snapshot.monitoring.input
+            ? 'Your mic is monitored too; keep headphones on.'
+            : 'Mic monitoring is off.'}{' '}
+          Device-reported latency compensation{' '}
+          {Math.round(
+            (snapshot.monitoring.input_latency_s +
+              snapshot.monitoring.base_latency_s +
+              snapshot.monitoring.output_latency_s) *
+              1000,
+          )}{' '}
+          ms.
+        </p>
+      )}
       {snapshot.error === null ? null : (
         <p className="input-error" role="alert">
           {snapshot.error.message}
@@ -145,6 +173,18 @@ export function TakePanel({
               Range {take.pitch_range[0]}-{take.pitch_range[1]}
             </span>
           </div>
+          {take.audio?.alignment === undefined ? null : (
+            <p className="muted">
+              Aligned from the capture clock with{' '}
+              {Math.round(
+                (take.audio.alignment.input_latency_s +
+                  take.audio.alignment.base_latency_s +
+                  take.audio.alignment.output_latency_s) *
+                  1000,
+              )}{' '}
+              ms of device-reported latency compensation.
+            </p>
+          )}
           {take.median_clarity < 0.6 || take.voiced_ratio < 0.45 ? (
             <p className="quality-warning" role="status">
               The notes were hard to hear. Move closer to the mic or try another take.
@@ -178,6 +218,16 @@ export function TakePanel({
       )}
 
       <div className="take-actions">
+        <label>
+          <input
+            aria-label="Monitor my microphone"
+            type="checkbox"
+            checked={monitorInput}
+            disabled={busy}
+            onChange={(event) => setMonitorInput(event.target.checked)}
+          />{' '}
+          Hear my voice (headphones)
+        </label>
         {canStop ? (
           <button type="button" onClick={stop}>
             Stop

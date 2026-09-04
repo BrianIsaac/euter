@@ -8,9 +8,15 @@ describe('Lane B transport port', () => {
       getBpm: () => 96,
       getTimeSignature: () => [4, 4],
       getPositionSeconds: () => 2.5,
-      countIn: async ({ bars }) => ({ durationSeconds: (bars * 4 * 60) / 96 }),
+      countIn: async ({ bars }) => ({
+        durationSeconds: (bars * 4 * 60) / 96,
+        recordingStartContextTime: 7.5,
+      }),
     };
     expect(port.getBpm()).toBe(96);
-    expect(await port.countIn({ bars: 1, metronome: true })).toEqual({ durationSeconds: 2.5 });
+    expect(await port.countIn({ bars: 1, metronome: true })).toEqual({
+      durationSeconds: 2.5,
+      recordingStartContextTime: 7.5,
+    });
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "take-backing",
-  "title": "A bar-one requested take reports where backing actually started and which track was silent",
+  "title": "A singer hears the arrangement and receives measured placement instead of a guessed offset",
   "start": "example",
   "reset": true,
   "steps": [
@@ -52,7 +52,8 @@
       "tool": "start_recording",
       "input": {
         "count_in_bars": 1,
-        "metronome": true
+        "metronome": true,
+        "monitor_input": true
       },
       "expect": {
         "ok": true,
@@ -60,9 +61,19 @@
         "summary_includes": "Recording",
         "data": {
           "data.track_id": "{{melody_id}}",
-          "data.target_bars": [1, 4]
+          "data.target_bars": [1, 4],
+          "data.input_monitoring": true,
+          "data.latency_compensation": "worklet-clock-and-browser-latency"
         }
       }
+    },
+    {
+      "action": "wait_for",
+      "text": [
+        "Arrangement monitor is playing",
+        "keep headphones on",
+        "Device-reported latency compensation"
+      ]
     },
     {
       "action": "click",
@@ -109,9 +120,16 @@
       "expect": {
         "ok": true,
         "data": {
-          "data.placed_on_track": "{{melody_id}}"
+          "data.placed_on_track": "{{melody_id}}",
+          "data.audio_alignment.method": "worklet-clock-and-browser-latency"
         },
-        "data_defined": ["data.take_id"]
+        "data_defined": [
+          "data.take_id",
+          "data.audio_alignment.input_latency_ms",
+          "data.audio_alignment.output_latency_ms",
+          "data.audio_alignment.capture_offset_s",
+          "data.audio_alignment.compensation_s"
+        ]
       }
     }
   ]

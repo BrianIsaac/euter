@@ -70,6 +70,30 @@ describe('capture reducer', () => {
     expect(isTake(null)).toBe(false);
     expect(isTake({ ...makeTake(), source: 'radio' })).toBe(false);
     expect(isTake({ ...makeTake(), tempo_hint: null })).toBe(true);
+    const aligned = makeTake();
+    aligned.audio = {
+      encoding: 'pcm16-base64',
+      sample_rate: 48_000,
+      channels: 1,
+      samples: '',
+      trim_start_s: 2.03,
+      start_beat: 0,
+      alignment: {
+        method: 'worklet-clock-and-browser-latency',
+        capture_offset_s: 2,
+        input_latency_s: 0.01,
+        base_latency_s: 0.005,
+        output_latency_s: 0.015,
+        compensation_s: 2.03,
+      },
+    };
+    expect(isTake(aligned)).toBe(true);
+    expect(
+      isTake({
+        ...aligned,
+        audio: { ...aligned.audio, alignment: { ...aligned.audio.alignment, input_latency_s: -1 } },
+      }),
+    ).toBe(false);
   });
 
   it('rejects destination fields the persisted song could not hold', () => {

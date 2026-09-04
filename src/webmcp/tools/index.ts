@@ -28,13 +28,14 @@ import { setMix } from './set_mix.ts';
 import { setNotes } from './set_notes.ts';
 import { setQuantize } from './set_quantize.ts';
 import { setTempo } from './set_tempo.ts';
+import { tuneVocal } from './tune_vocal.ts';
 import { startRecording } from './start_recording.ts';
 import { stop } from './stop.ts';
 import { stopRecording } from './stop_recording.ts';
 import { suggestChords } from './suggest_chords.ts';
 import { undo } from './undo.ts';
 
-/** The twenty-eight tools of the tool surface. */
+/** The twenty-nine tools of the tool surface. */
 export const productTools: readonly ToolDefinition[] = [
   getSongState,
   getTrackNotes,
@@ -52,6 +53,7 @@ export const productTools: readonly ToolDefinition[] = [
   setKey,
   setTempo,
   setQuantize,
+  tuneVocal,
   addTrack,
   setInstrument,
   setMix,

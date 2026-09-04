@@ -110,6 +110,20 @@ describe('render', () => {
     harness.engine.dispose();
   });
 
+  it('rejects MIDI immediately when it would omit a retained vocal', async () => {
+    const harness = createHarness();
+    const melody = harness.engine.store.getDocument().tracks[0];
+    if (melody) melody.clips = [{ id: 'voice', take_id: 'voice', s: 0 }];
+
+    await expect(harness.invoke('render', { format: 'midi' })).resolves.toMatchObject({
+      ok: false,
+      code: 'INVALID_ARGUMENT',
+      message: expect.stringContaining('MIDI cannot contain retained voice audio'),
+    });
+    expect(harness.engine.jobs.list()).toEqual([]);
+    harness.engine.dispose();
+  });
+
   it('cancels the job when the caller aborts the call', async () => {
     const slow = slowRender();
     const harness = createHarness({ engine: slow.engine });

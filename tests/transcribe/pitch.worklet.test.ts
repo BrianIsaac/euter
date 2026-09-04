@@ -3,6 +3,7 @@ import {
   PITCH_PROCESSOR_NAME,
   PITCH_WINDOW_SIZE,
   PitchFrameEngine,
+  PitchWorkletProcessor,
 } from '../../src/transcribe/pitch.worklet.ts';
 
 function sine(hz: number, seconds: number, sampleRate: number): Float32Array {
@@ -45,5 +46,22 @@ describe('pitch worklet engine', () => {
     expect([...engine.finish()]).toEqual([3, 4, 5]);
     engine.reset();
     expect(engine.finish()).toHaveLength(0);
+  });
+
+  it('returns the AudioContext capture clock with the transferred PCM', () => {
+    const processor = new PitchWorkletProcessor();
+    const messages: unknown[] = [];
+    processor.port.postMessage = (message) => messages.push(message);
+
+    processor.port.onmessage?.({ data: { type: 'start' } } as MessageEvent);
+    processor.process([[new Float32Array([0.1, 0.2])]]);
+    processor.port.onmessage?.({ data: { type: 'stop' } } as MessageEvent);
+
+    expect(messages.at(-1)).toMatchObject({
+      type: 'take',
+      sampleRate: 48_000,
+      captureStartedAtContextTime: 0,
+      pcm: new Float32Array([0.1, 0.2]),
+    });
   });
 });

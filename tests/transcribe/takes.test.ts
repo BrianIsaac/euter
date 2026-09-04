@@ -14,7 +14,7 @@ function sine(hz: number, seconds: number, sampleRate: number): Float32Array {
 }
 
 describe('take transcription', () => {
-  it('aligns frames by count-in plus base and output latency', () => {
+  it('aligns frames by capture clock plus browser-reported input and output latency', () => {
     const frames: PitchFrame[] = [
       { t: 1, hz: 261.63, clarity: 0.9 },
       { t: 1.1, hz: 261.63, clarity: 0.9 },
@@ -22,7 +22,8 @@ describe('take transcription', () => {
     ];
     expect(
       alignPitchTrack(frames, {
-        countInOffsetSeconds: 1,
+        captureOffsetSeconds: 0.98,
+        inputLatency: 0.02,
         baseLatency: 0.04,
         outputLatency: 0.06,
       }),
@@ -43,7 +44,7 @@ describe('take transcription', () => {
       source: 'mic',
       bpm: 120,
       durationSeconds: 1.3,
-      countInOffsetSeconds: 1,
+      captureOffsetSeconds: 1,
     });
 
     expect(take.notes).toHaveLength(1);
@@ -64,7 +65,8 @@ describe('take transcription', () => {
       source: 'mic',
       bpm: 120,
       durationSeconds: 2,
-      countInOffsetSeconds: 1,
+      captureOffsetSeconds: 0.98,
+      inputLatency: 0.02,
       baseLatency: 0.04,
       outputLatency: 0.06,
     });

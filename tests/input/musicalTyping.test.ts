@@ -13,7 +13,7 @@ function transportHarness() {
     getBpm: () => 120,
     getTimeSignature: () => [4, 4],
     getPositionSeconds: () => seconds,
-    countIn: async () => ({ durationSeconds: 0 }),
+    countIn: async () => ({ durationSeconds: 0, recordingStartContextTime: 0 }),
   };
   return { transport, setSeconds: (next: number) => (seconds = next) };
 }

@@ -11,6 +11,7 @@ describe('song commands', () => {
     ['set_key', { key: 'C major' }],
     ['set_tempo', { bpm: 92 }],
     ['set_quantize', { track_id: 'mel', grid: '16n', strength: 0.7 }],
+    ['tune_vocal', { track_id: 'mel', strength: 0.35 }],
     ['add_track', { kind: 'bass', instrument: 'sub-bass' }],
     ['set_instrument', { track_id: 'mel', instrument: 'grand-piano' }],
     ['set_mix', { track_id: 'mel', pan: -0.2 }],

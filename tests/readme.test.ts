@@ -16,7 +16,7 @@ describe('README evidence', () => {
 
   it('does not present direct tool replay as evidence that ChatGPT followed the prose prompts', () => {
     expect(readme).toContain('does not send the prose to ChatGPT');
-    expect(readme).toMatch(/all 28\s+registered tools/);
+    expect(readme).toMatch(/all 29\s+registered tools/);
     expect(readme).not.toContain('Eight lines that exercise the whole surface');
   });
 

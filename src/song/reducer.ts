@@ -40,7 +40,10 @@ const MIX_DEFAULTS: Record<TrackKind, Pick<Track, 'volume_db' | 'pan'>> = {
   chords: { volume_db: -9, pan: 0.12 },
   bass: { volume_db: -7, pan: 0 },
   drums: { volume_db: -8, pan: 0 },
+  vocal: { volume_db: -3, pan: 0 },
 };
+
+export const VOCAL_INSTRUMENT = 'recorded-voice';
 
 /** Default reducer for Lane C's generic `createCommandBus`. */
 export const songReducer = createSongReducer();
@@ -93,9 +96,18 @@ export function createSongReducer(options: SongReducerOptions = {}): Reducer<Son
         );
       case 'set_quantize':
         return setQuantize(document, command);
+      case 'tune_vocal':
+        return tuneVocal(document, command);
       case 'add_track':
         return addTrack(document, command, idFactory);
       case 'set_instrument':
+        if (requireTrack(document, command.args.track_id).kind === 'vocal') {
+          throw new ToolError(
+            'INVALID_ARGUMENT',
+            'Vocal tracks play the retained recording and do not use an instrument.',
+            true,
+          );
+        }
         requireInstrument(command.args.instrument);
         return updateTrack(
           document,
@@ -241,17 +253,76 @@ function setQuantize(
     command.args.swing ?? 0,
     document.bars * document.time_sig[0],
   );
-  const bars = noteRange(notes, document.time_sig[0], document.bars);
-  const updated = { ...track, notes, notes_rev: track.notes_rev + 1 };
+  const clips = track.clips.map((clip) => ({
+    ...clip,
+    timing_grid: command.args.grid,
+    timing_strength: command.args.strength,
+    timing_swing: command.args.swing ?? 0,
+  }));
+  const bars =
+    notes.length === 0 && clips.length > 0
+      ? clipRange(track, document)
+      : noteRange(notes, document.time_sig[0], document.bars);
+  const updated = {
+    ...track,
+    notes,
+    notes_rev: track.notes_rev + 1,
+    clips,
+    clips_rev: clips.length === 0 ? track.clips_rev : track.clips_rev + 1,
+  };
   return finish(
     document,
     command,
     { tracks: replaceTrack(document.tracks, updated) },
-    ['tracks', `track:${track.id}:notes`],
+    [
+      'tracks',
+      `track:${track.id}:notes`,
+      ...(clips.length === 0 ? [] : [`track:${track.id}:clips`]),
+    ],
     `Quantised ${track.name} to ${command.args.grid} at ${round(command.args.strength * 100)}%`,
     bars,
     track.id,
   );
+}
+
+function tuneVocal(
+  document: SongDocument,
+  command: Extract<SongCommand, { type: 'tune_vocal' }>,
+): ReducerResult<SongDocument> {
+  const track = requireTrack(document, command.args.track_id);
+  const retained = new Set(
+    document.takes.filter((take) => take.audio !== undefined).map(({ id }) => id),
+  );
+  const vocalClips = track.clips.filter((clip) => retained.has(clip.take_id));
+  if (vocalClips.length === 0) {
+    throw new ToolError(
+      'INVALID_ARGUMENT',
+      `Track "${track.id}" has no retained voice clips to tune.`,
+      true,
+    );
+  }
+  const updated = {
+    ...track,
+    clips_rev: track.clips_rev + 1,
+    clips: track.clips.map((clip) =>
+      retained.has(clip.take_id) ? { ...clip, tuning_strength: command.args.strength } : clip,
+    ),
+  };
+  const percent = round(command.args.strength * 100);
+  return finish(
+    document,
+    command,
+    { tracks: replaceTrack(document.tracks, updated) },
+    ['tracks', `track:${track.id}:clips`],
+    `Tuned ${track.name} to ${document.key.name} at ${percent}%`,
+    clipRange(track, document),
+    track.id,
+  );
+}
+
+function clipRange(track: Track, document: SongDocument): [number, number] {
+  const bars = track.clips.map((clip) => Math.floor(clip.s / document.time_sig[0]) + 1);
+  return [Math.min(...bars), Math.max(...bars)];
 }
 
 function addTrack(
@@ -259,7 +330,17 @@ function addTrack(
   command: Extract<SongCommand, { type: 'add_track' }>,
   idFactory: (prefix: string) => string,
 ): ReducerResult<SongDocument> {
-  requireInstrument(command.args.instrument);
+  if (command.args.kind === 'vocal') {
+    if (command.args.instrument !== VOCAL_INSTRUMENT) {
+      throw new ToolError(
+        'INVALID_ARGUMENT',
+        `Vocal tracks use instrument "${VOCAL_INSTRUMENT}".`,
+        true,
+      );
+    }
+  } else {
+    requireInstrument(command.args.instrument);
+  }
   const id = uniqueId(document, command.args.kind, idFactory);
   const mix = MIX_DEFAULTS[command.args.kind];
   const track: Track = {
@@ -272,6 +353,8 @@ function addTrack(
     solo: false,
     notes_rev: 0,
     notes: [],
+    clips_rev: 0,
+    clips: [],
   };
   return finish(
     document,
@@ -406,15 +489,27 @@ function arrange(
         const copied = track.notes
           .filter((note) => note.s >= sourceStart && note.s < sourceEnd)
           .map((note) => ({ ...note, s: note.s + beatShift, source: command.source }));
-        return copied.length === 0
+        const copiedClips = track.clips
+          .filter((clip) => clip.s >= sourceStart && clip.s < sourceEnd)
+          .map((clip) => ({
+            ...clip,
+            id: `${clip.id.slice(0, 48)}-${targetFrom}-${copy}`,
+            s: clip.s + beatShift,
+          }));
+        return copied.length === 0 && copiedClips.length === 0
           ? track
           : {
               ...track,
-              notes_rev: track.notes_rev + 1,
+              notes_rev: copied.length === 0 ? track.notes_rev : track.notes_rev + 1,
               notes: [
                 ...track.notes.filter((note) => note.s < targetStart || note.s >= targetEnd),
                 ...copied,
               ].sort(noteOrder),
+              clips_rev: copiedClips.length === 0 ? track.clips_rev : track.clips_rev + 1,
+              clips: [
+                ...track.clips.filter((clip) => clip.s < targetStart || clip.s >= targetEnd),
+                ...copiedClips,
+              ].sort((left, right) => left.s - right.s),
             };
       });
       const copiedChords = document.chords
@@ -455,7 +550,12 @@ function commitTake(
     document,
     command,
     { tracks: committed.tracks, take_request: committed.take_request },
-    ['tracks', `track:${committed.track.id}:notes`, 'take_request'],
+    [
+      'tracks',
+      `track:${committed.track.id}:notes`,
+      ...(take.audio === undefined ? [] : [`track:${committed.track.id}:clips`]),
+      'take_request',
+    ],
     `Committed ${take.id} to ${committed.track.name}`,
     committed.range,
     committed.track.id,
@@ -483,7 +583,7 @@ function commitTakeToTrack(
   range: [number, number];
   track: Track;
 } {
-  if (take.notes.length === 0) {
+  if (take.notes.length === 0 && take.audio === undefined) {
     throw new ToolError(
       'INVALID_ARGUMENT',
       `Take "${take.id}" has no detected notes. Record or import another take.`,
@@ -501,6 +601,16 @@ function commitTakeToTrack(
       true,
     );
   }
+  if (take.audio !== undefined) {
+    const audioEnd = take.audio.start_beat + (take.duration_s * document.bpm) / 60;
+    if (take.audio.start_beat >= maximumBeat || audioEnd > maximumBeat + 1e-6) {
+      throw new ToolError(
+        'OUT_OF_RANGE',
+        `Take "${take.id}" audio extends past the current ${document.bars} bars. Arrange more bars first.`,
+        true,
+      );
+    }
+  }
   const notes = quantizeNotes(
     take.notes.map((note) => (source === undefined ? note : { ...note, source })),
     grid,
@@ -508,7 +618,12 @@ function commitTakeToTrack(
     0,
     maximumBeat,
   );
-  const range = bars ?? noteRange(notes, document.time_sig[0], document.bars);
+  const range =
+    bars ??
+    take.target_bars ??
+    (notes.length === 0 && take.audio !== undefined
+      ? audioRange(take, document)
+      : noteRange(notes, document.time_sig[0], document.bars));
   const start = (range[0] - 1) * document.time_sig[0];
   const end = range[1] * document.time_sig[0];
   const updated = {
@@ -517,6 +632,14 @@ function commitTakeToTrack(
     notes: [...track.notes.filter((note) => note.s < start || note.s >= end), ...notes].sort(
       noteOrder,
     ),
+    clips_rev: take.audio === undefined ? track.clips_rev : track.clips_rev + 1,
+    clips:
+      take.audio === undefined
+        ? track.clips
+        : [
+            ...track.clips.filter((clip) => clip.s < start || clip.s >= end),
+            { id: take.id, take_id: take.id, s: take.audio.start_beat },
+          ].sort((left, right) => left.s - right.s),
   };
   return {
     tracks: replaceTrack(document.tracks, updated),
@@ -524,6 +647,17 @@ function commitTakeToTrack(
     range,
     track,
   };
+}
+
+function audioRange(take: Take, document: SongDocument): [number, number] {
+  const audio = take.audio;
+  if (audio === undefined) return [1, 1];
+  const beatsPerBar = document.time_sig[0];
+  const lastBeat = audio.start_beat + Math.max(0, (take.duration_s * document.bpm) / 60 - 1e-6);
+  return [
+    Math.floor(audio.start_beat / beatsPerBar) + 1,
+    Math.min(document.bars, Math.floor(lastBeat / beatsPerBar) + 1),
+  ];
 }
 
 function proposeOptions(

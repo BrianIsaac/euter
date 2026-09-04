@@ -62,5 +62,40 @@ describe('TrackList', () => {
         source: 'human',
       }),
     );
+
+    fireEvent.change(screen.getByLabelText('Kind of track to add'), { target: { value: 'vocal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add track' }));
+    expect(onDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'add_track',
+        args: { kind: 'vocal', instrument: 'recorded-voice' },
+      }),
+    );
+  });
+
+  it('shows the agent-applied vocal tuning and timing on the affected track', () => {
+    const song = loadExampleSong();
+    const melody = song.tracks[0];
+    if (melody) {
+      melody.clips.push({
+        id: 'voice-1',
+        take_id: 'voice-1',
+        s: 0,
+        tuning_strength: 0.35,
+        timing_grid: '16n',
+        timing_strength: 0.6,
+      });
+    }
+    render(
+      <TrackList
+        song={song}
+        selectedTrackId="melody"
+        onSelect={() => undefined}
+        onDispatch={() => undefined}
+      />,
+    );
+
+    expect(screen.getByTestId('vocal-processing-melody')).toHaveTextContent('tune 35% · 16n 60%');
+    expect(screen.getByLabelText('Volume for Melody')).toHaveValue('-3');
   });
 });

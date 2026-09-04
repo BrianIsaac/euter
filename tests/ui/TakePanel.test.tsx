@@ -26,6 +26,7 @@ const idle: RecorderSnapshot = {
   targetBars: null,
   trackId: null,
   prompt: null,
+  monitoring: null,
   error: null,
 };
 
@@ -74,6 +75,7 @@ describe('TakePanel', () => {
     expect(recorder.start).toHaveBeenCalledWith({
       countInBars: 1,
       metronome: true,
+      monitorInput: false,
       trackId: 'bass',
       targetBars: { barFrom: 9, barTo: 16 },
       prompt: 'Hum me a bassline for the chorus',
@@ -82,12 +84,15 @@ describe('TakePanel', () => {
 
   it('arms the selected track for a first-click recording', () => {
     const recorder = fakeRecorder(idle);
-    render(<TakePanel recorder={recorder} trackId="melody" onCommit={vi.fn()} />);
+    render(<TakePanel recorder={recorder} trackId="melody" songBars={8} onCommit={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('Monitor my microphone'));
     fireEvent.click(screen.getByRole('button', { name: 'Record' }));
     expect(recorder.start).toHaveBeenCalledWith({
       countInBars: 1,
       metronome: true,
+      monitorInput: true,
       trackId: 'melody',
+      targetBars: { barFrom: 1, barTo: 8 },
     });
   });
 
@@ -105,6 +110,53 @@ describe('TakePanel', () => {
     expect(screen.getByLabelText('Clarity 94%')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await vi.waitFor(() => expect(onTake).toHaveBeenCalledOnce());
+  });
+
+  it('shows measured monitoring and lets the person opt into headphone mic monitoring', () => {
+    const recorder = fakeRecorder({
+      ...idle,
+      status: 'recording',
+      monitoring: {
+        backing: 'arrangement',
+        input: true,
+        input_latency_s: 0.01,
+        base_latency_s: 0.005,
+        output_latency_s: 0.02,
+      },
+    });
+    render(<TakePanel recorder={recorder} trackId="melody" songBars={8} onCommit={vi.fn()} />);
+
+    expect(screen.getByText(/Arrangement monitor is playing/u)).toHaveTextContent(
+      'Device-reported latency compensation 35 ms',
+    );
+    expect(screen.getByText(/keep headphones on/u)).toBeInTheDocument();
+  });
+
+  it('reports the retained take alignment evidence', () => {
+    const recorder = fakeRecorder(idle);
+    const take = makeTake({
+      audio: {
+        encoding: 'pcm16-base64',
+        sample_rate: 48_000,
+        channels: 1,
+        samples: '',
+        trim_start_s: 2.035,
+        start_beat: 0,
+        alignment: {
+          method: 'worklet-clock-and-browser-latency',
+          capture_offset_s: 2,
+          input_latency_s: 0.01,
+          base_latency_s: 0.005,
+          output_latency_s: 0.02,
+          compensation_s: 2.035,
+        },
+      },
+    });
+    render(<TakePanel recorder={recorder} take={take} onCommit={vi.fn()} />);
+
+    expect(screen.getByText(/Aligned from the capture clock/u)).toHaveTextContent(
+      '35 ms of device-reported latency compensation',
+    );
   });
 
   it('offers retake and commits the selected grid and strength', () => {

@@ -363,6 +363,7 @@ export function App({ runtime }: AppProps) {
             <TakePanel
               recorder={recorderPort}
               trackId={selectedTrackId}
+              songBars={song.bars}
               take={pendingTake}
               request={takeRequest}
               onTake={onTake}

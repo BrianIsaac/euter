@@ -47,6 +47,6 @@ describe('descriptions', () => {
   });
 
   it('carries one description for every registered tool and nothing else', () => {
-    expect(Object.keys(descriptions)).toHaveLength(28);
+    expect(Object.keys(descriptions)).toHaveLength(29);
   });
 });

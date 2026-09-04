@@ -10,7 +10,7 @@ const idSchema = z.string().trim().min(1).max(64);
 const barSchema = z.number().int().min(1);
 const styleSchema = z.enum(['pop', 'soul', 'lofi']);
 const roleSchema = z.enum(['bass', 'chords', 'drums']);
-const trackKindSchema = z.enum(['melody', 'chords', 'bass', 'drums']);
+const trackKindSchema = z.enum(['melody', 'chords', 'bass', 'drums', 'vocal']);
 
 export const inputNoteSchema = z
   .object({
@@ -98,6 +98,18 @@ export const songCommandSchema = z.discriminatedUnion('type', [
           grid: z.enum(['8n', '16n']),
           strength: z.number().min(0).max(1),
           swing: z.number().min(0).max(0.5).optional(),
+        })
+        .strict(),
+      ...common,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('tune_vocal'),
+      args: z
+        .object({
+          track_id: idSchema,
+          strength: z.number().min(0).max(1),
         })
         .strict(),
       ...common,
@@ -243,6 +255,7 @@ export type SetChordsCommand = Extract<SongCommand, { type: 'set_chords' }>;
 export type SetKeyCommand = Extract<SongCommand, { type: 'set_key' }>;
 export type SetTempoCommand = Extract<SongCommand, { type: 'set_tempo' }>;
 export type SetQuantizeCommand = Extract<SongCommand, { type: 'set_quantize' }>;
+export type TuneVocalCommand = Extract<SongCommand, { type: 'tune_vocal' }>;
 export type AddTrackCommand = Extract<SongCommand, { type: 'add_track' }>;
 export type SetInstrumentCommand = Extract<SongCommand, { type: 'set_instrument' }>;
 export type SetMixCommand = Extract<SongCommand, { type: 'set_mix' }>;

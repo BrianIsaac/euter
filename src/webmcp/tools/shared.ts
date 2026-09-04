@@ -28,6 +28,13 @@ export interface TakeData {
   median_clarity: number;
   pitch_range: [number, number];
   tempo_hint: number | null;
+  audio_alignment?: {
+    method: 'worklet-clock-and-browser-latency';
+    input_latency_ms: number;
+    output_latency_ms: number;
+    capture_offset_s: number;
+    compensation_s: number;
+  };
   refining_job_id?: string;
   context?: TakeContext;
 }
@@ -126,6 +133,17 @@ export function takeData(take: Take, beatsPerBar = 4): TakeData {
   };
   if (take.refining_job_id !== undefined) {
     data.refining_job_id = take.refining_job_id;
+  }
+  if (take.audio?.alignment !== undefined) {
+    data.audio_alignment = {
+      method: take.audio.alignment.method,
+      input_latency_ms: round(take.audio.alignment.input_latency_s * 1000),
+      output_latency_ms: round(
+        (take.audio.alignment.base_latency_s + take.audio.alignment.output_latency_s) * 1000,
+      ),
+      capture_offset_s: round(take.audio.alignment.capture_offset_s),
+      compensation_s: round(take.audio.alignment.compensation_s),
+    };
   }
   return data;
 }

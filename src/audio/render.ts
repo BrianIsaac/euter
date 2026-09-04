@@ -1,7 +1,8 @@
-import type { Note, SongDocument, Track } from '../song/types.ts';
+import type { AudioClip, Note, SongDocument, Take, Track } from '../song/types.ts';
 import type { BaseContext } from 'tone';
 import type * as ToneModuleNamespace from 'tone';
 import { loadInstrument, type InstrumentLoadResult } from './instruments.ts';
+import { decodeTakeAudio, scheduleVocalAudio } from './clips.ts';
 import {
   DEFAULT_REVERB_SEND,
   MASTER_COMPRESSOR,
@@ -28,12 +29,24 @@ export interface OfflineNoteEvent {
 export interface OfflineTrack {
   track: Track;
   notes: readonly OfflineNoteEvent[];
+  clips: readonly OfflineClipEvent[];
+}
+
+export interface OfflineClipEvent {
+  take: Take;
+  clip: AudioClip;
+  time_seconds: number;
+  offset_seconds: number;
+  duration_seconds: number;
+  clip_elapsed_seconds: number;
 }
 
 export interface OfflineRenderRequest {
   duration_seconds: number;
   sample_rate: number;
   channels: number;
+  bpm: number;
+  key_name: string;
   samples_base_url?: string | undefined;
   tracks: readonly OfflineTrack[];
 }
@@ -116,12 +129,28 @@ export async function renderSong(
     notes: track.notes
       .filter((note) => note.s < endBeat && note.s + note.d > startBeat)
       .map((note) => renderEvent(note, startBeat, endBeat, secondsPerBeat)),
+    clips: track.clips.flatMap((clip) => {
+      const take = song.takes.find(({ id }) => id === clip.take_id);
+      if (take?.audio === undefined) return [];
+      const event = renderClipEvent(
+        clip.s,
+        take.duration_s,
+        take,
+        clip,
+        startBeat,
+        endBeat,
+        secondsPerBeat,
+      );
+      return event === null ? [] : [event];
+    }),
   }));
   const tail = range.tail_seconds ?? 2;
   const request: OfflineRenderRequest = {
     duration_seconds: (endBeat - startBeat) * secondsPerBeat + tail,
     sample_rate: options.sample_rate ?? 44_100,
     channels: 2,
+    bpm: song.bpm,
+    key_name: song.key.name,
     ...(options.samples_base_url === undefined
       ? {}
       : { samples_base_url: options.samples_base_url }),
@@ -174,24 +203,27 @@ export function createCatalogueOfflineEngine(
             reverb.connect(compressor);
 
             await Promise.all(
-              request.tracks.map(async ({ track, notes }) => {
+              request.tracks.map(async ({ track, notes, clips }) => {
                 throwIfAborted(options.signal);
                 const channel = graph.channel(track);
                 const send = graph.send(DEFAULT_REVERB_SEND[track.kind], track.id);
                 channel.connect(compressor);
                 channel.connect(send);
                 send.connect(reverb);
-                const result = await instrumentLoader(track.instrument, {
-                  context,
-                  destination: channel.raw,
-                  samplesBaseUrl: request.samples_base_url,
-                  toneContext,
-                  onProgress: (value) => reportLoadProgress(track.id, value),
-                });
-                throwIfAborted(options.signal);
-                if (!result.loaded && result.reason)
-                  fallbacks.push(`${track.name}: ${result.reason}`);
-                scheduleTrack(result, notes);
+                if (track.kind !== 'vocal') {
+                  const result = await instrumentLoader(track.instrument, {
+                    context,
+                    destination: channel.raw,
+                    samplesBaseUrl: request.samples_base_url,
+                    toneContext,
+                    onProgress: (value) => reportLoadProgress(track.id, value),
+                  });
+                  throwIfAborted(options.signal);
+                  if (!result.loaded && result.reason)
+                    fallbacks.push(`${track.name}: ${result.reason}`);
+                  scheduleTrack(result, notes);
+                }
+                scheduleClips(context, channel, clips, request.bpm, request.key_name);
                 reportLoadProgress(track.id, 1);
               }),
             );
@@ -205,6 +237,31 @@ export function createCatalogueOfflineEngine(
       return { buffer, fallbacks };
     },
   };
+}
+
+function scheduleClips(
+  context: BaseAudioContext,
+  channel: ChannelNode,
+  clips: readonly OfflineClipEvent[],
+  bpm: number,
+  keyName: string,
+): void {
+  for (const clip of clips) {
+    const audio = clip.take.audio;
+    if (audio === undefined) continue;
+    scheduleVocalAudio({
+      context,
+      destination: channel.raw,
+      buffer: decodeTakeAudio(audio, context),
+      take: clip.take,
+      clip: clip.clip,
+      keyName,
+      bpm,
+      whenSeconds: clip.time_seconds,
+      clipElapsedSeconds: clip.clip_elapsed_seconds,
+      durationSeconds: clip.duration_seconds,
+    });
+  }
 }
 
 function scheduleTrack(result: InstrumentLoadResult, notes: readonly OfflineNoteEvent[]): void {
@@ -241,6 +298,30 @@ function renderEvent(
     time_seconds: (clippedStart - startBeat) * secondsPerBeat,
     duration_seconds: Math.max(0.01, (clippedEnd - clippedStart) * secondsPerBeat),
     velocity: note.v,
+  };
+}
+
+function renderClipEvent(
+  clipStartBeat: number,
+  durationSeconds: number,
+  take: Take,
+  clip: AudioClip,
+  startBeat: number,
+  endBeat: number,
+  secondsPerBeat: number,
+): OfflineClipEvent | null {
+  const clipEndBeat = clipStartBeat + durationSeconds / secondsPerBeat;
+  const overlapStart = Math.max(startBeat, clipStartBeat);
+  const overlapEnd = Math.min(endBeat, clipEndBeat);
+  if (overlapEnd <= overlapStart) return null;
+  const elapsed = (overlapStart - clipStartBeat) * secondsPerBeat;
+  return {
+    take,
+    clip,
+    time_seconds: (overlapStart - startBeat) * secondsPerBeat,
+    offset_seconds: (take.audio?.trim_start_s ?? 0) + elapsed,
+    duration_seconds: (overlapEnd - overlapStart) * secondsPerBeat,
+    clip_elapsed_seconds: elapsed,
   };
 }
 

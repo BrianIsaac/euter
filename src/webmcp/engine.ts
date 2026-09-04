@@ -123,7 +123,6 @@ export interface EngineOptions {
   createObjectUrl?: ((blob: Blob) => string) | undefined;
   revokeObjectUrl?: ((url: string) => void) | undefined;
   makeId?: ((prefix: string) => string) | undefined;
-  delay?: ((ms: number) => Promise<void>) | undefined;
 }
 
 export interface Engine {
@@ -195,12 +194,6 @@ function waitWithSignal(promise: Promise<void>, signal: AbortSignal | undefined)
 export function createEngine(options: EngineOptions = {}): Engine {
   const makeId =
     options.makeId ?? ((prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}`);
-  const delay =
-    options.delay ??
-    ((ms: number) =>
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, ms);
-      }));
   const audio = options.audio ?? createAudioContextManager();
   const transport = options.transport ?? createSongTransport(audio);
   const metronome = options.metronome ?? createMetronome();
@@ -299,54 +292,42 @@ export function createEngine(options: EngineOptions = {}): Engine {
       const abort = (): void => finish();
       signal?.addEventListener('abort', abort, { once: true });
       try {
-        if (!click) {
-          if (backing !== null && hasFullBackingPreRoll) {
-            playback.setPreview(backing);
-            await startBacking(backing, startBar);
-          }
-          await waitWithSignal(delay(durationSeconds * 1000), signal);
-          if (backing !== null && !hasFullBackingPreRoll) {
-            playback.setPreview(backing);
-            await startBacking(backing, captureBar);
-          }
-          throwIfAborted(signal);
-          return { durationSeconds, finish };
-        }
-
-        let complete: () => void = () => undefined;
+        let recordingStartContextTime: number | null = null;
+        let complete: (time: number) => void = () => undefined;
         const completed = new Promise<void>((resolve) => {
-          complete = resolve;
+          complete = (time) => {
+            recordingStartContextTime = time;
+            resolve();
+          };
         });
         if (silentPreRoll !== null) playback.setPreview(silentPreRoll);
-        let clickFailed = false;
-        try {
-          await metronome.scheduleCountIn({
-            bars,
-            bpm,
-            beatsPerBar,
-            startBar,
-            startTransport: backing === null || !hasFullBackingPreRoll,
-            continueClick: backing === null || hasFullBackingPreRoll,
-            onComplete: complete,
-          });
-          await ensureActive();
-        } catch {
-          metronome.stop();
-          clickFailed = true;
-        }
+        await metronome.scheduleCountIn({
+          bars,
+          bpm,
+          beatsPerBar,
+          startBar,
+          startTransport: backing === null || !hasFullBackingPreRoll,
+          audible: click,
+          continueClick: click && (backing === null || hasFullBackingPreRoll),
+          onComplete: complete,
+        });
+        await ensureActive();
         if (backing !== null && hasFullBackingPreRoll) {
           playback.setPreview(backing);
           await startBacking(backing, startBar);
         }
-        if (clickFailed) await waitWithSignal(delay(durationSeconds * 1000), signal);
-        else await waitWithSignal(completed, signal);
+        await waitWithSignal(completed, signal);
         if (backing !== null && !hasFullBackingPreRoll) {
           metronome.stop();
           playback.setPreview(backing);
           await startBacking(backing, captureBar);
+          recordingStartContextTime = audio.requireRunning().currentTime;
         }
         throwIfAborted(signal);
-        return { durationSeconds, finish };
+        if (recordingStartContextTime === null) {
+          throw new Error('The count-in clock did not report its recording boundary.');
+        }
+        return { durationSeconds, recordingStartContextTime, finish };
       } catch (error) {
         finish();
         throw error;

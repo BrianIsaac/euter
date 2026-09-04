@@ -91,6 +91,10 @@ export const startRecordingInput = z.strictObject({
     .union([z.literal(1), z.literal(2)])
     .describe('Bars of count-in before recording'),
   metronome: z.boolean().describe('Whether the click keeps playing while recording'),
+  monitor_input: z
+    .boolean()
+    .optional()
+    .describe('Whether the microphone is routed to the output; headphones are required'),
   expected_revision: expectedRevisionField,
 });
 
@@ -176,9 +180,23 @@ export const setQuantizeInput = z.strictObject({
   ...write,
 });
 
+export const tuneVocalInput = z.strictObject({
+  track_id: trackIdField,
+  strength: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe('Correction amount: 0 preserves pitch, 1 moves voiced grains fully into the key'),
+  ...write,
+});
+
 export const addTrackInput = z.strictObject({
-  kind: z.enum(['melody', 'chords', 'bass', 'drums']).describe('What the track is for'),
-  instrument: z.string().min(1).max(80).describe('Instrument name from get_song_state'),
+  kind: z.enum(['melody', 'chords', 'bass', 'drums', 'vocal']).describe('What the track is for'),
+  instrument: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('Instrument from get_song_state; recorded-voice for vocal'),
   name: z.string().min(1).max(80).optional().describe('Name shown in the track list'),
   ...write,
 });

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import {
   beatPosition,
+  type ClipPartEvent,
+  type ClipPartNode,
   createAudioReconciler,
   type ChannelNode,
   type GraphNode,
@@ -17,15 +19,22 @@ import type {
 import { createSongReducer } from '../../src/song/reducer.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
 import { createSongStore } from '../../src/song/store.ts';
+import { encodeTakeAudio } from '../../src/audio/clips.ts';
 
 interface FakePart extends PartNode {
   callback: (time: number, event: PartEvent) => void;
   dispose: Mock<() => void>;
 }
 
+interface FakeClipPart extends ClipPartNode {
+  callback: (time: number, event: ClipPartEvent) => void;
+  dispose: Mock<() => void>;
+}
+
 function graphFactory() {
   const connections: string[] = [];
   const parts: FakePart[] = [];
+  const clipParts: FakeClipPart[] = [];
   const nodes: GraphNode[] = [];
   const node = (label: string): GraphNode => {
     const value: GraphNode = {
@@ -60,9 +69,20 @@ function graphFactory() {
       parts.push(part);
       return part;
     },
+    clipPart: (trackId, events, callback) => {
+      const part: FakeClipPart = {
+        label: `clips:${trackId}`,
+        events,
+        callback,
+        start: vi.fn(),
+        dispose: vi.fn<() => void>(),
+      };
+      clipParts.push(part);
+      return part;
+    },
     setTransportBpm: vi.fn(),
   };
-  return { factory, connections, parts, nodes, channels };
+  return { factory, connections, parts, clipParts, nodes, channels };
 }
 
 function audio(): AudioContextManager {
@@ -203,6 +223,82 @@ describe('audio graph reconciler', () => {
       'electric-piano',
       expect.objectContaining({ destination: { label: 'channel:melody' } }),
     );
+    reconciler.dispose();
+  });
+
+  it('decodes and schedules a retained vocal through the live track channel', async () => {
+    const graph = graphFactory();
+    const song = loadExampleSong();
+    song.takes.push({
+      id: 'voice-1',
+      source: 'mic',
+      notes: [],
+      pitch_track: [],
+      duration_s: 0.09,
+      voiced_ratio: 0,
+      median_clarity: 0,
+      pitch_range: [0, 0],
+      tempo_hint: 92,
+      audio: encodeTakeAudio(new Float32Array(800).fill(0.2), 8_000, 0.01, 4),
+    });
+    song.tracks.push({
+      id: 'vocal',
+      name: 'Voice',
+      kind: 'vocal',
+      instrument: 'recorded-voice',
+      volume_db: -3,
+      pan: 0,
+      mute: false,
+      solo: false,
+      notes_rev: 0,
+      notes: [],
+      clips_rev: 1,
+      clips: [{ id: 'voice-1', take_id: 'voice-1', s: 4 }],
+    });
+    const starts: number[][] = [];
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      start: vi.fn((...args: number[]) => starts.push(args)),
+    };
+    const context = {
+      createBuffer: (_channels: number, length: number, sampleRate: number) => {
+        const channel = new Float32Array(length);
+        return {
+          duration: length / sampleRate,
+          length,
+          sampleRate,
+          numberOfChannels: 1,
+          getChannelData: () => channel,
+        } as unknown as AudioBuffer;
+      },
+      createBufferSource: () => source,
+    } as unknown as AudioContext;
+    const audioWithVoice: AudioContextManager = {
+      ...audio(),
+      getContext: () => context,
+      requireRunning: () => context,
+    };
+    const instrumentLoader = vi.fn(async (id: string): Promise<InstrumentLoadResult> => ({
+      instrument: { id, trigger: vi.fn(), dispose: vi.fn() },
+      loaded: true,
+    }));
+    const store = createSongStore(song, createSongReducer());
+    const reconciler = createAudioReconciler(store, audioWithVoice, {
+      provideGraphFactory: async () => graph.factory,
+      instrumentLoader,
+    });
+
+    await reconciler.ready();
+
+    expect(instrumentLoader).not.toHaveBeenCalledWith('recorded-voice', expect.anything());
+    expect(reconciler.getSnapshot().nodes).toContain('clips:vocal');
+    const part = graph.clipParts.find(({ label }) => label === 'clips:vocal');
+    const event = part?.events[0];
+    expect(event).toMatchObject({ time: '1:0:0', offset_seconds: 0.01, duration_seconds: 0.09 });
+    if (event) part?.callback(2, event);
+    expect(source.connect).toHaveBeenCalledWith({ label: 'channel:vocal' });
+    expect(starts[0]).toEqual([2, 0.01, 0.09]);
     reconciler.dispose();
   });
 

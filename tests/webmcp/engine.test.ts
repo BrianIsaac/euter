@@ -178,8 +178,29 @@ describe('engine', () => {
     engine.dispose();
   });
 
+  it('uses the scheduled audio clock even when the count-in clicks are muted', async () => {
+    const metronome = fakeMetronome();
+    const schedule = vi.spyOn(metronome, 'scheduleCountIn').mockImplementationOnce((options) => {
+      options.onComplete?.(12.5);
+      return Promise.resolve({ duration_s: 2, cancel: vi.fn() });
+    });
+    const { engine } = createTestEngine({ metronome });
+
+    const result = await engine.transportPort.countIn({
+      bars: 1,
+      metronome: false,
+      targetBar: 5,
+      mutedTrackId: 'melody',
+    });
+
+    expect(schedule).toHaveBeenCalledWith(expect.objectContaining({ audible: false }));
+    expect(result.recordingStartContextTime).toBe(12.5);
+    result.finish?.();
+    engine.dispose();
+  });
+
   it('waits out an early-bar count-in before starting backing on the requested bar', async () => {
-    let complete: (() => void) | undefined;
+    let complete: ((time: number) => void) | undefined;
     const metronome = fakeMetronome();
     vi.spyOn(metronome, 'scheduleCountIn').mockImplementationOnce((options) => {
       complete = options.onComplete;
@@ -197,7 +218,7 @@ describe('engine', () => {
     expect(transport.calls.play).toEqual([]);
     expect(engine.getSnapshot().takeBacking).toBeNull();
 
-    complete?.();
+    complete?.(2);
     const result = await counting;
     expect(transport.calls.play).toEqual([{ from_bar: 1 }]);
     expect(engine.getSnapshot().takeBacking).toEqual({
@@ -234,14 +255,13 @@ describe('engine', () => {
   });
 
   it('cancels backing and its wait when the recorder aborts during count-in', async () => {
-    let releaseDelay: (() => void) | undefined;
-    const delay = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          releaseDelay = resolve;
-        }),
-    );
-    const { engine, transport } = createTestEngine({ delay });
+    let complete: ((time: number) => void) | undefined;
+    const metronome = fakeMetronome();
+    vi.spyOn(metronome, 'scheduleCountIn').mockImplementationOnce((options) => {
+      complete = options.onComplete;
+      return Promise.resolve({ duration_s: 2, cancel: vi.fn() });
+    });
+    const { engine, transport } = createTestEngine({ metronome });
     const controller = new AbortController();
     const counting = engine.transportPort.countIn({
       bars: 1,
@@ -254,7 +274,7 @@ describe('engine', () => {
     expect(engine.playback.getPreview()).not.toBeNull();
 
     controller.abort(new DOMException('Take stopped.', 'AbortError'));
-    releaseDelay?.();
+    complete?.(2);
 
     await expect(counting).rejects.toMatchObject({ name: 'AbortError' });
     expect(transport.calls.stop).toBe(1);

@@ -45,4 +45,11 @@ describe('MIDI encoder', () => {
       5,
     );
   });
+
+  it('refuses to silently omit retained voice clips', () => {
+    const song = loadExampleSong();
+    const melody = song.tracks[0];
+    if (melody) melody.clips = [{ id: 'voice', take_id: 'voice', s: 0 }];
+    expect(() => encodeMidi(song)).toThrow('MIDI cannot contain retained voice audio');
+  });
 });

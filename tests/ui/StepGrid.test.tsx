@@ -14,6 +14,8 @@ const drums: Track = {
   solo: false,
   notes_rev: 1,
   notes: [{ p: 36, s: 0, d: 0.25, v: 0.8, source: 'agent' }],
+  clips_rev: 0,
+  clips: [],
 };
 
 describe('StepGrid', () => {

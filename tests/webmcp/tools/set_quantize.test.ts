@@ -97,6 +97,30 @@ describe('set_quantize', () => {
     harness.engine.dispose();
   });
 
+  it('writes the same reversible grid and strength onto retained audio', async () => {
+    const harness = createHarness();
+    const melody = harness.engine.store.getDocument().tracks[0];
+    if (melody) melody.clips.push({ id: 'voice-1', take_id: 'voice-1', s: 0 });
+
+    const envelope = (await harness.invoke('set_quantize', {
+      track_id: 'melody',
+      grid: '8n',
+      strength: 0.65,
+      swing: 0.2,
+      why: 'Line the vocal attacks up with the swung quaver grid.',
+    })) as QuantizeEnvelope;
+
+    expect(envelope.changed).toContain('track:melody:clips');
+    const updated = harness.engine.store.getDocument().tracks[0];
+    expect(updated?.clips[0]).toMatchObject({
+      timing_grid: '8n',
+      timing_strength: 0.65,
+      timing_swing: 0.2,
+    });
+    expect(updated?.clips_rev).toBe(1);
+    harness.engine.dispose();
+  });
+
   it('refuses a track that is not on the song', async () => {
     const harness = createHarness();
     await expect(
