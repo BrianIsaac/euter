@@ -10,7 +10,7 @@ const idSchema = z.string().trim().min(1).max(64);
 const barSchema = z.number().int().min(1);
 const styleSchema = z.enum(['pop', 'soul', 'lofi']);
 const roleSchema = z.enum(['bass', 'chords', 'drums']);
-const trackKindSchema = z.enum(['melody', 'chords', 'bass', 'drums']);
+const trackKindSchema = z.enum(['melody', 'chords', 'bass', 'drums', 'vocal']);
 
 export const inputNoteSchema = z
   .object({

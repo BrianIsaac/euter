@@ -7,6 +7,7 @@ import {
   SONG_STORAGE_KEY,
 } from '../../src/song/serialise.ts';
 import { createEmptySong } from '../../src/song/types.ts';
+import { encodeTakeAudio } from '../../src/audio/clips.ts';
 
 describe('song serialisation', () => {
   it('saves a take whose pitch track has unvoiced frames', () => {
@@ -46,6 +47,48 @@ describe('song serialisation', () => {
     saveSong(storage, song);
     expect(loadSong(storage)).toEqual(song);
     expect(values.has(SONG_STORAGE_KEY)).toBe(true);
+  });
+
+  it('round-trips retained audio and migrates tracks saved before clips existed', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    const song = loadExampleSong();
+    song.takes = [
+      {
+        id: 'voice-1',
+        source: 'import',
+        notes: [],
+        pitch_track: [],
+        duration_s: 0.25,
+        voiced_ratio: 0,
+        median_clarity: 0,
+        pitch_range: [0, 0],
+        tempo_hint: 92,
+        audio: encodeTakeAudio(new Float32Array([0, 0.25, -0.25]), 8_000),
+      },
+    ];
+    const melody = song.tracks[0];
+    if (melody) {
+      melody.clips = [{ id: 'voice-1', take_id: 'voice-1', s: 0 }];
+      melody.clips_rev = 1;
+    }
+    saveSong(storage, song);
+    expect(loadSong(storage)).toEqual(song);
+
+    const legacy = JSON.parse(values.get(SONG_STORAGE_KEY) ?? '{}') as {
+      tracks: Record<string, unknown>[];
+    };
+    for (const track of legacy.tracks) {
+      delete track.clips;
+      delete track.clips_rev;
+    }
+    expect(loadSong({ getItem: () => JSON.stringify(legacy) })?.tracks[0]).toMatchObject({
+      clips: [],
+      clips_rev: 0,
+    });
   });
 
   it('ignores malformed storage values', () => {

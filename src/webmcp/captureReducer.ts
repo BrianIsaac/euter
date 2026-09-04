@@ -32,8 +32,27 @@ export function isTake(value: unknown): value is Take {
     typeof take.median_clarity === 'number' &&
     Array.isArray(take.pitch_range) &&
     (typeof take.tempo_hint === 'number' || take.tempo_hint === null) &&
+    isTakeAudio(take.audio) &&
     isTargetTrackId(take.target_track_id) &&
     isTargetBars(take.target_bars)
+  );
+}
+
+function isTakeAudio(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const audio = value as Record<string, unknown>;
+  return (
+    audio.encoding === 'pcm16-base64' &&
+    typeof audio.sample_rate === 'number' &&
+    audio.sample_rate >= 8_000 &&
+    audio.sample_rate <= 192_000 &&
+    audio.channels === 1 &&
+    typeof audio.samples === 'string' &&
+    typeof audio.trim_start_s === 'number' &&
+    audio.trim_start_s >= 0 &&
+    typeof audio.start_beat === 'number' &&
+    audio.start_beat >= 0
   );
 }
 

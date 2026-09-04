@@ -140,6 +140,12 @@ describe('RecorderController', () => {
     expect(stopped.data.take.source).toBe('mic');
     expect(stopped.data.take.notes[0]).toMatchObject({ p: 60, source: 'take' });
     expect(stopped.data.take.notes[0]?.s).toBeGreaterThanOrEqual(8);
+    expect(stopped.data.take.audio).toMatchObject({
+      encoding: 'pcm16-base64',
+      sample_rate: 16_000,
+      trim_start_s: 0.52,
+      start_beat: 8,
+    });
     expect(stopped.data.trackId).toBe('bass');
     expect(stopped.data.targetBars).toEqual({ barFrom: 3, barTo: 4 });
     expect(stopped.data.wav.type).toBe('audio/wav');

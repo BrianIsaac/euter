@@ -177,8 +177,12 @@ export const setQuantizeInput = z.strictObject({
 });
 
 export const addTrackInput = z.strictObject({
-  kind: z.enum(['melody', 'chords', 'bass', 'drums']).describe('What the track is for'),
-  instrument: z.string().min(1).max(80).describe('Instrument name from get_song_state'),
+  kind: z.enum(['melody', 'chords', 'bass', 'drums', 'vocal']).describe('What the track is for'),
+  instrument: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('Instrument from get_song_state; recorded-voice for vocal'),
   name: z.string().min(1).max(80).optional().describe('Name shown in the track list'),
   ...write,
 });

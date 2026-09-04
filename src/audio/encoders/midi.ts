@@ -11,6 +11,11 @@ export function encodeMidi(
   song: SongDocument,
   range: MidiRange = { start_bar: 1, end_bar: song.bars },
 ): Uint8Array {
+  if (song.tracks.some((track) => track.clips.length > 0)) {
+    throw new RangeError(
+      'MIDI cannot contain retained voice audio. Export WAV or MP3 to include the vocal.',
+    );
+  }
   if (
     !Number.isInteger(range.start_bar) ||
     !Number.isInteger(range.end_bar) ||

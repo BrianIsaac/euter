@@ -13,6 +13,7 @@ import {
 } from '../../src/audio/render.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
 import type { Track } from '../../src/song/types.ts';
+import { encodeTakeAudio } from '../../src/audio/clips.ts';
 
 function audioBuffer(value = 0.25): AudioBuffer {
   const channels = [new Float32Array(16).fill(value), new Float32Array(16).fill(value)];
@@ -59,6 +60,129 @@ describe('offline rendering', () => {
       request?.tracks.find(({ track }) => track.id === 'melody')?.notes.length,
     ).toBeGreaterThan(0);
     expect(progress.mock.calls.flat()).toEqual([0, 5, 100]);
+  });
+
+  it('places retained voice in a ranged render and trims audio before the requested bar', async () => {
+    const song = loadExampleSong();
+    const audio = encodeTakeAudio(new Float32Array(8_000).fill(0.2), 8_000, 0.1, 2);
+    song.takes.push({
+      id: 'voice-1',
+      source: 'mic',
+      notes: [],
+      pitch_track: [],
+      duration_s: 0.9,
+      voiced_ratio: 0,
+      median_clarity: 0,
+      pitch_range: [0, 0],
+      tempo_hint: 92,
+      audio,
+    });
+    song.tracks.push({
+      id: 'vocal',
+      name: 'Voice',
+      kind: 'vocal',
+      instrument: 'recorded-voice',
+      volume_db: -3,
+      pan: 0,
+      mute: false,
+      solo: false,
+      notes_rev: 0,
+      notes: [],
+      clips_rev: 1,
+      clips: [{ id: 'voice-1', take_id: 'voice-1', s: 2 }],
+    });
+    const engine: OfflineRenderEngine = {
+      render: vi.fn(async () => ({ buffer: audioBuffer(), fallbacks: [] })),
+    };
+
+    await renderSong(song, { start_bar: 1, end_bar: 1, tail_seconds: 0 }, { engine });
+
+    expect(vi.mocked(engine.render).mock.calls[0]?.[0].tracks.at(-1)).toMatchObject({
+      track: { id: 'vocal', kind: 'vocal', volume_db: -3 },
+      clips: [
+        {
+          audio,
+          time_seconds: (2 * 60) / 92,
+          offset_seconds: 0.1,
+          duration_seconds: expect.closeTo(0.9, 8),
+        },
+      ],
+    });
+  });
+
+  it('schedules a vocal clip into its channel without loading an instrument', async () => {
+    const song = loadExampleSong();
+    const audio = encodeTakeAudio(new Float32Array(800).fill(0.25), 8_000, 0.01, 0);
+    song.takes.push({
+      id: 'voice-1',
+      source: 'mic',
+      notes: [],
+      pitch_track: [],
+      duration_s: 0.09,
+      voiced_ratio: 0,
+      median_clarity: 0,
+      pitch_range: [0, 0],
+      tempo_hint: 92,
+      audio,
+    });
+    song.tracks.push({
+      id: 'vocal',
+      name: 'Voice',
+      kind: 'vocal',
+      instrument: 'recorded-voice',
+      volume_db: -6,
+      pan: 0.2,
+      mute: false,
+      solo: false,
+      notes_rev: 0,
+      notes: [],
+      clips_rev: 1,
+      clips: [{ id: 'voice-1', take_id: 'voice-1', s: 0 }],
+    });
+    const starts: number[][] = [];
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      start: vi.fn((...args: number[]) => starts.push(args)),
+    };
+    const context = {
+      destination: {},
+      createBuffer: (_channels: number, length: number, sampleRate: number) => {
+        const channel = new Float32Array(length);
+        return {
+          duration: length / sampleRate,
+          length,
+          sampleRate,
+          numberOfChannels: 1,
+          getChannelData: () => channel,
+        } as unknown as AudioBuffer;
+      },
+      createBufferSource: () => source,
+    } as unknown as BaseAudioContext;
+    const graph = graphFactory();
+    const boundary: OfflineToneBoundary = {
+      async render(_request, build) {
+        await build(context, graph.factory);
+        return audioBuffer();
+      },
+    };
+    const instrumentLoader = vi.fn(async (id: string): Promise<InstrumentLoadResult> => ({
+      instrument: { id, trigger: vi.fn(), dispose: vi.fn() },
+      loaded: true,
+    }));
+
+    await renderSong(
+      song,
+      { start_bar: 1, end_bar: 1 },
+      {
+        engine: createCatalogueOfflineEngine({ boundary, instrumentLoader }),
+      },
+    );
+
+    expect(instrumentLoader).not.toHaveBeenCalledWith('recorded-voice', expect.anything());
+    expect(graph.channels.get('vocal')).toMatchObject({ volume_db: -6, pan: 0.2 });
+    expect(source.connect).toHaveBeenCalledWith({ label: 'channel:vocal' });
+    expect(starts[0]).toEqual([0, 0.01, 0.09]);
   });
 
   it('rejects invalid ranges and honours cancellation before and during rendering', async () => {

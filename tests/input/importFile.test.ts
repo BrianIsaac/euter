@@ -28,6 +28,12 @@ describe('importAudioFile', () => {
       tempo_hint: 120,
     });
     expect(result.data.take.notes[0]?.p).toBe(69);
+    expect(result.data.take.audio).toMatchObject({
+      encoding: 'pcm16-base64',
+      sample_rate: 16_000,
+      trim_start_s: 0,
+      start_beat: 0,
+    });
     expect(result.data.wav.type).toBe('audio/wav');
     expect(result.data.fileName).toBe('voice memo.m4a');
   });

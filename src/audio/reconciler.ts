@@ -1,7 +1,8 @@
 /** Reconciles the Tone graph from the song document; the document remains authoritative. */
-import type { Note, SongDocument, Track } from '../song/types.ts';
+import type { AudioClip, Note, SongDocument, Track } from '../song/types.ts';
 import type { SongStoreReader } from '../song/serialise.ts';
 import type { AudioContextManager } from './context.ts';
+import { decodeTakeAudio } from './clips.ts';
 import {
   loadInstrument,
   type AudioInstrument,
@@ -32,6 +33,21 @@ export interface PartNode {
   dispose(): void;
 }
 
+export interface ClipPartEvent {
+  time: string;
+  clip: AudioClip;
+  buffer: AudioBuffer;
+  offset_seconds: number;
+  duration_seconds: number;
+}
+
+export interface ClipPartNode {
+  readonly label: string;
+  readonly events: readonly ClipPartEvent[];
+  start(): void;
+  dispose(): void;
+}
+
 export interface ToneGraphFactory {
   destination(): GraphNode;
   compressor(): GraphNode;
@@ -44,6 +60,11 @@ export interface ToneGraphFactory {
     events: readonly PartEvent[],
     callback: (time: number, event: PartEvent) => void,
   ): PartNode;
+  clipPart(
+    trackId: string,
+    events: readonly ClipPartEvent[],
+    callback: (time: number, event: ClipPartEvent) => void,
+  ): ClipPartNode;
   setTransportBpm(bpm: number): void;
 }
 
@@ -78,7 +99,9 @@ interface ReconciledTrack {
   loadingKey: string | null;
   instrument: AudioInstrument | null;
   part: PartNode | null;
+  clipPart: ClipPartNode | null;
   notesRev: number;
+  clipsRev: number;
   loadVersion: number;
   loadPromise: Promise<void> | null;
 }
@@ -88,6 +111,7 @@ export const DEFAULT_REVERB_SEND: Readonly<Record<Track['kind'], number>> = {
   chords: 0.28,
   bass: 0.06,
   drums: 0.1,
+  vocal: 0.18,
 };
 
 export const MASTER_COMPRESSOR = { threshold: -18, ratio: 3 } as const;
@@ -169,13 +193,27 @@ export function createAudioReconciler(
           loadingKey: null,
           instrument: null,
           part: null,
+          clipPart: null,
           notesRev: -1,
+          clipsRev: -1,
           loadVersion: 0,
           loadPromise: null,
         };
         tracks.set(track.id, state);
       }
       state.channel.setMix(track);
+      if (state.clipsRev !== track.clips_rev) rebuildClipPart(song, track, state);
+      if (track.kind === 'vocal') {
+        clearTrackLoadState(track.id, state);
+        state.loadVersion += 1;
+        state.part?.dispose();
+        state.part = null;
+        state.instrument?.dispose();
+        state.instrument = null;
+        state.instrumentKey = '';
+        state.notesRev = track.notes_rev;
+        continue;
+      }
       const key = `${track.id}:${track.instrument}`;
       if (state.loadingKey && state.instrumentKey === key) {
         clearTrackLoadState(track.id, state);
@@ -263,6 +301,47 @@ export function createAudioReconciler(
     state.notesRev = track.notes_rev;
   }
 
+  function rebuildClipPart(song: SongDocument, track: Track, state: ReconciledTrack): void {
+    if (!factory) return;
+    state.clipPart?.dispose();
+    state.clipPart = null;
+    const context = audio.requireRunning();
+    const events: ClipPartEvent[] = [];
+    try {
+      for (const clip of track.clips) {
+        const take = song.takes.find(({ id }) => id === clip.take_id);
+        if (take?.audio === undefined) continue;
+        const buffer = decodeTakeAudio(take.audio, context);
+        const duration = Math.min(
+          take.duration_s,
+          Math.max(0, buffer.duration - take.audio.trim_start_s),
+        );
+        if (duration <= 0) continue;
+        events.push({
+          time: beatPosition(clip.s, song.time_sig[0]),
+          clip,
+          buffer,
+          offset_seconds: take.audio.trim_start_s,
+          duration_seconds: duration,
+        });
+      }
+      if (events.length > 0) {
+        state.clipPart = factory.clipPart(track.id, events, (time, event) => {
+          const source = audio.requireRunning().createBufferSource();
+          source.buffer = event.buffer;
+          source.connect(nativeAudioInput(state.channel.raw));
+          source.start(time, event.offset_seconds, event.duration_seconds);
+        });
+        state.clipPart.start();
+      }
+      fallbackReasons.delete(`clip:${track.id}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      fallbackReasons.set(`clip:${track.id}`, `Could not decode retained voice: ${detail}.`);
+    }
+    state.clipsRev = track.clips_rev;
+  }
+
   const loadingProgress = new Map<string, number>();
   const fallbackReasons = new Map<string, string>();
 
@@ -293,6 +372,7 @@ export function createAudioReconciler(
           nodes.push(state.part.label);
           parts[trackId] = state.part.events;
         }
+        if (state.clipPart) nodes.push(state.clipPart.label);
       }
       return {
         ready: factory !== null,
@@ -320,6 +400,23 @@ export function createAudioReconciler(
   };
 }
 
+function nativeAudioInput(value: unknown): AudioNode {
+  let current = value;
+  const seen = new Set<unknown>();
+  while (
+    typeof current === 'object' &&
+    current !== null &&
+    'input' in current &&
+    !seen.has(current)
+  ) {
+    seen.add(current);
+    const input = (current as { input?: unknown }).input;
+    if (input === undefined || input === current) break;
+    current = input;
+  }
+  return current as AudioNode;
+}
+
 /** Converts absolute beats to Tone's `bars:quarters:sixteenths` form. */
 export function beatPosition(beats: number, beatsPerBar = 4): string {
   const bar = Math.floor(beats / beatsPerBar);
@@ -332,6 +429,7 @@ export function beatPosition(beats: number, beatsPerBar = 4): string {
 function disposeTrack(state: ReconciledTrack): void {
   state.loadVersion += 1;
   state.part?.dispose();
+  state.clipPart?.dispose();
   state.instrument?.dispose();
   state.send.dispose();
   state.channel.dispose();
@@ -376,6 +474,19 @@ async function defaultGraphFactoryProvider(): Promise<ToneGraphFactory> {
       const raw = new tone.Part<PartEvent>((time, event) => callback(time, event), [...events]);
       return {
         label: `part:${trackId}`,
+        events,
+        start() {
+          raw.start(0);
+        },
+        dispose() {
+          raw.dispose();
+        },
+      };
+    },
+    clipPart: (trackId, events, callback) => {
+      const raw = new tone.Part<ClipPartEvent>((time, event) => callback(time, event), [...events]);
+      return {
+        label: `clips:${trackId}`,
         events,
         start() {
           raw.start(0);

@@ -1,5 +1,6 @@
 /** Microphone recorder and WAV handoff (plan Decisions 10 and 24; Architecture item 5). */
 import pitchWorkletUrl from '../transcribe/pitch.worklet.ts?worker&url';
+import { encodeTakeAudio } from '../audio/clips.ts';
 import type { Take } from '../song/types.ts';
 import type { LivePitchMeasurement } from '../transcribe/pitch.worklet.ts';
 import { transcribePcmToTake } from '../transcribe/takes.ts';
@@ -311,15 +312,20 @@ export class RecorderController {
       const startBeat = active.options.targetBars
         ? (active.options.targetBars.barFrom - 1) * beatsPerBar
         : 0;
+      const context = this.transport.getAudioContext();
+      const baseLatency = context?.baseLatency ?? 0;
+      const outputLatency = context?.outputLatency ?? 0;
+      const trimStartSeconds = baseLatency + outputLatency + active.countInSeconds;
       const take = transcribePcmToTake(message.pcm, message.sampleRate, {
         id: this.#makeTakeId(),
         source: 'mic',
         bpm,
-        baseLatency: this.transport.getAudioContext()?.baseLatency ?? 0,
-        outputLatency: this.transport.getAudioContext()?.outputLatency ?? 0,
+        baseLatency,
+        outputLatency,
         countInOffsetSeconds: active.countInSeconds,
         startBeat,
       });
+      take.audio = encodeTakeAudio(message.pcm, message.sampleRate, trimStartSeconds, startBeat);
       const result: RecordedTake = {
         take,
         wav: encodePcm16Wav(message.pcm, message.sampleRate),

@@ -5,6 +5,7 @@ import { createSongReducer } from '../../src/song/reducer.ts';
 import { loadExampleSong } from '../../src/song/serialise.ts';
 import { createSongStore } from '../../src/song/store.ts';
 import { createEmptySong, type SongDocument } from '../../src/song/types.ts';
+import { encodeTakeAudio } from '../../src/audio/clips.ts';
 
 const agent = (
   type: string,
@@ -314,6 +315,63 @@ describe('song reducer and command bus', () => {
       source: 'take',
     });
     expect(songStore.getDocument().take_request).toBeNull();
+  });
+
+  it('commits retained voice to a vocal track and restores the clip through undo and redo', () => {
+    const song = loadExampleSong();
+    song.tracks.push({
+      id: 'vocal',
+      name: 'Voice',
+      kind: 'vocal',
+      instrument: 'recorded-voice',
+      volume_db: -3,
+      pan: 0,
+      mute: false,
+      solo: false,
+      notes_rev: 0,
+      notes: [],
+      clips_rev: 0,
+      clips: [],
+    });
+    song.takes = [
+      {
+        id: 'take-voice',
+        source: 'mic',
+        target_track_id: 'vocal',
+        target_bars: [1, 1],
+        notes: [{ p: 60, s: 0.1, d: 0.8, v: 0.8, source: 'take' }],
+        pitch_track: [],
+        duration_s: 0.25,
+        voiced_ratio: 0.8,
+        median_clarity: 0.9,
+        pitch_range: [60, 60],
+        tempo_hint: 92,
+        audio: encodeTakeAudio(new Float32Array(2_000).fill(0.2), 8_000, 0.03, 0),
+      },
+    ];
+    const songStore = store(song);
+
+    const committed = songStore.dispatch(
+      agent('commit_take', {
+        take_id: 'take-voice',
+        track_id: 'vocal',
+        quantize_strength: 0,
+        grid: '16n',
+      }),
+    );
+
+    expect(committed.changed).toContain('track:vocal:clips');
+    expect(songStore.getDocument().tracks.at(-1)).toMatchObject({
+      kind: 'vocal',
+      clips_rev: 1,
+      clips: [{ id: 'take-voice', take_id: 'take-voice', s: 0 }],
+    });
+    songStore.undo('agent');
+    expect(songStore.getDocument().tracks.at(-1)?.clips).toEqual([]);
+    songStore.redo('agent');
+    expect(songStore.getDocument().tracks.at(-1)?.clips).toEqual([
+      { id: 'take-voice', take_id: 'take-voice', s: 0 },
+    ]);
   });
 
   it('registers, chooses and visibly requests teaching options', () => {

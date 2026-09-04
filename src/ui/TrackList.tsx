@@ -20,9 +20,10 @@ const KIND_INSTRUMENT: Record<TrackKind, string> = {
   chords: 'electric-piano',
   bass: 'sub-bass',
   drums: 'studio-kit',
+  vocal: 'recorded-voice',
 };
 
-const KINDS: TrackKind[] = ['melody', 'chords', 'bass', 'drums'];
+const KINDS: TrackKind[] = ['melody', 'chords', 'bass', 'drums', 'vocal'];
 
 /**
  * Renders the list.
@@ -58,31 +59,43 @@ export function TrackList({ song, selectedTrackId, onSelect, onDispatch }: Track
               onClick={() => onSelect(track.id)}
             >
               {track.name}
-              <span className="muted"> {track.notes.length} notes</span>
+              <span className="muted">
+                {' '}
+                {track.kind === 'vocal'
+                  ? `${track.clips.length} clip${track.clips.length === 1 ? '' : 's'}`
+                  : `${track.notes.length} notes`}
+              </span>
               {track.id === selectedTrackId ? <span className="muted"> armed</span> : null}
             </button>
 
-            <label className="track-field">
-              <span className="muted">sound</span>
-              <select
-                aria-label={`Instrument for ${track.name}`}
-                value={track.instrument}
-                onChange={(event) =>
-                  onDispatch({
-                    type: 'set_instrument',
-                    args: { track_id: track.id, instrument: event.target.value },
-                    source: 'human',
-                    why: `Changed ${track.name} to ${event.target.value}.`,
-                  })
-                }
-              >
-                {INSTRUMENT_CATALOGUE.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {track.kind === 'vocal' ? (
+              <span className="track-field">
+                <span className="muted">sound</span>
+                <span>recorded voice</span>
+              </span>
+            ) : (
+              <label className="track-field">
+                <span className="muted">sound</span>
+                <select
+                  aria-label={`Instrument for ${track.name}`}
+                  value={track.instrument}
+                  onChange={(event) =>
+                    onDispatch({
+                      type: 'set_instrument',
+                      args: { track_id: track.id, instrument: event.target.value },
+                      source: 'human',
+                      why: `Changed ${track.name} to ${event.target.value}.`,
+                    })
+                  }
+                >
+                  {INSTRUMENT_CATALOGUE.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label className="track-field">
               <span className="muted">level</span>

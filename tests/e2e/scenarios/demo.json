@@ -1,6 +1,6 @@
 {
   "name": "demo",
-  "title": "The demo call order, from an imported hum to an MP3 and a MIDI file",
+  "title": "The demo call order, from an imported hum to an MP3 and an explicit MIDI refusal",
   "start": "example",
   "reset": true,
   "steps": [
@@ -608,46 +608,18 @@
     },
     {
       "action": "tool",
+      "note": "MIDI cannot carry the retained voice, so the export refuses instead of silently dropping it.",
       "tool": "render",
       "input": {
         "format": "midi",
         "bar_from": 5,
         "bar_to": 8
       },
-      "capture": {
-        "midi_job": "data.job_id"
-      },
       "expect": {
-        "ok": true,
-        "revision": "+0",
-        "data": {
-          "data.format": "midi",
-          "data.bar_from": 5,
-          "data.bar_to": 8
-        }
-      }
-    },
-    {
-      "action": "poll",
-      "tool": "get_job",
-      "input": {
-        "job_id": "{{midi_job}}"
-      },
-      "until": {
-        "data.state": "done"
-      },
-      "timeout_ms": 120000,
-      "interval_ms": 400,
-      "expect": {
-        "ok": true,
-        "data": {
-          "data.state": "done",
-          "data.kind": "midi"
-        },
-        "data_defined": ["data.download_url", "data.filename"],
-        "data_includes": {
-          "data.filename": ".mid"
-        }
+        "ok": false,
+        "code": "INVALID_ARGUMENT",
+        "recoverable": true,
+        "message_includes": ["MIDI cannot contain retained voice audio", "WAV or MP3"]
       }
     },
     {

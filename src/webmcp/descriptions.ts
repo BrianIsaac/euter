@@ -30,9 +30,9 @@ export const descriptions = {
   start_recording:
     'Arms the selected microphone, keyboard or MIDI input on a track with a count-in and optional continuing click. A prior person gesture and microphone permission are required for microphone capture. The recorded track is locked against edits until stop_recording, and arming a second take while one is live returns RECORDING_IN_PROGRESS.',
   stop_recording:
-    'Stops the recorder and transcribes the take to notes. The result contains the bounded take data and placed_on_track; the piano roll already contains its notes and raw pitch curve.',
+    'Stops the recorder and retains its audio while transcribing the take to notes. The result contains bounded take data and placed_on_track; commit_take puts the voice in playback and WAV or MP3 exports.',
   commit_take:
-    'Commits a raw take to a track, quantised to a grid with strength 0-1. Zero keeps the performed timing and one snaps fully. Notes in the covered bars are replaced while raw timing remains available to set_quantize. A chosen take reading uses the same commit path.',
+    'Commits a raw take to a track, including retained audio when present, and quantises its notes to a grid with strength 0-1. Zero keeps performed timing and one snaps fully. A chosen take reading uses the same commit path.',
   set_notes:
     'Writes notes to a track from bar_from and replaces the covered bars. p is MIDI pitch 24-96, s is a beat offset from bar_from, d is duration in beats and v is velocity 0-1. Each invocation covers at most 8 bars and rejects notes outside the range.',
   set_chords:
@@ -49,7 +49,7 @@ export const descriptions = {
   set_quantize:
     'Re-quantises a track from its recorded timing to a grid with strength and optional swing. Strength zero restores the performed timing.',
   add_track:
-    'Adds a melody, chords, bass or drums track with a listed instrument and optional display name. The result contains the new track and id; instrument names are reported by get_song_state.',
+    'Adds a melody, chords, bass, drums or vocal track with an optional display name. Instrument names are reported by get_song_state; recorded-voice identifies a vocal track and plays retained take audio.',
   set_instrument:
     'Changes a track’s instrument to a name reported by get_song_state. Samples load lazily: loaded:false means the requested sound is not playing yet. If loading falls back, the transport and About panel name the bundled instrument sounding in its place.',
   set_mix: 'Sets a track’s volume_db, pan, mute or solo. Only the supplied fields change.',
@@ -62,7 +62,7 @@ export const descriptions = {
   undo: 'Undoes the last person or agent edit. The undo is itself a step forward: the revision increases rather than returning to the earlier number, and the result reports how many edits were taken back.',
   redo: 'Redoes the last undone edit. As with undo the revision increases rather than returning to an earlier number, and the result reports how many edits came back.',
   render:
-    'Starts rendering the song or a bar range to WAV, MP3 or MIDI. A bar range is clipped to those bars and begins at time zero in the file. The result immediately contains a job id; get_job reports progress and the person-facing download link.',
+    'Starts rendering the song or a bar range; a range begins at time zero. WAV and MP3 contain retained voice clips. MIDI rejects clips because it cannot carry audio. The result contains a job id; get_job reports progress and the download.',
   cancel_job:
     'Cancels a running render job. A job that has already finished is reported with cancelled:false and its final state.',
 } as const;

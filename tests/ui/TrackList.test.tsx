@@ -62,5 +62,14 @@ describe('TrackList', () => {
         source: 'human',
       }),
     );
+
+    fireEvent.change(screen.getByLabelText('Kind of track to add'), { target: { value: 'vocal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add track' }));
+    expect(onDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'add_track',
+        args: { kind: 'vocal', instrument: 'recorded-voice' },
+      }),
+    );
   });
 });

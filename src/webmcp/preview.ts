@@ -130,6 +130,8 @@ export function applyOptionPreview(
           set.bar_to,
           beatsPerBar,
         ),
+        clips_rev: 0,
+        clips: [],
       },
     ];
   }
@@ -144,6 +146,7 @@ function generateFor(
   set: TeachingOptionSet,
   beatsPerBar: number,
 ): Note[] {
+  if (kind === 'melody' || kind === 'vocal') return [];
   if (kind === 'chords') {
     return generateChords(chords, keyName, style, set.bar_from, set.bar_to, beatsPerBar);
   }

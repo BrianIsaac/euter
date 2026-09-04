@@ -1,5 +1,6 @@
 /** File-picker and drop import through the microphone take path (plan Decision 10; Risk 1). */
 import type { Take } from '../song/types.ts';
+import { encodeTakeAudio } from '../audio/clips.ts';
 import { transcribePcmToTake } from '../transcribe/takes.ts';
 import { encodePcm16Wav } from './recorder.ts';
 
@@ -55,15 +56,17 @@ export async function importAudioFile(
       throw new DOMException('Decoded container has no usable audio track.', 'EncodingError');
     }
     const pcm = mixToMono(decoded);
+    const take = transcribePcmToTake(pcm, decoded.sampleRate, {
+      id: options.id,
+      source: 'import',
+      bpm: options.bpm,
+      startBeat: options.startBeat ?? 0,
+    });
+    take.audio = encodeTakeAudio(pcm, decoded.sampleRate, 0, options.startBeat ?? 0);
     return {
       ok: true,
       data: {
-        take: transcribePcmToTake(pcm, decoded.sampleRate, {
-          id: options.id,
-          source: 'import',
-          bpm: options.bpm,
-          startBeat: options.startBeat ?? 0,
-        }),
+        take,
         wav: encodePcm16Wav(pcm, decoded.sampleRate),
         fileName: file.name,
       },
