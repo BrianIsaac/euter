@@ -21,7 +21,7 @@ describe('the WebMCP video explainer', () => {
     expect(html).toContain('document.modelContext');
     expect(html).toContain('navigator.modelContext');
     expect(html).toContain('registerTool');
-    expect(html).toContain('28 musical tools');
+    expect(html).toContain('29 musical tools');
     expect(html).toContain('6 read tools');
     expect(html).toContain('serialised queue');
     expect(html).toContain('command bus');
@@ -37,7 +37,7 @@ describe('the WebMCP video explainer', () => {
     expect(closing?.querySelector('h2')?.textContent).toBe('Euterpe');
     expect(closingText).toContain('Hum a melody. Make a song with your agent.');
     expect(closingText).toContain(
-      '28 WebMCP tools · visible, explained and undoable · the person stays in control',
+      '29 WebMCP tools · visible, explained and undoable · the person stays in control',
     );
     expect(closingText).toContain('euter.pages.dev');
     expect(closingText).toContain('Source linked on Devpost · MIT');

@@ -38,7 +38,7 @@ function contextFor(harness: Harness, commands: Command[]): ToolContext {
     bus,
     engine: harness.engine,
     environment: harness.runtime.environment,
-    registry: { statusText: () => 'ready (28)', toolCount: () => 28, callCount: () => 0 },
+    registry: { statusText: () => 'ready (29)', toolCount: () => 29, callCount: () => 0 },
     signal: new AbortController().signal,
   };
 }

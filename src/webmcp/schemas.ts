@@ -176,6 +176,16 @@ export const setQuantizeInput = z.strictObject({
   ...write,
 });
 
+export const tuneVocalInput = z.strictObject({
+  track_id: trackIdField,
+  strength: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe('Correction amount: 0 preserves pitch, 1 moves voiced grains fully into the key'),
+  ...write,
+});
+
 export const addTrackInput = z.strictObject({
   kind: z.enum(['melody', 'chords', 'bass', 'drums', 'vocal']).describe('What the track is for'),
   instrument: z

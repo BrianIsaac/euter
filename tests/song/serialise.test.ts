@@ -72,7 +72,17 @@ describe('song serialisation', () => {
     ];
     const melody = song.tracks[0];
     if (melody) {
-      melody.clips = [{ id: 'voice-1', take_id: 'voice-1', s: 0 }];
+      melody.clips = [
+        {
+          id: 'voice-1',
+          take_id: 'voice-1',
+          s: 0,
+          tuning_strength: 0.35,
+          timing_grid: '16n',
+          timing_strength: 0.6,
+          timing_swing: 0.1,
+        },
+      ];
       melody.clips_rev = 1;
     }
     saveSong(storage, song);

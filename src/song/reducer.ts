@@ -96,6 +96,8 @@ export function createSongReducer(options: SongReducerOptions = {}): Reducer<Son
         );
       case 'set_quantize':
         return setQuantize(document, command);
+      case 'tune_vocal':
+        return tuneVocal(document, command);
       case 'add_track':
         return addTrack(document, command, idFactory);
       case 'set_instrument':
@@ -251,17 +253,76 @@ function setQuantize(
     command.args.swing ?? 0,
     document.bars * document.time_sig[0],
   );
-  const bars = noteRange(notes, document.time_sig[0], document.bars);
-  const updated = { ...track, notes, notes_rev: track.notes_rev + 1 };
+  const clips = track.clips.map((clip) => ({
+    ...clip,
+    timing_grid: command.args.grid,
+    timing_strength: command.args.strength,
+    timing_swing: command.args.swing ?? 0,
+  }));
+  const bars =
+    notes.length === 0 && clips.length > 0
+      ? clipRange(track, document)
+      : noteRange(notes, document.time_sig[0], document.bars);
+  const updated = {
+    ...track,
+    notes,
+    notes_rev: track.notes_rev + 1,
+    clips,
+    clips_rev: clips.length === 0 ? track.clips_rev : track.clips_rev + 1,
+  };
   return finish(
     document,
     command,
     { tracks: replaceTrack(document.tracks, updated) },
-    ['tracks', `track:${track.id}:notes`],
+    [
+      'tracks',
+      `track:${track.id}:notes`,
+      ...(clips.length === 0 ? [] : [`track:${track.id}:clips`]),
+    ],
     `Quantised ${track.name} to ${command.args.grid} at ${round(command.args.strength * 100)}%`,
     bars,
     track.id,
   );
+}
+
+function tuneVocal(
+  document: SongDocument,
+  command: Extract<SongCommand, { type: 'tune_vocal' }>,
+): ReducerResult<SongDocument> {
+  const track = requireTrack(document, command.args.track_id);
+  const retained = new Set(
+    document.takes.filter((take) => take.audio !== undefined).map(({ id }) => id),
+  );
+  const vocalClips = track.clips.filter((clip) => retained.has(clip.take_id));
+  if (vocalClips.length === 0) {
+    throw new ToolError(
+      'INVALID_ARGUMENT',
+      `Track "${track.id}" has no retained voice clips to tune.`,
+      true,
+    );
+  }
+  const updated = {
+    ...track,
+    clips_rev: track.clips_rev + 1,
+    clips: track.clips.map((clip) =>
+      retained.has(clip.take_id) ? { ...clip, tuning_strength: command.args.strength } : clip,
+    ),
+  };
+  const percent = round(command.args.strength * 100);
+  return finish(
+    document,
+    command,
+    { tracks: replaceTrack(document.tracks, updated) },
+    ['tracks', `track:${track.id}:clips`],
+    `Tuned ${track.name} to ${document.key.name} at ${percent}%`,
+    clipRange(track, document),
+    track.id,
+  );
+}
+
+function clipRange(track: Track, document: SongDocument): [number, number] {
+  const bars = track.clips.map((clip) => Math.floor(clip.s / document.time_sig[0]) + 1);
+  return [Math.min(...bars), Math.max(...bars)];
 }
 
 function addTrack(

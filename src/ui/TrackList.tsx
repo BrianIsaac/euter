@@ -66,6 +66,15 @@ export function TrackList({ song, selectedTrackId, onSelect, onDispatch }: Track
                   : `${track.notes.length} notes`}
               </span>
               {track.id === selectedTrackId ? <span className="muted"> armed</span> : null}
+              {track.clips.length === 0 ? null : (
+                <span className="muted" data-testid={`vocal-processing-${track.id}`}>
+                  {' '}
+                  tune {Math.round((track.clips[0]?.tuning_strength ?? 0) * 100)}%
+                  {track.clips[0]?.timing_grid === undefined
+                    ? ''
+                    : ` · ${track.clips[0].timing_grid} ${Math.round((track.clips[0].timing_strength ?? 0) * 100)}%`}
+                </span>
+              )}
             </button>
 
             {track.kind === 'vocal' ? (

@@ -7,7 +7,7 @@ Euterpe is a GarageBand-like music maker built for
 the key, the chords, the parts, the arrangement, the mix, the export - is a tool the browser's
 agent can call while you play, sing and listen. It is not a song generator. The sound comes from
 sampled and synthesised instruments driven by notes, the agent reasons about theory and structure
-through 28 tools, and every change it makes carries one sentence on why, pinned to the bars it
+through 29 tools, and every change it makes carries one sentence on why, pinned to the bars it
 changed and undoable with them.
 
 A captured hum is evidence, not an instruction to copy a noisy transcript. `get_take` returns its
@@ -45,13 +45,13 @@ documentation promises.
    the app's activity strip as they run.
 
 This build has no "Site tools" badge in the address bar; discovery is the agent's, not a control
-you press. The header reads `Agent tools: ready (28)` when the page has registered.
+you press. The header reads `Agent tools: ready (29)` when the page has registered.
 
 ### Chrome 151 or later
 
 1. Enable `chrome://flags/#enable-webmcp-testing` and relaunch, or rely on the origin-trial token
    the page already serves. `chrome://version` then shows `--enable-features=WebMCPTesting`.
-2. DevTools > Application > WebMCP lists the 28 tools and runs any of them; the Model Context Tool
+2. DevTools > Application > WebMCP lists the 29 tools and runs any of them; the Model Context Tool
    Inspector extension works too. `pnpm e2e` drives the same surface unattended.
 3. Press Record or a key once, or load the example and press Play, for the same reason as above.
 
@@ -63,7 +63,7 @@ import and a played take are the same object to the rest of the app.
 Eight lines for the core demo flow, with the tool sequences the end-to-end harness replays for
 them. `pnpm e2e` invokes those WebMCP tools directly; it does not send the prose to ChatGPT, so the
 model's choice of tools remains an operator check. The direct calls below ran against the built
-bundle and https://euter.pages.dev on 28 Aug 2026. The other scenarios bring the total to all 28
+bundle and https://euter.pages.dev on 28 Aug 2026. The other scenarios bring the total to all 29
 registered tools.
 
 | #   | Say                                                                                                       | Calls, and what came back                                                                                                                                                                                                                                          |
@@ -100,7 +100,7 @@ operator filled by hand on 27 Aug 2026 and which the in-app About panel renders 
 
 ## The tools
 
-Twenty-eight tools on `document.modelContext`, six of them reads (`readOnlyHint: true`), sixteen
+Twenty-nine tools on `document.modelContext`, six of them reads (`readOnlyHint: true`), seventeen
 marked `untrustedContentHint: true` because their output can echo text the person typed.
 
 | Group       | Tools                                                                                     |
@@ -109,7 +109,7 @@ marked `untrustedContentHint: true` because their output can echo text the perso
 | Capture     | `start_recording`, `stop_recording`, `commit_take`                                        |
 | Composition | `set_notes`, `set_chords`, `suggest_chords` (read)                                        |
 | Teaching    | `propose_options`, `audition_option`, `request_take`                                      |
-| Song        | `set_key`, `set_tempo`, `set_quantize`                                                    |
+| Song        | `set_key`, `set_tempo`, `set_quantize`, `tune_vocal`                                      |
 | Arrangement | `add_track`, `set_instrument`, `set_mix`, `generate_part`, `arrange`                      |
 | Transport   | `play`, `stop`                                                                            |
 | History     | `undo`, `redo`                                                                            |
@@ -132,7 +132,7 @@ those twelve codes is provoked once in
   `navigator.modelContext` with one `AbortController` each, deduplicated, and aborted on dispose.
   Both are registered because the ChatGPT desktop app exposes them as two distinct objects while
   Chrome 151 aliases them and warns that `navigator.modelContext` is deprecated. The header shows
-  `initialising | ready (28) | unavailable | error`.
+  `initialising | ready (29) | unavailable | error`.
 - **Descriptions state capability, precondition and result** and never direct the agent: a
   description that can steer policy is a metadata-poisoning surface. A next step belongs in the
   result - `data.next` or the summary. A whole-surface test rejects agent-directed wording and the
@@ -223,7 +223,7 @@ default on a throwaway profile pre-armed with
 `chrome-devtools-mcp --categoryExperimentalWebmcp=true`, and runs the JSON scenarios in
 [`tests/e2e/scenarios/`](tests/e2e/scenarios) through `list_webmcp_tools` and
 `execute_webmcp_tool`, asserting each envelope, each revision, the 1,500-character output budget,
-and all 28 tool behaviours. Scenarios that depend on First Light declare an example start and the
+and all 29 tool behaviours. Scenarios that depend on First Light declare an example start and the
 harness reloads them through `?example=1`, so the product keeps its normal empty default without
 making the demo setup click-dependent.
 
@@ -242,7 +242,7 @@ auditionable readings, a chosen reading and the untouched raw escape), `errors` 
 provoked once), `stale-revision` (a person edits between two agent calls), `recording-lock` (one
 track closed to edits while it is being sung), `take-backing` (the actual bar and mute state used
 behind a bar-one requested take), and `sample-fallback` (a deliberate sample 404 selects a named
-bundled substitute). Together they invoke all 28 tools. The unit test rejects missing or
+bundled substitute). Together they invoke all 29 tools. The unit test rejects missing or
 assertion-free scenario entries, and a full run independently compares the registered surface with
 tools that actually passed a behavioural assertion. `--driver mcp` is strict: it fails if
 chrome-devtools-mcp cannot start, so a green default run is evidence for that route. `--driver cdp`

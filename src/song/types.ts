@@ -52,6 +52,12 @@ export interface AudioClip {
   take_id: string;
   /** Absolute start in beats from the beginning of the song. */
   s: number;
+  /** 0 preserves performed pitch; 1 moves voiced grains fully onto notes in the song key. */
+  tuning_strength?: number | undefined;
+  /** Audio-warp settings written by the same set_quantize control as symbolic notes. */
+  timing_grid?: '8n' | '16n' | undefined;
+  timing_strength?: number | undefined;
+  timing_swing?: number | undefined;
 }
 
 /** Mono PCM kept in JSON-safe form so history and persistence retain the person's voice. */

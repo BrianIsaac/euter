@@ -73,6 +73,10 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
                 id: z.string().trim().min(1).max(64),
                 take_id: z.string().trim().min(1).max(64),
                 s: z.number().finite().nonnegative(),
+                tuning_strength: z.number().finite().min(0).max(1).optional(),
+                timing_grid: z.enum(['8n', '16n']).optional(),
+                timing_strength: z.number().finite().min(0).max(1).optional(),
+                timing_swing: z.number().finite().min(0).max(0.5).optional(),
               })
               .strict(),
           ),
@@ -196,7 +200,8 @@ export const persistedSongSchema: z.ZodType<SongDocument> = z
         });
       }
       for (const clip of track.clips) {
-        if (clip.s >= songBeats || !song.takes.some(({ id }) => id === clip.take_id)) {
+        const take = song.takes.find(({ id }) => id === clip.take_id);
+        if (clip.s >= songBeats || take?.audio === undefined) {
           context.addIssue({
             code: 'custom',
             message: `Track "${track.id}" has an invalid audio clip.`,

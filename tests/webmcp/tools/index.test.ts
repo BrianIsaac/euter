@@ -3,7 +3,7 @@ import { descriptions } from '../../../src/webmcp/descriptions.ts';
 import { productTools, tools } from '../../../src/webmcp/tools/index.ts';
 
 describe('tools index', () => {
-  it('lists the twenty-eight product tools in the plan’s order', () => {
+  it('lists the twenty-nine product tools in the plan’s order', () => {
     expect(productTools.map((tool) => tool.name)).toEqual([
       'get_song_state',
       'get_track_notes',
@@ -21,6 +21,7 @@ describe('tools index', () => {
       'set_key',
       'set_tempo',
       'set_quantize',
+      'tune_vocal',
       'add_track',
       'set_instrument',
       'set_mix',
@@ -57,7 +58,7 @@ describe('tools index', () => {
 
   it('registers the product tools and nothing else', () => {
     expect(tools).toBe(productTools);
-    expect(tools).toHaveLength(28);
+    expect(tools).toHaveLength(29);
     expect(tools.map(({ name }) => name)).not.toContain('ping');
     expect(tools.map(({ name }) => name)).not.toContain('get_diagnostics');
   });

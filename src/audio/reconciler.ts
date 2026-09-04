@@ -1,8 +1,8 @@
 /** Reconciles the Tone graph from the song document; the document remains authoritative. */
-import type { AudioClip, Note, SongDocument, Track } from '../song/types.ts';
+import type { AudioClip, Note, SongDocument, Take, Track } from '../song/types.ts';
 import type { SongStoreReader } from '../song/serialise.ts';
 import type { AudioContextManager } from './context.ts';
-import { decodeTakeAudio } from './clips.ts';
+import { decodeTakeAudio, scheduleVocalAudio } from './clips.ts';
 import {
   loadInstrument,
   type AudioInstrument,
@@ -36,9 +36,11 @@ export interface PartNode {
 export interface ClipPartEvent {
   time: string;
   clip: AudioClip;
+  take: Take;
   buffer: AudioBuffer;
   offset_seconds: number;
   duration_seconds: number;
+  clip_elapsed_seconds: number;
 }
 
 export interface ClipPartNode {
@@ -320,17 +322,28 @@ export function createAudioReconciler(
         events.push({
           time: beatPosition(clip.s, song.time_sig[0]),
           clip,
+          take,
           buffer,
           offset_seconds: take.audio.trim_start_s,
           duration_seconds: duration,
+          clip_elapsed_seconds: 0,
         });
       }
       if (events.length > 0) {
         state.clipPart = factory.clipPart(track.id, events, (time, event) => {
-          const source = audio.requireRunning().createBufferSource();
-          source.buffer = event.buffer;
-          source.connect(nativeAudioInput(state.channel.raw));
-          source.start(time, event.offset_seconds, event.duration_seconds);
+          const current = store.getDocument();
+          scheduleVocalAudio({
+            context: audio.requireRunning(),
+            destination: state.channel.raw,
+            buffer: event.buffer,
+            take: event.take,
+            clip: event.clip,
+            keyName: current.key.name,
+            bpm: current.bpm,
+            whenSeconds: time,
+            clipElapsedSeconds: event.clip_elapsed_seconds,
+            durationSeconds: event.duration_seconds,
+          });
         });
         state.clipPart.start();
       }
@@ -398,23 +411,6 @@ export function createAudioReconciler(
       listeners.clear();
     },
   };
-}
-
-function nativeAudioInput(value: unknown): AudioNode {
-  let current = value;
-  const seen = new Set<unknown>();
-  while (
-    typeof current === 'object' &&
-    current !== null &&
-    'input' in current &&
-    !seen.has(current)
-  ) {
-    seen.add(current);
-    const input = (current as { input?: unknown }).input;
-    if (input === undefined || input === current) break;
-    current = input;
-  }
-  return current as AudioNode;
 }
 
 /** Converts absolute beats to Tone's `bars:quarters:sixteenths` form. */

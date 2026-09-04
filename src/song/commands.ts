@@ -105,6 +105,18 @@ export const songCommandSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('tune_vocal'),
+      args: z
+        .object({
+          track_id: idSchema,
+          strength: z.number().min(0).max(1),
+        })
+        .strict(),
+      ...common,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('add_track'),
       args: z
         .object({
@@ -243,6 +255,7 @@ export type SetChordsCommand = Extract<SongCommand, { type: 'set_chords' }>;
 export type SetKeyCommand = Extract<SongCommand, { type: 'set_key' }>;
 export type SetTempoCommand = Extract<SongCommand, { type: 'set_tempo' }>;
 export type SetQuantizeCommand = Extract<SongCommand, { type: 'set_quantize' }>;
+export type TuneVocalCommand = Extract<SongCommand, { type: 'tune_vocal' }>;
 export type AddTrackCommand = Extract<SongCommand, { type: 'add_track' }>;
 export type SetInstrumentCommand = Extract<SongCommand, { type: 'set_instrument' }>;
 export type SetMixCommand = Extract<SongCommand, { type: 'set_mix' }>;

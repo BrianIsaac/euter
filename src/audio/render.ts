@@ -1,8 +1,8 @@
-import type { Note, SongDocument, TakeAudio, Track } from '../song/types.ts';
+import type { AudioClip, Note, SongDocument, Take, Track } from '../song/types.ts';
 import type { BaseContext } from 'tone';
 import type * as ToneModuleNamespace from 'tone';
 import { loadInstrument, type InstrumentLoadResult } from './instruments.ts';
-import { decodeTakeAudio } from './clips.ts';
+import { decodeTakeAudio, scheduleVocalAudio } from './clips.ts';
 import {
   DEFAULT_REVERB_SEND,
   MASTER_COMPRESSOR,
@@ -33,16 +33,20 @@ export interface OfflineTrack {
 }
 
 export interface OfflineClipEvent {
-  audio: TakeAudio;
+  take: Take;
+  clip: AudioClip;
   time_seconds: number;
   offset_seconds: number;
   duration_seconds: number;
+  clip_elapsed_seconds: number;
 }
 
 export interface OfflineRenderRequest {
   duration_seconds: number;
   sample_rate: number;
   channels: number;
+  bpm: number;
+  key_name: string;
   samples_base_url?: string | undefined;
   tracks: readonly OfflineTrack[];
 }
@@ -131,7 +135,8 @@ export async function renderSong(
       const event = renderClipEvent(
         clip.s,
         take.duration_s,
-        take.audio,
+        take,
+        clip,
         startBeat,
         endBeat,
         secondsPerBeat,
@@ -144,6 +149,8 @@ export async function renderSong(
     duration_seconds: (endBeat - startBeat) * secondsPerBeat + tail,
     sample_rate: options.sample_rate ?? 44_100,
     channels: 2,
+    bpm: song.bpm,
+    key_name: song.key.name,
     ...(options.samples_base_url === undefined
       ? {}
       : { samples_base_url: options.samples_base_url }),
@@ -216,7 +223,7 @@ export function createCatalogueOfflineEngine(
                     fallbacks.push(`${track.name}: ${result.reason}`);
                   scheduleTrack(result, notes);
                 }
-                scheduleClips(context, channel, clips);
+                scheduleClips(context, channel, clips, request.bpm, request.key_name);
                 reportLoadProgress(track.id, 1);
               }),
             );
@@ -236,12 +243,24 @@ function scheduleClips(
   context: BaseAudioContext,
   channel: ChannelNode,
   clips: readonly OfflineClipEvent[],
+  bpm: number,
+  keyName: string,
 ): void {
   for (const clip of clips) {
-    const source = context.createBufferSource();
-    source.buffer = decodeTakeAudio(clip.audio, context);
-    source.connect(nativeAudioInput(channel.raw));
-    source.start(clip.time_seconds, clip.offset_seconds, clip.duration_seconds);
+    const audio = clip.take.audio;
+    if (audio === undefined) continue;
+    scheduleVocalAudio({
+      context,
+      destination: channel.raw,
+      buffer: decodeTakeAudio(audio, context),
+      take: clip.take,
+      clip: clip.clip,
+      keyName,
+      bpm,
+      whenSeconds: clip.time_seconds,
+      clipElapsedSeconds: clip.clip_elapsed_seconds,
+      durationSeconds: clip.duration_seconds,
+    });
   }
 }
 
@@ -249,23 +268,6 @@ function scheduleTrack(result: InstrumentLoadResult, notes: readonly OfflineNote
   for (const note of notes) {
     result.instrument.trigger(note.pitch, note.time_seconds, note.duration_seconds, note.velocity);
   }
-}
-
-function nativeAudioInput(value: unknown): AudioNode {
-  let current = value;
-  const seen = new Set<unknown>();
-  while (
-    typeof current === 'object' &&
-    current !== null &&
-    'input' in current &&
-    !seen.has(current)
-  ) {
-    seen.add(current);
-    const input = (current as { input?: unknown }).input;
-    if (input === undefined || input === current) break;
-    current = input;
-  }
-  return current as AudioNode;
 }
 
 /** Applies a transparent whole-buffer ceiling before any audio encoder sees the render. */
@@ -302,7 +304,8 @@ function renderEvent(
 function renderClipEvent(
   clipStartBeat: number,
   durationSeconds: number,
-  audio: TakeAudio,
+  take: Take,
+  clip: AudioClip,
   startBeat: number,
   endBeat: number,
   secondsPerBeat: number,
@@ -313,10 +316,12 @@ function renderClipEvent(
   if (overlapEnd <= overlapStart) return null;
   const elapsed = (overlapStart - clipStartBeat) * secondsPerBeat;
   return {
-    audio,
+    take,
+    clip,
     time_seconds: (overlapStart - startBeat) * secondsPerBeat,
-    offset_seconds: audio.trim_start_s + elapsed,
+    offset_seconds: (take.audio?.trim_start_s ?? 0) + elapsed,
     duration_seconds: (overlapEnd - overlapStart) * secondsPerBeat,
+    clip_elapsed_seconds: elapsed,
   };
 }
 

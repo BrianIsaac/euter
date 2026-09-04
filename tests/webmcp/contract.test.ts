@@ -11,6 +11,7 @@ import {
 import { productTools, tools } from '../../src/webmcp/tools/index.ts';
 import type { JsonSchemaObject } from '../../src/webmcp/schemas.ts';
 import { createHarness, makeTake, type Harness } from '../helpers/harness.ts';
+import { encodeTakeAudio } from '../../src/audio/clips.ts';
 
 /** Tools whose call lands a change in the document and therefore pins a producer note. */
 const DOCUMENT_WRITES = new Set([
@@ -23,6 +24,7 @@ const DOCUMENT_WRITES = new Set([
   'set_key',
   'set_tempo',
   'set_quantize',
+  'tune_vocal',
   'add_track',
   'set_instrument',
   'set_mix',
@@ -41,6 +43,7 @@ const UNTRUSTED_OUTPUTS = new Set([
   'audition_option',
   'request_take',
   'set_quantize',
+  'tune_vocal',
   'add_track',
   'set_instrument',
   'set_mix',
@@ -52,6 +55,13 @@ const UNTRUSTED_OUTPUTS = new Set([
 
 /** Tools that need something in the song, the recorder or the job list before their example runs. */
 const seeds: Record<string, (harness: Harness) => Promise<void> | void> = {
+  tune_vocal: (harness) => {
+    const take = makeTake('take-1');
+    take.audio = encodeTakeAudio(new Float32Array(32_000), 8_000);
+    harness.engine.addTake(take, 'Kept your hum.', 'agent');
+    const track = harness.engine.store.getDocument().tracks[0];
+    if (track) track.clips.push({ id: 'take-1', take_id: 'take-1', s: 0 });
+  },
   get_take: (harness) => {
     harness.engine.addTake(makeTake('take-1'), 'Kept your hum.', 'agent');
   },
@@ -118,8 +128,8 @@ describe('tool contract', () => {
     }
   });
 
-  it('registers the twenty-eight tools, six of them reads, with unique names', () => {
-    expect(productTools).toHaveLength(28);
+  it('registers the twenty-nine tools, six of them reads, with unique names', () => {
+    expect(productTools).toHaveLength(29);
     expect(tools).toBe(productTools);
     expect(productTools.filter(({ kind }) => kind === 'read')).toHaveLength(6);
     expect(new Set(tools.map((tool) => tool.name)).size).toBe(tools.length);

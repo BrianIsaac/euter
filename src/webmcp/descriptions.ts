@@ -47,7 +47,9 @@ export const descriptions = {
     'Sets a tonal song key such as "C major" or "A minor". The result contains the melody fit score and ranked detected alternatives; get_song_state contains the current estimate.',
   set_tempo: 'Sets the tempo in BPM. Notes keep their beat positions.',
   set_quantize:
-    'Re-quantises a track from its recorded timing to a grid with strength and optional swing. Strength zero restores the performed timing.',
+    'Re-quantises a track from its recorded timing to a grid with strength and optional swing. Retained voice clips are warped with their notes. Strength zero restores performed timing.',
+  tune_vocal:
+    'Corrects retained voice clips toward notes in the current song key with explicit strength 0-1. Zero preserves performed pitch and one applies full key-aware correction. The audio remains reversible.',
   add_track:
     'Adds a melody, chords, bass, drums or vocal track with an optional display name. Instrument names are reported by get_song_state; recorded-voice identifies a vocal track and plays retained take audio.',
   set_instrument:

@@ -101,10 +101,12 @@ describe('offline rendering', () => {
       track: { id: 'vocal', kind: 'vocal', volume_db: -3 },
       clips: [
         {
-          audio,
+          take: expect.objectContaining({ id: 'voice-1', audio }),
+          clip: { id: 'voice-1', take_id: 'voice-1', s: 2 },
           time_seconds: (2 * 60) / 92,
           offset_seconds: 0.1,
           duration_seconds: expect.closeTo(0.9, 8),
+          clip_elapsed_seconds: 0,
         },
       ],
     });

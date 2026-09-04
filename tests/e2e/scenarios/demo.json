@@ -8,9 +8,9 @@
       "action": "tools",
       "note": "The whole surface as the browser publishes it (plan Acceptance).",
       "expect": {
-        "count": 28,
+        "count": 29,
         "read_only": 6,
-        "untrusted": 16,
+        "untrusted": 17,
         "max_description_chars": 500,
         "names_include": [
           "get_song_state",
@@ -30,6 +30,7 @@
           "set_key",
           "set_tempo",
           "set_quantize",
+          "tune_vocal",
           "add_track",
           "set_instrument",
           "set_mix",
@@ -349,6 +350,29 @@
     },
     {
       "action": "tool",
+      "note": "The new audio-aware producer move keeps correction strength explicit.",
+      "tool": "tune_vocal",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "strength": 0.35,
+        "why": "A gentle correction keeps the character of the hum."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["track:melody:clips", "notes_log"],
+        "summary_includes": ["C major", "35%"],
+        "data": {
+          "data.track_id": "{{melody_id}}",
+          "data.key": "C major",
+          "data.strength": 0.35,
+          "data.clips_updated": 1,
+          "data.reversible": true
+        }
+      }
+    },
+    {
+      "action": "tool",
       "tool": "set_quantize",
       "input": {
         "track_id": "{{melody_id}}",
@@ -360,6 +384,25 @@
         "ok": true,
         "revision": "+1",
         "changed": ["notes_log"]
+      }
+    },
+    {
+      "action": "tool",
+      "note": "The existing mix control now acts on the retained voice through the shared track channel.",
+      "tool": "set_mix",
+      "input": {
+        "track_id": "{{melody_id}}",
+        "volume_db": -5,
+        "why": "Set the retained voice just behind the instruments."
+      },
+      "expect": {
+        "ok": true,
+        "revision": "+1",
+        "changed": ["track:melody:mix", "notes_log"],
+        "data": {
+          "data.track_id": "{{melody_id}}",
+          "data.volume_db": -5
+        }
       }
     },
     {

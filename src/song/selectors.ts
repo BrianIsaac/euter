@@ -134,11 +134,11 @@ export function selectTrackSummary(track: Track, beatsPerBar = 4): string {
   if (track.kind === 'vocal') {
     const bars = track.clips.map((clip) => Math.floor(clip.s / beatsPerBar) + 1);
     const span = bars.length === 0 ? 'no audio' : `bars ${Math.min(...bars)}-${Math.max(...bars)}`;
-    return `${track.id} ${span}: vocal ${track.clips.length} clip${track.clips.length === 1 ? '' : 's'}; retained voice`;
+    return `${track.id} ${span}: vocal ${vocalClipSummary(track)}; retained voice`;
   }
   if (track.notes.length === 0) {
     const bars = track.clips.map((clip) => Math.floor(clip.s / beatsPerBar) + 1);
-    return `${track.id} bars ${Math.min(...bars)}-${Math.max(...bars)}: ${track.kind} 0 notes + ${track.clips.length} voice clip; ${track.instrument}`;
+    return `${track.id} bars ${Math.min(...bars)}-${Math.max(...bars)}: ${track.kind} 0 notes + ${vocalClipSummary(track)}; ${track.instrument}`;
   }
   const bars = track.notes.map((note) => Math.floor(note.s / beatsPerBar) + 1);
   const pitches = track.notes.map(({ p }) => p);
@@ -146,8 +146,20 @@ export function selectTrackSummary(track: Track, beatsPerBar = 4): string {
   const barTo = Math.max(...bars);
   const noun = track.kind === 'drums' ? 'hits' : 'notes';
   const pitch = track.kind === 'drums' ? '' : ` ${Math.min(...pitches)}-${Math.max(...pitches)}`;
-  const clips = track.clips.length === 0 ? '' : ` + ${track.clips.length} voice clip`;
+  const clips = track.clips.length === 0 ? '' : ` + ${vocalClipSummary(track)}`;
   return `${track.id} bars ${barFrom}-${barTo}: ${track.kind}${pitch} ${track.notes.length} ${noun}${clips}; ${track.instrument}`;
+}
+
+function vocalClipSummary(track: Track): string {
+  const clip = track.clips[0];
+  const count = `${track.clips.length} voice clip${track.clips.length === 1 ? '' : 's'}`;
+  if (!clip) return count;
+  const tune = Math.round((clip.tuning_strength ?? 0) * 100);
+  const timing =
+    clip.timing_grid === undefined
+      ? ''
+      : `, ${clip.timing_grid} ${Math.round((clip.timing_strength ?? 0) * 100)}%`;
+  return `${count}, tune ${tune}%${timing}`;
 }
 
 /**

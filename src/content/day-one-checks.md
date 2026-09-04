@@ -52,8 +52,8 @@ exactly as written. Three procedures need the product's tools instead of the pro
 
 | # | Procedure against the product | Pass condition |
 | --- | --- | --- |
-| 0 | In the chat, naming the tab that is open: "Read the song state in the tab I have open and tell me the key, the tempo and how many tracks there are." | `get_song_state` is called; the envelope is shown; Diagnostics lists the call; the header reads "Agent tools: ready (28)" |
-| 6 | Chrome with the flag: DevTools > Application > WebMCP lists 28 tools; "Run tool" on `set_tempo` with `{"bpm":96,"why":"A touch faster."}` | The envelope comes back `ok:true`, the header revision moves and the Activity strip shows the call with its reason |
+| 0 | In the chat, naming the tab that is open: "Read the song state in the tab I have open and tell me the key, the tempo and how many tracks there are." | `get_song_state` is called; the envelope is shown; Diagnostics lists the call; the header reads "Agent tools: ready (29)" |
+| 6 | Chrome with the flag: DevTools > Application > WebMCP lists 29 tools; "Run tool" on `set_tempo` with `{"bpm":96,"why":"A touch faster."}` | The envelope comes back `ok:true`, the header revision moves and the Activity strip shows the call with its reason |
 | 7 | In the chat: "Call get_song_state and quote the audio and jobs fields exactly." Those two fields are last in the payload, which runs to about 1,100 characters. | The agent quotes them; nothing near the end is missing |
 
 Check 0's finding still holds and is the more important one: the agent must be told to use the tab
